@@ -15,14 +15,14 @@ class WScene;
  *
  * What is imported: the nodes of the file's scene as entities with their names and transforms, triangle meshes
  * with normals and the first set of texture coordinates, metallic-roughness materials with their base colour,
- * metallic-roughness, normal and emissive textures (PNG and JPEG), and directional and point lights
+ * metallic-roughness, normal, emissive and occlusion textures (PNG and JPEG), and directional and point lights
  * (KHR_lights_punctual, with KHR_materials_emissive_strength for materials).
  *
  * The engine uses glTF's conventions for axes, units, materials and lights, so everything arrives unconverted.
  *
  * What is not imported, each with a warning that says so: cameras, animations, skins and morph targets, spot
  * lights, points and lines, transparency, double-sided and unlit materials, further sets of texture coordinates,
- * vertex colours, texture transforms and occlusion textures. Tangents in the file are not used; the renderer works
+ * vertex colours and texture transforms. Tangents in the file are not used; the renderer works
  * them out. Normals that a mesh lacks are calculated, flat for each triangle, as glTF asks.
  */
 class FGltfImporter

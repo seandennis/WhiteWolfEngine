@@ -6,6 +6,8 @@
 #include "SceneData.glsl"
 #include "MaterialTextures.glsl"
 #include "Brdf.glsl"
+#include "Environment.glsl"
+#include "AmbientLight.glsl"
 #include "NormalMapping.glsl"
 
 layout(location = 0) in vec3 InRelativePosition;
@@ -40,6 +42,11 @@ void main()
 	vec3 ToCamera = normalize(-InRelativePosition);
 	FSurface Surface = MakeSurface(BaseColor, Metallic, Roughness, Normal, ToCamera);
 	vec3 Light = EmissiveColor;
+
+	// The light of the surroundings is dimmed where the material says the surface is hidden from them.
+	float OcclusionSample = texture(sampler2D(OcclusionTexture, OcclusionSampler), InTextureCoordinate).r;
+	float Occlusion = mix(1.0, OcclusionSample, clamp(Draws[InDrawIndex].NormalScale.z, 0.0, 1.0));
+	Light += ReflectEnvironment(Surface, Roughness) * Occlusion;
 
 	for (int Index = 0; Index < View.LightCounts.x; ++Index)
 	{

@@ -4,6 +4,7 @@
 #include "Rendering/CameraView.h"
 #include "Rendering/DirectionalLightComponent.h"
 #include "Rendering/DrawData.h"
+#include "Rendering/EnvironmentMap.h"
 #include "Rendering/Material.h"
 #include "Rendering/MaterialTextureSlot.h"
 #include "Rendering/MipChain.h"
@@ -13,6 +14,8 @@
 #include "Rendering/RenderTargetImplementation.h"
 #include "Rendering/SceneRendererImplementation.h"
 #include "Rendering/ShaderLibrary.h"
+#include "Rendering/SkyLightComponent.h"
+#include "Rendering/SphericalHarmonics.h"
 #include "Rendering/StaticMesh.h"
 #include "Rendering/StaticMeshComponent.h"
 #include "Rendering/StaticMeshVertex.h"
@@ -32,6 +35,7 @@
 #include <cmath>
 #include <cstddef>
 #include <format>
+#include <numbers>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -80,6 +84,11 @@ namespace
 
 		/** How many lights were left out because the scene has more than the renderer supports. */
 		int32 IgnoredLightCount = 0;
+
+		/** The environment of the scene's sky light, with its intensity and the sky light's rotation; null if none. */
+		WEnvironmentMap* SkyEnvironment = nullptr;
+		float SkyIntensity = 0.0f;
+		FQuat SkyRotation = FQuat(1.0f, 0.0f, 0.0f, 0.0f);
 	};
 
 	/** A mesh whose geometry has to be copied to the graphics card before it can be drawn. */
@@ -139,7 +148,8 @@ namespace
 			Data.BaseColor = Material->BaseColor;
 			Data.EmissiveColor = Material->EmissiveColor;
 			Data.MetallicRoughness = glm::vec4(Material->Metallic, Material->Roughness, 0.0f, 0.0f);
-			Data.NormalScale = glm::vec4(Material->NormalScale, bHasNormalTexture ? 1.0f : 0.0f, 0.0f, 0.0f);
+			Data.NormalScale =
+				glm::vec4(Material->NormalScale, bHasNormalTexture ? 1.0f : 0.0f, Material->OcclusionStrength, 0.0f);
 		}
 		else
 		{
@@ -205,6 +215,22 @@ namespace
 		Contents.ViewConstants.LightCounts.y = Index + 1;
 	}
 
+	/** Makes a sky light the scene's sky light, if it shines and the scene has none yet. */
+	void CollectSkyLight(const WSkyLightComponent& Light, const FTransform& WorldTransform, FSceneContents& Contents)
+	{
+		WEnvironmentMap* const Environment = Light.Environment.Get();
+		const bool bShines = Light.bVisible && std::isfinite(Light.Intensity) && Light.Intensity > 0.0f &&
+			IsValid(Environment) && Environment->HasImage();
+		if (!bShines || Contents.SkyEnvironment != nullptr)
+		{
+			return;
+		}
+
+		Contents.SkyEnvironment = Environment;
+		Contents.SkyIntensity = Light.Intensity;
+		Contents.SkyRotation = glm::normalize(WorldTransform.Rotation);
+	}
+
 	/**
 	 * Walks the entities of a scene once and collects what a picture of it needs.
 	 *
@@ -221,10 +247,13 @@ namespace
 			FTransform ParentTransform;
 		};
 
+		// Entities wait on a stack. They are pushed in reverse, so that they are visited in the order of the scene:
+		// "the first light" is then the first in the scene.
 		std::vector<FPendingEntity> Pending;
-		for (const TObjectPtr<WEntity>& Root : Scene.GetRootEntities())
+		const std::vector<TObjectPtr<WEntity>>& Roots = Scene.GetRootEntities();
+		for (std::size_t Index = Roots.size(); Index > 0; --Index)
 		{
-			Pending.push_back({Root.Get(), FTransform()});
+			Pending.push_back({Roots[Index - 1].Get(), FTransform()});
 		}
 
 		FSceneContents Contents;
@@ -239,9 +268,10 @@ namespace
 
 			const FTransform WorldTransform =
 				FTransform::Combine(Current.ParentTransform, Current.Entity->GetRelativeTransform());
-			for (const TObjectPtr<WEntity>& Child : Current.Entity->GetChildren())
+			const std::vector<TObjectPtr<WEntity>>& Children = Current.Entity->GetChildren();
+			for (std::size_t Index = Children.size(); Index > 0; --Index)
 			{
-				Pending.push_back({Child.Get(), WorldTransform});
+				Pending.push_back({Children[Index - 1].Get(), WorldTransform});
 			}
 
 			for (const TObjectPtr<WComponent>& Component : Current.Entity->GetComponents())
@@ -267,6 +297,10 @@ namespace
 				else if (const WPointLightComponent* const Lamp = Cast<WPointLightComponent>(Component.Get()))
 				{
 					CollectPointLight(*Lamp, WorldTransform, View, Contents);
+				}
+				else if (const WSkyLightComponent* const Sky = Cast<WSkyLightComponent>(Component.Get()))
+				{
+					CollectSkyLight(*Sky, WorldTransform, Contents);
 				}
 			}
 		}
@@ -348,6 +382,38 @@ namespace
 	}
 
 	/**
+	 * Creates the pipeline that draws the sky: one triangle over the whole surface at the farthest depth, which
+	 * passes the depth test only where nothing has been drawn.
+	 */
+	nvrhi::GraphicsPipelineHandle CreateSkyPipeline(nvrhi::IDevice& Device,
+		nvrhi::IBindingLayout* SceneBindingLayout,
+		nvrhi::Format ColorFormat,
+		nvrhi::Format DepthFormat)
+	{
+		const nvrhi::ShaderHandle VertexShader = CreateShader(Device, "Sky.vert", nvrhi::ShaderType::Vertex);
+		const nvrhi::ShaderHandle FragmentShader = CreateShader(Device, "Sky.frag", nvrhi::ShaderType::Pixel);
+		if (VertexShader == nullptr || FragmentShader == nullptr)
+		{
+			return nullptr;
+		}
+
+		nvrhi::GraphicsPipelineDesc Description;
+		Description.primType = nvrhi::PrimitiveType::TriangleList;
+		Description.VS = VertexShader;
+		Description.PS = FragmentShader;
+		Description.bindingLayouts.push_back(SceneBindingLayout);
+		Description.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None;
+		Description.renderState.depthStencilState.depthTestEnable = true;
+		Description.renderState.depthStencilState.depthWriteEnable = false;
+		Description.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::GreaterOrEqual;
+
+		nvrhi::FramebufferInfo TargetFormats;
+		TargetFormats.addColorFormat(ColorFormat);
+		TargetFormats.setDepthFormat(DepthFormat);
+		return Device.createGraphicsPipeline(Description, TargetFormats);
+	}
+
+	/**
 	 * Creates the pipeline that fits the lit scene to the display: one triangle over the whole surface.
 	 *
 	 * @param OutputFormat The format of the surface the pipeline draws on.
@@ -420,7 +486,11 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 												.setVisibility(nvrhi::ShaderType::Vertex | nvrhi::ShaderType::Pixel)
 												.setRegisterSpaceAndDescriptorSet(0)
 												.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(0))
-												.addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0)));
+												.addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
+												.addItem(nvrhi::BindingLayoutItem::Texture_SRV(1))
+												.addItem(nvrhi::BindingLayoutItem::Texture_SRV(2))
+												.addItem(nvrhi::BindingLayoutItem::Sampler(0))
+												.addItem(nvrhi::BindingLayoutItem::Sampler(1)));
 	NewImplementation->TonemapBindingLayout =
 		RenderInterface.createBindingLayout(nvrhi::BindingLayoutDesc()
 												.setVisibility(nvrhi::ShaderType::Pixel)
@@ -458,6 +528,12 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 		return nullptr;
 	}
 
+	if (!NewImplementation->Environments.Initialize(NewImplementation->Context))
+	{
+		OutError = "the graphics card could not create what lighting from an environment needs";
+		return nullptr;
+	}
+
 	if (!NewImplementation->CreateSamplersAndWhiteTexture())
 	{
 		OutError = "the graphics card could not create the samplers and the default texture of materials";
@@ -482,8 +558,12 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 		FRenderTarget::FImplementation::DepthFormat);
 	NewImplementation->TonemapPipeline = CreateTonemapPipeline(
 		RenderInterface, NewImplementation->TonemapBindingLayout, FRenderTarget::FImplementation::ColorFormat);
+	NewImplementation->SkyPipeline = CreateSkyPipeline(RenderInterface,
+		NewImplementation->SceneBindingLayout,
+		FRenderTarget::FImplementation::SceneColorFormat,
+		FRenderTarget::FImplementation::DepthFormat);
 	if (NewImplementation->LitPipeline == nullptr || NewImplementation->UnlitPipeline == nullptr ||
-		NewImplementation->TonemapPipeline == nullptr)
+		NewImplementation->TonemapPipeline == nullptr || NewImplementation->SkyPipeline == nullptr)
 	{
 		OutError = "the graphics card could not create the pipelines that draw and light meshes";
 		return nullptr;
@@ -526,6 +606,7 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	std::erase_if(Implementation->Textures,
 		[](const std::pair<const WTexture* const, FTextureResource>& Entry)
 		{ return Entry.second.Texture.Get() == nullptr; });
+	Implementation->Environments.ReleaseUnused();
 	std::erase_if(Implementation->Materials,
 		[](const std::pair<const WMaterial* const, FMaterialBindings>& Entry)
 		{ return Entry.first != nullptr && Entry.second.Material.Get() == nullptr; });
@@ -576,42 +657,102 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		MaterialBindingSets.push_back(BindingSet);
 	}
 
-	if (DrawCount > Implementation->DrawBufferCapacity)
+	// The environment of the scene's sky light, or the black one if it has none.
+	const FEnvironmentResource* const Environment = Contents.SkyEnvironment != nullptr
+		? Implementation->Environments.FindOrCreate(Contents.SkyEnvironment)
+		: &Implementation->Environments.GetBlack();
+	if (Environment == nullptr)
 	{
-		int32 NewCapacity = std::max(Implementation->DrawBufferCapacity, MinDrawBufferCapacity);
-		while (NewCapacity < DrawCount)
+		OutError = "the graphics card has no room for the environment of the scene's sky light";
+		return false;
+	}
+
+	// The buffer of per-mesh data grows by doubling, and exists even for a scene without meshes, because the sky
+	// is drawn with the same bindings.
+	nvrhi::BufferHandle DrawBuffer = Implementation->DrawBuffer;
+	int32 DrawBufferCapacity = Implementation->DrawBufferCapacity;
+	if (DrawBuffer == nullptr || DrawCount > DrawBufferCapacity)
+	{
+		DrawBufferCapacity = std::max(DrawBufferCapacity, MinDrawBufferCapacity);
+		while (DrawBufferCapacity < DrawCount)
 		{
-			NewCapacity *= 2;
+			DrawBufferCapacity *= 2;
 		}
 
 		nvrhi::BufferDesc DrawBufferDescription;
-		DrawBufferDescription.byteSize = static_cast<uint64>(NewCapacity) * sizeof(FDrawData);
+		DrawBufferDescription.byteSize = static_cast<uint64>(DrawBufferCapacity) * sizeof(FDrawData);
 		DrawBufferDescription.structStride = static_cast<uint32>(sizeof(FDrawData));
 		DrawBufferDescription.debugName = "DrawData";
 		DrawBufferDescription.initialState = nvrhi::ResourceStates::ShaderResource;
 		DrawBufferDescription.keepInitialState = true;
-
-		nvrhi::BufferHandle NewDrawBuffer = Device.createBuffer(DrawBufferDescription);
-		nvrhi::BindingSetHandle NewBindingSet;
-		if (NewDrawBuffer != nullptr)
-		{
-			NewBindingSet = Device.createBindingSet(
-				nvrhi::BindingSetDesc()
-					.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(0, NewDrawBuffer))
-					.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, Implementation->ViewBuffer)),
-				Implementation->SceneBindingLayout);
-		}
-		if (NewBindingSet == nullptr)
+		DrawBuffer = Device.createBuffer(DrawBufferDescription);
+		if (DrawBuffer == nullptr)
 		{
 			OutError = std::format("the graphics card has no room for the data of {} meshes", DrawCount);
 			return false;
 		}
-
-		Implementation->DrawBuffer = std::move(NewDrawBuffer);
-		Implementation->SceneBindingSet = std::move(NewBindingSet);
-		Implementation->DrawBufferCapacity = NewCapacity;
 	}
 
+	// The bindings name the buffer and the environment's textures, so they are made again when any of them is
+	// another than before.
+	const bool bBindingsAreCurrent = Implementation->SceneBindingSet != nullptr &&
+		DrawBuffer == Implementation->DrawBuffer &&
+		Implementation->BoundReflections == Environment->Reflections.Get() &&
+		Implementation->BoundPicture == Environment->Picture.Get();
+	if (!bBindingsAreCurrent)
+	{
+		nvrhi::BindingSetHandle NewBindingSet = Device.createBindingSet(
+			nvrhi::BindingSetDesc()
+				.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(0, DrawBuffer))
+				.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, Implementation->ViewBuffer))
+				.addItem(nvrhi::BindingSetItem::Texture_SRV(1, Environment->Reflections))
+				.addItem(nvrhi::BindingSetItem::Texture_SRV(2, Environment->Picture))
+				.addItem(nvrhi::BindingSetItem::Sampler(0, Implementation->Environments.GetReflectionsSampler()))
+				.addItem(nvrhi::BindingSetItem::Sampler(1, Implementation->Environments.GetPictureSampler())),
+			Implementation->SceneBindingLayout);
+		if (NewBindingSet == nullptr)
+		{
+			OutError = "the graphics card could not bind the data of the scene";
+			return false;
+		}
+
+		Implementation->SceneBindingSet = std::move(NewBindingSet);
+		Implementation->BoundReflections = Environment->Reflections.Get();
+		Implementation->BoundPicture = Environment->Picture.Get();
+	}
+	Implementation->DrawBuffer = std::move(DrawBuffer);
+	Implementation->DrawBufferCapacity = DrawBufferCapacity;
+
+	// The lights of the picture, with what the sky light adds to them.
+	FViewConstants ViewConstants = Contents.ViewConstants;
+	const bool bHasSky = bIsLit && Environment != &Implementation->Environments.GetBlack();
+	if (bHasSky)
+	{
+		const FSphericalHarmonics& Irradiance = Contents.SkyEnvironment->GetIrradiance();
+		for (std::size_t Index = 0; Index < ViewConstants.SkyIrradiance.size(); ++Index)
+		{
+			ViewConstants.SkyIrradiance[Index] =
+				glm::vec4(Irradiance.Coefficients[Index] * Contents.SkyIntensity, 0.0f);
+		}
+		ViewConstants.RelativeToEnvironment = glm::mat4_cast(glm::conjugate(Contents.SkyRotation));
+
+		// The sky is read at the level of detail at which one pixel of the environment's picture covers about one
+		// pixel of the screen, so that a large picture does not flicker on a small screen.
+		const float HalfHeight = std::tan(glm::radians(View.VerticalFieldOfView) * 0.5f);
+		const float ScreenPixelAngle = 2.0f * HalfHeight / static_cast<float>(TargetData.Height);
+		const float PicturePixelAngle = std::numbers::pi_v<float> / static_cast<float>(Environment->PictureHeight);
+		const float SkyLevel = std::max(std::log2(ScreenPixelAngle / PicturePixelAngle), 0.0f);
+		const float LastReflectionLevel = static_cast<float>(FEnvironmentCache::ReflectionLevelCount - 1);
+		ViewConstants.SkyParameters = glm::vec4(Contents.SkyIntensity, LastReflectionLevel, 0.0f, SkyLevel);
+
+		// A place on the screen, from -1 to 1 each way, is this far to the side and up in front of the camera;
+		// the camera's rotation turns that into a direction along the world's axes.
+		const FMatrix4f CameraRotation = glm::mat4_cast(View.Rotation);
+		ViewConstants.ClipToDirection = FMatrix4f(CameraRotation[0] * (HalfHeight * AspectRatio),
+			CameraRotation[1] * HalfHeight,
+			-CameraRotation[2],
+			glm::vec4(0.0f));
+	}
 	if (bIsLit && TargetData.TonemapBindingLayout != Implementation->TonemapBindingLayout)
 	{
 		nvrhi::BindingSetHandle NewBindingSet =
@@ -656,6 +797,7 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	}
 
 	const int32 UploadedTextureCount = Implementation->WritePendingTextures(CommandList);
+	const int32 UploadedEnvironmentCount = Implementation->Environments.ProcessPending(CommandList);
 
 	if (DrawCount > 0)
 	{
@@ -664,7 +806,7 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	}
 	if (bIsLit)
 	{
-		CommandList.writeBuffer(Implementation->ViewBuffer, &Contents.ViewConstants, sizeof(FViewConstants));
+		CommandList.writeBuffer(Implementation->ViewBuffer, &ViewConstants, sizeof(FViewConstants));
 	}
 
 	// A lit scene is drawn into the high dynamic range buffer; an unlit one straight onto the surface.
@@ -712,6 +854,20 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		}
 	}
 
+	if (bHasSky)
+	{
+		// The sky is drawn last, at the farthest depth, so that it shows only where no surface is.
+		nvrhi::GraphicsState State;
+		State.pipeline = Implementation->SkyPipeline;
+		State.framebuffer = TargetData.SceneFramebuffer;
+		State.viewport.addViewportAndScissorRect(Viewport);
+		State.bindings.push_back(Implementation->SceneBindingSet);
+		CommandList.setGraphicsState(State);
+
+		const uint32 FullScreenTriangleVertexCount = 3;
+		CommandList.draw(nvrhi::DrawArguments().setVertexCount(FullScreenTriangleVertexCount));
+	}
+
 	if (bIsLit)
 	{
 		nvrhi::GraphicsState State;
@@ -735,6 +891,9 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	Implementation->Statistics.CachedMeshCount = static_cast<int32>(Implementation->MeshBuffers.size());
 	Implementation->Statistics.UploadedTextureCount = UploadedTextureCount;
 	Implementation->Statistics.CachedTextureCount = static_cast<int32>(Implementation->Textures.size());
+	Implementation->Statistics.UploadedEnvironmentCount = UploadedEnvironmentCount;
+	Implementation->Statistics.CachedEnvironmentCount = Implementation->Environments.GetCount();
+	Implementation->Statistics.SkyLightCount = bHasSky ? 1 : 0;
 	Implementation->Statistics.DirectionalLightCount = Contents.ViewConstants.LightCounts.x;
 	Implementation->Statistics.PointLightCount = Contents.ViewConstants.LightCounts.y;
 	return true;
@@ -855,7 +1014,8 @@ nvrhi::IBindingSet* FSceneRenderer::FImplementation::FindOrCreateMaterialBinding
 		Sources = {Material->BaseColorTexture.Get(),
 			Material->MetallicRoughnessTexture.Get(),
 			Material->NormalTexture.Get(),
-			Material->EmissiveTexture.Get()};
+			Material->EmissiveTexture.Get(),
+			Material->OcclusionTexture.Get()};
 	}
 
 	std::array<nvrhi::ITexture*, MaterialTextureSlotCount> SlotTextures{};

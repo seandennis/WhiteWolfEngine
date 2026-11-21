@@ -26,6 +26,7 @@ struct FDrawData
 	vec4 MetallicRoughness;
 
 	// x: how strongly the normal texture bends the surface's normal. y: 1 if the material has a normal texture.
+	// z: how strongly the occlusion texture dims the light of the surroundings.
 	vec4 NormalScale;
 };
 
@@ -69,4 +70,27 @@ layout(set = 0, binding = 256, std140) uniform FViewConstants
 
 	FDirectionalLightData DirectionalLights[MaxDirectionalLights];
 	FPointLightData PointLights[MaxPointLights];
+
+	// The light a matte surface gathers from the sky light's environment, for every direction it can face, as
+	// spherical harmonics, already multiplied by the sky light's intensity. See Environment.glsl.
+	vec4 SkyIrradiance[9];
+
+	// Turns a camera-relative direction into the direction in the environment's picture: the inverse of the sky
+	// light's rotation.
+	mat4 RelativeToEnvironment;
+
+	// Gives the camera-relative direction the camera looks in at a place on the screen: multiply it with
+	// (x, y, 1, 0), where x and y run from -1 to 1 across the picture.
+	mat4 ClipToDirection;
+
+	// x: the intensity of the sky light, zero if the scene has none. y: the number of the last, roughest level of
+	// the environment's reflection cube map. w: the level of detail the sky is read at.
+	vec4 SkyParameters;
 } View;
+
+// The environment of the sky light: blurred by roughness for reflections, and as it is for the sky. Textures are
+// bound from 0 on and samplers from 128 on; see the binding offsets of NVRHI's Vulkan backend.
+layout(set = 0, binding = 1) uniform textureCube EnvironmentReflections;
+layout(set = 0, binding = 2) uniform texture2D EnvironmentPicture;
+layout(set = 0, binding = 128) uniform sampler EnvironmentReflectionsSampler;
+layout(set = 0, binding = 129) uniform sampler EnvironmentPictureSampler;

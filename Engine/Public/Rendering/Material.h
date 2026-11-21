@@ -68,4 +68,16 @@ public:
 	/** Multiplies EmissiveColor. An sRGB texture. */
 	WPROPERTY(BlueprintReadWrite, Category = "Material")
 	TObjectPtr<WTexture> EmissiveTexture;
+
+	/**
+	 * Says where the surface is hidden from its surroundings, in creases and hollows: its red channel dims the
+	 * light that comes from all around, the sky light's, and leaves the light of lamps and suns alone. White is
+	 * open and black fully hidden. A linear texture.
+	 */
+	WPROPERTY(BlueprintReadWrite, Category = "Material")
+	TObjectPtr<WTexture> OcclusionTexture;
+
+	/** How strongly OcclusionTexture dims the light: 1 is as authored, 0 is not at all. */
+	WPROPERTY(BlueprintReadWrite, Category = "Material")
+	float OcclusionStrength = 1.0f;
 };

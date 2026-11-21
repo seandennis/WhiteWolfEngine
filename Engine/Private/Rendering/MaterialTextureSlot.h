@@ -14,7 +14,8 @@ enum class EMaterialTextureSlot : uint8
 	MetallicRoughness,
 	Normal,
 	Emissive,
+	Occlusion,
 };
 
 /** The number of values of EMaterialTextureSlot. */
-inline constexpr std::size_t MaterialTextureSlotCount = 4;
+inline constexpr std::size_t MaterialTextureSlotCount = 5;

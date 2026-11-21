@@ -635,6 +635,14 @@ namespace
 				Material->NormalScale = Source->normal_texture.scale;
 			}
 
+			// glTF keeps the strength of an occlusion texture where it keeps the scale of a normal texture.
+			Material->OcclusionTexture =
+				GetTexture(Source->occlusion_texture, ETextureColorSpace::Linear, Description, "occlusion");
+			if (Source->occlusion_texture.texture != nullptr)
+			{
+				Material->OcclusionStrength = Source->occlusion_texture.scale;
+			}
+
 			if (Source->alpha_mode != cgltf_alpha_mode_opaque)
 			{
 				Warn(std::format(

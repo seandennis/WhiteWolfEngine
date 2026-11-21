@@ -79,6 +79,46 @@ inline FReferenceColor ReferenceReflect(
 	return (Diffuse + Specular) * Illuminance * NormalDotLight;
 }
 
+/**
+ * How much of the light of its whole surrounding a surface mirrors towards the camera: Brian Karis' approximation
+ * of the lighting model summed over a surrounding, as in AmbientLight.glsl.
+ */
+inline FReferenceColor ReferenceEnvironmentReflectance(
+	const FReferenceColor& SpecularColor, double Roughness, double NormalDotCamera)
+{
+	const double TermX = 1.0 - Roughness;
+	const double TermY = 0.0425 - 0.0275 * Roughness;
+	const double TermZ = 1.04 - 0.572 * Roughness;
+	const double TermW = 0.022 * Roughness - 0.04;
+	const double Blend = std::min(TermX * TermX, std::pow(2.0, -9.28 * NormalDotCamera)) * TermX + TermY;
+	return SpecularColor * (-1.04 * Blend + TermZ) + FReferenceColor(1.04 * Blend + TermW);
+}
+
+/**
+ * The light a surface sends to the camera from a sky light.
+ *
+ * @param Gathered The light the surface gathers as a matte surface: the irradiance for the way it faces.
+ * @param Mirrored The light it mirrors: what the environment shows in the mirrored direction, blurred by the
+ * surface's roughness.
+ */
+inline FReferenceColor ReferenceReflectEnvironment(
+	const FReferenceSurface& Surface, const FReferenceColor& Gathered, const FReferenceColor& Mirrored)
+{
+	const double Metallic = std::clamp(Surface.Metallic, 0.0, 1.0);
+	const double Roughness = std::clamp(Surface.Roughness, 0.0, 1.0);
+	const FReferenceColor DiffuseColor = Surface.BaseColor * (1.0 - Metallic);
+	const FReferenceColor SpecularColor = glm::mix(FReferenceColor(0.04), Surface.BaseColor, Metallic);
+	const double NormalDotCamera = std::clamp(glm::dot(Surface.Normal, Surface.ToCamera), 0.0, 1.0);
+	const FReferenceColor Reflectance = ReferenceEnvironmentReflectance(SpecularColor, Roughness, NormalDotCamera);
+	return DiffuseColor * (ReferenceWhite - Reflectance) * Gathered / std::numbers::pi + Mirrored * Reflectance;
+}
+
+/** The light a surface sends to the camera in a surrounding that has the same light in every direction. */
+inline FReferenceColor ReferenceReflectEvenEnvironment(const FReferenceSurface& Surface, const FReferenceColor& Light)
+{
+	return ReferenceReflectEnvironment(Surface, Light * std::numbers::pi, Light);
+}
+
 /** The Khronos PBR Neutral tone mapper. */
 inline FReferenceColor ReferenceToneMap(FReferenceColor Color)
 {

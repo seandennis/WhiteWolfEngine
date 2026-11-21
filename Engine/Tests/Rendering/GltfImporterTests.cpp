@@ -133,7 +133,8 @@ namespace
 	/** The material of the test square, with all of its textures taken from one image file beside the glTF file. */
 	constexpr std::string_view TexturedMaterial = R"([{"name": "Paint",
 		"pbrMetallicRoughness": {"baseColorTexture": {"index": 0}, "metallicRoughnessTexture": {"index": 0}},
-		"normalTexture": {"index": 0, "scale": 0.5}, "emissiveTexture": {"index": 0}}])";
+		"normalTexture": {"index": 0, "scale": 0.5}, "emissiveTexture": {"index": 0},
+		"occlusionTexture": {"index": 0, "strength": 0.75}}])";
 }
 
 TEST_SUITE("FGltfImporter")
@@ -500,6 +501,10 @@ TEST_SUITE("FGltfImporter")
 		CHECK(BaseColor->WrapU == ETextureWrap::ClampToEdge);
 		CHECK(BaseColor->WrapV == ETextureWrap::MirroredRepeat);
 		CHECK(Material->NormalScale == 0.5f);
+
+		// The occlusion texture is data too, so it is the same texture as the other data textures of this picture.
+		CHECK(Material->OcclusionTexture.Get() == MetallicRoughness);
+		CHECK(Material->OcclusionStrength == 0.75f);
 		CHECK(Test.Warnings.empty());
 	}
 

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Rendering/EnvironmentCache.h"
 #include "Rendering/MaterialBindings.h"
 #include "Rendering/RenderContext.h"
 #include "Rendering/SceneRenderStatistics.h"
@@ -37,8 +38,20 @@ struct FSceneRenderer::FImplementation
 	nvrhi::BufferHandle DrawBuffer;
 	int32 DrawBufferCapacity = 0;
 
-	/** Binds ViewBuffer and DrawBuffer. Made again whenever DrawBuffer is replaced by a larger one. */
+	/** The environments of sky lights on the graphics card. */
+	FEnvironmentCache Environments;
+
+	/**
+	 * Binds ViewBuffer, DrawBuffer and the two textures of the sky light's environment. Made again whenever
+	 * DrawBuffer is replaced by a larger one or the environment is another than the one bound, which the two
+	 * pointers remember.
+	 */
 	nvrhi::BindingSetHandle SceneBindingSet;
+	nvrhi::ITexture* BoundReflections = nullptr;
+	nvrhi::ITexture* BoundPicture = nullptr;
+
+	/** Draws the sky light's environment behind the scene. */
+	nvrhi::GraphicsPipelineHandle SkyPipeline;
 
 	/** Draws meshes lit, into the high dynamic range buffer of a render target. */
 	nvrhi::GraphicsPipelineHandle LitPipeline;

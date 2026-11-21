@@ -20,6 +20,15 @@ struct FSceneRenderStatistics
 	/** How many textures have their picture on the graphics card, whether or not they were used. */
 	int32 CachedTextureCount = 0;
 
+	/** How many environment maps were copied to the graphics card, because they were new or had changed. */
+	int32 UploadedEnvironmentCount = 0;
+
+	/** How many environment maps have a copy on the graphics card. */
+	int32 CachedEnvironmentCount = 0;
+
+	/** One if a sky light lit the picture, zero if not. Always zero in the unlit view mode. */
+	int32 SkyLightCount = 0;
+
 	/** How many directional lights lit the picture. Always zero in the unlit view mode. */
 	int32 DirectionalLightCount = 0;
 
