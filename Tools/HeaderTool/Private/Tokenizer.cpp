@@ -197,7 +197,8 @@ namespace
 			}
 			else
 			{
-				Position += StartsWith("::") ? 2 : 1;
+				const std::size_t Length = StartsWith("::") ? 2 : 1;
+				Position += Length;
 				AddToken(ETokenType::Punctuation, Start, StartLine);
 			}
 		}
