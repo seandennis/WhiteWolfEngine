@@ -224,14 +224,20 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 
 ## D-018: Leak detection
 
-**Status:** Partly implemented.
+**Status:** Accepted.
 
 **Decision.**
 
 - `FGarbageCollector::ReportLeakedObjects()` runs a full collection and logs an error for every object that still exists and is not a class. The test executable calls it after the tests and fails the run if anything is reported, so a test that leaves an object rooted cannot pass.
 - Engine memory allocations other than objects are checked by LeakSanitizer in the `linux-sanitize` preset, which fails the test run on any leak.
 
-**Still to do.** The specification asks debug builds on the product platform to report leaked engine allocations at shutdown. On MSVC that needs the debug heap of the C runtime (`_CrtSetDbgFlag` and a comparison of heap snapshots around the test run), together with making failed assertions report to stderr instead of opening a dialog. Both are Windows-specific code that belongs with the platform layer and has to be written with an MSVC build to verify it. Until then, allocation leaks are caught on Linux only.
+- On the product platform, `FProcessDiagnostics::EnableMemoryLeakReport()` switches on the leak check of the debug C runtime in MSVC Debug builds. The runtime writes its report ("Detected memory leaks!" and one line per block) to stderr when it shuts down, which is after every module has destroyed its static objects, so memory owned by a static object is never reported. The report comes too late to change the exit code, so every module test is registered with CTest to fail when that line appears in its output.
+- The CTest entry `EngineTests.DetectsMemoryLeaks` runs one test case that leaks on purpose and passes only if the leak is reported. It guards against the check being switched off by accident, and runs in MSVC Debug builds and under the `linux-sanitize` preset.
+- `FProcessDiagnostics::DisableErrorDialogs()` makes `abort()`, failed C runtime assertions and crashes write to stderr and end the process instead of opening a dialog, so an unattended test run can fail but cannot hang.
+
+**Alternative considered.** Comparing heap snapshots taken before and after the tests reports as leaks everything that legitimately outlives the tests: lazily created static objects and containers that grew. Letting the runtime report at exit has no such false positives.
+
+**Limit.** Release builds have no debug heap, so allocation leaks are detected in Debug builds and under the sanitizers only. Leaked objects are detected in every configuration.
 
 ## D-019: Visual Studio 2022 and Visual Studio 2026 are both supported
 

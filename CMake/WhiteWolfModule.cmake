@@ -77,4 +77,8 @@ function(ww_add_module_tests module)
     source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${test_sources})
 
     add_test(NAME ${test_target} COMMAND ${test_target})
+    # The test executable switches on the memory leak report of the debug C runtime (see
+    # FProcessDiagnostics). The report is written while the process exits, too late to change
+    # the exit code, so the test is failed on its first line instead.
+    set_tests_properties(${test_target} PROPERTIES FAIL_REGULAR_EXPRESSION "Detected memory leaks!")
 endfunction()

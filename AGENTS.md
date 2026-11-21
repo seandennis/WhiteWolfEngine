@@ -77,6 +77,8 @@ Build\windows\Binaries\Debug\EngineTests.exe --test-case="*Parse*"
 
 - Tests use [doctest](https://github.com/doctest/doctest). Each module has one test executable, `<Module>Tests`, built from every file under `<Module>/Tests/`, and one CTest entry of the same name.
 - Tests are headless: they never open a window, wait for input or need a GPU-attached display.
+- `EngineTests.DetectsMemoryLeaks` is a CTest entry that leaks memory on purpose and passes only if the leak is reported. It exists in MSVC Debug builds and under `linux-sanitize`, the builds that can detect leaked allocations.
+- A test executable's `main` starts with `FProcessDiagnostics::DisableErrorDialogs()` and `FProcessDiagnostics::EnableMemoryLeakReport()`, so a crash cannot hang the run in a dialog and leaks are reported at exit.
 - `CodeStyle.ClangFormat` is a CTest entry that runs the format check. It reports **Skipped** (not Passed) when clang-format 18 is not installed; install it rather than committing unchecked code.
 - Test files mirror the source tree and are named `<Subject>Tests.cpp`, for example `Engine/Tests/Core/VersionTests.cpp` tests `Engine/Public/Core/Version.h`.
 - Group the cases for a type in `TEST_SUITE("<TypeName>")`. Name each `TEST_CASE` as a sentence that states the expected behaviour.
@@ -106,7 +108,8 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
   CMakeLists.txt
   Public/                 Headers other modules may include
     CoreMinimal.h         Included first by every engine header: core types, assertions, logging
-    Core/                 Fundamental types and assertions: CoreTypes.h, Assert.h, Version.h, EngineVersion.h
+    Core/                 Fundamental types and assertions: CoreTypes.h, Assert.h, Version.h, EngineVersion.h,
+                          ProcessDiagnostics.h (error dialogs, memory leak report)
     Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
     Math/                 Math types: Vector.h (FVector, FVector3f), Quat.h (FQuat), Transform.h (FTransform)
     Object/               The object system: Object.h (WObject), Class.h (WClass), ObjectPtr.h (TObjectPtr),
@@ -211,7 +214,7 @@ First-party code compiles with `/W4 /WX` on MSVC and an equivalent strict set on
 - **Collection is incremental.** `FGarbageCollector::Tick()` runs once per frame and does a small, time-budgeted part of a collection, so game code runs between the steps of a collection. Never keep a raw pointer to an object from one frame to the next: only registered `TObjectPtr` properties, weak references and the root set are safe across frames. This applies to engine systems as much as to game code.
 - **Storing a reference tells the collector.** Every construction, copy and assignment of a `TObjectPtr` goes through the collector, which is what makes incremental collection correct. Never copy objects that contain `TObjectPtr` members with `memcpy` or similar. Storing a reference to a destroyed object stores null.
 - **`CollectGarbage()`** destroys everything unreachable before it returns. It is for tests and tools. Never call it while a function further up the stack holds a raw pointer to an object that nothing else keeps alive, and never from `BeginDestroy()`.
-- **Leaks fail the test run.** The test executable ends with `FGarbageCollector::ReportLeakedObjects()`; a test that leaves an object in the root set makes the whole run fail. The `linux-sanitize` preset additionally fails on any leaked memory allocation.
+- **Leaks fail the test run.** The test executable ends with `FGarbageCollector::ReportLeakedObjects()`; a test that leaves an object in the root set makes the whole run fail. MSVC Debug builds and the `linux-sanitize` preset additionally fail on any leaked memory allocation (D-018).
 - **Main thread only.** Objects are created, used and collected on the main thread.
 
 Declaring a class, until the header tool generates this from `WCLASS()` and `WPROPERTY()`:

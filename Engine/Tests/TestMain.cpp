@@ -1,10 +1,12 @@
 // Entry point of the engine's unit test executable.
 //
 // Runs every doctest test case and then fails the run if any object was leaked, so a test that leaves an object in
-// the root set cannot pass unnoticed.
+// the root set cannot pass unnoticed. Leaked memory allocations are reported when the process exits; CTest fails the
+// test on that report.
 #define DOCTEST_CONFIG_IMPLEMENT
 #include <doctest/doctest.h>
 
+#include "Core/ProcessDiagnostics.h"
 #include "Logging/ConsoleLogSink.h"
 #include "Logging/Log.h"
 #include "Object/GarbageCollector.h"
@@ -15,6 +17,10 @@
 
 int main(int ArgumentCount, char** Arguments)
 {
+	// A test run is unattended: a crash must end it, not open a dialog and wait.
+	FProcessDiagnostics::DisableErrorDialogs();
+	FProcessDiagnostics::EnableMemoryLeakReport();
+
 	doctest::Context Context(ArgumentCount, Arguments);
 	const int TestResult = Context.run();
 
