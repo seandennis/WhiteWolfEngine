@@ -59,7 +59,7 @@ Two MSVC warnings are disabled project-wide: **C4251** and **C4275**. They repor
 
 **Status:** Accepted.
 
-**Decision.** The engine ships for Windows x64 built with MSVC from Visual Studio 2022, as the specification requires. The code is also kept compiling and passing its tests with GCC and Clang on Linux through the `linux-gcc`, `linux-clang` and `linux-sanitize` presets. Linux is not a supported platform for users of the engine.
+**Decision.** The engine ships for Windows x64 built with MSVC from Visual Studio 2022, as the specification requires, or from Visual Studio 2026 (D-019). The code is also kept compiling and passing its tests with GCC and Clang on Linux through the `linux-gcc`, `linux-clang` and `linux-sanitize` presets. Linux is not a supported platform for users of the engine.
 
 **Reasons.** Three independent compilers catch more defects than one. AddressSanitizer, LeakSanitizer and UBSan on Linux are the strongest available check on a garbage-collected object system, and they run on every commit. Agents frequently work in Linux environments and must be able to verify their changes; a Windows-only codebase would leave that work unverified until CI. The cost is keeping platform-specific code behind small interfaces, which the Epic standard asks for anyway.
 
@@ -130,7 +130,7 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 
 **Status:** Accepted. Not yet exercised: the workflow first runs when the repository is pushed.
 
-**Decision.** `.github/workflows/ci.yml` runs on every push to `main` and every pull request: MSVC Debug and Release on `windows-2022` (the hosted image that carries Visual Studio 2022; `windows-latest` has moved to Visual Studio 2026), the four Linux cross-check presets on `ubuntu-24.04`, and a formatting job. Actions are pinned to commit SHAs.
+**Decision.** `.github/workflows/ci.yml` runs on every push to `main` and every pull request: MSVC Debug and Release on `windows-2022` (the hosted image that carries Visual Studio 2022) and on `windows-2025` (which carries Visual Studio 2026; see D-019), the four Linux cross-check presets on `ubuntu-24.04`, and a formatting job. Actions are pinned to commit SHAs.
 
 **Reasons.** The specification forbids committing a broken build and names MSVC as the compiler. CI is the only check that runs on the product toolchain no matter where a change was written.
 
@@ -232,3 +232,24 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - Engine memory allocations other than objects are checked by LeakSanitizer in the `linux-sanitize` preset, which fails the test run on any leak.
 
 **Still to do.** The specification asks debug builds on the product platform to report leaked engine allocations at shutdown. On MSVC that needs the debug heap of the C runtime (`_CrtSetDbgFlag` and a comparison of heap snapshots around the test run), together with making failed assertions report to stderr instead of opening a dialog. Both are Windows-specific code that belongs with the platform layer and has to be written with an MSVC build to verify it. Until then, allocation leaks are caught on Linux only.
+
+## D-019: Visual Studio 2022 and Visual Studio 2026 are both supported
+
+**Status:** Accepted. **Extends the specification**, which names Visual Studio 2022.
+
+**Context.** The specification names MSVC from Visual Studio 2022. The project owner's development machine has Visual Studio 2026, and GitHub's current Windows image (`windows-2025`) carries Visual Studio 2026 too. Its compiler is the direct successor of the Visual Studio 2022 one and accepts the same options. The `windows` preset used to name the generator `Visual Studio 17 2022`, which cannot configure on a machine that has only Visual Studio 2026.
+
+**Decision.**
+
+- The product toolchain is MSVC from Visual Studio 2022 (17.6 or later) or from Visual Studio 2026.
+- The `windows` configure preset names no generator. CMake then uses the newest Visual Studio installed, so the same presets and commands work with either version. The CMake bundled with each Visual Studio knows that version's generator.
+- CI builds and tests Debug and Release with both versions (D-011), so neither can break unnoticed.
+- The first MSVC build and test run of the engine was made with Visual Studio 2026 (18.12, MSVC 19.52).
+
+**Alternatives considered.** A second set of presets for Visual Studio 2026 would double the Windows presets and give every documented command two spellings. Requiring Visual Studio 2026 would drop the version the specification names for no benefit. Ninja with MSVC would work with any version but generates no solution to open in Visual Studio.
+
+**Consequences.**
+
+- A machine with both versions installed builds with the newer one.
+- The generated solution is `WhiteWolfEngine.slnx` with Visual Studio 2026 and `WhiteWolfEngine.sln` with Visual Studio 2022.
+- The clang-format bundled with Visual Studio 2026 is not version 18, so the formatter must still be installed separately (D-008).

@@ -5,13 +5,13 @@ description: Build White Wolf Engine and run its tests. Use when building, runni
 
 # Build and test White Wolf Engine
 
-All commands run from the repository root. On Windows use a **Developer PowerShell for VS 2022**.
+All commands run from the repository root. On Windows use a **Developer PowerShell for VS** (2022 or 2026) with `git` on the `PATH`; the developer shell does not add it (see "Toolchain" in `AGENTS.md`).
 
 ## 1. Pick the presets for this machine
 
 | Machine | Workflow presets to run |
 | --- | --- |
-| Windows with Visual Studio 2022 | `windows-debug`, `windows-release` |
+| Windows with Visual Studio 2022 or 2026 | `windows-debug`, `windows-release` |
 | Linux (development cross-check) | `linux-gcc-debug`, `linux-gcc-release`, `linux-clang-debug`, `linux-sanitize` |
 
 Windows with MSVC is the product toolchain and the result that counts. The Linux presets only cross-check the code; they never replace a Windows run.
@@ -65,6 +65,7 @@ New source files are picked up automatically; no CMake edit or reconfigure is ne
 | `unresolved external symbol` (MSVC) or `undefined reference` when linking a test or another module | The symbol is not exported. Add the module API macro (`ENGINE_API`) to its declaration. |
 | A warning stops the build | Fix the code. Do not disable the warning; see "Warnings" in `AGENTS.md`. |
 | `No such preset` | The preset is for the other operating system; see the table in step 1. |
+| Configure fails with `could not find git` | `git` is not on the `PATH`. Install Git for Windows or add the copy bundled with Visual Studio; see "Toolchain" in `AGENTS.md`. |
 | Configure fails while fetching a dependency | The first configure needs internet access to GitHub. Retry when the network is available; never vendor a copy by hand. |
 | doctest fails to compile with `use of undefined type 'std::basic_ostream'` (MSVC) | A `CHECK` compares a type that doctest prints with `operator<<`, such as `std::string_view`, and the test file does not include `<ostream>`. Include it. |
 | `CodeStyle.ClangFormat` fails | Run `cmake -P Tools/Format.cmake`, review the changes, rebuild. |

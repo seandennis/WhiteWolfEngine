@@ -12,7 +12,7 @@ endif()
 
 if(NOT (MSVC OR CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$"))
     message(FATAL_ERROR
-        "Unsupported compiler '${CMAKE_CXX_COMPILER_ID}'. White Wolf Engine targets MSVC (Visual Studio 2022); "
+        "Unsupported compiler '${CMAKE_CXX_COMPILER_ID}'. White Wolf Engine targets MSVC (Visual Studio); "
         "GCC and Clang are supported for development builds only.")
 endif()
 

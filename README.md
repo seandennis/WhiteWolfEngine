@@ -10,8 +10,8 @@ The engine is built in the milestones defined by the specification. Each one mus
 
 | # | Milestone | Status |
 | --- | --- | --- |
-| 1 | Repository, CMake build, test framework, `AGENTS.md`, code style tooling, first push to GitHub | In progress: everything is in place and passes on the Linux cross-check presets. Still to do: the first MSVC build and test run, and the first push |
-| 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | In progress. Done: logging, assertions, math types, `WObject`/`WClass` with incremental mark-and-sweep garbage collection, `Destroy`/`IsValid`, weak references, leak reporting. Still to do: reflection of value types and functions with the `WCLASS`/`WPROPERTY`/`WFUNCTION` header tool, ECS, scene serialization, window, input. Not yet built with MSVC |
+| 1 | Repository, CMake build, test framework, `AGENTS.md`, code style tooling, first push to GitHub | In progress: everything is in place and passes with MSVC (Visual Studio 2026, Debug and Release) and on the Linux cross-check presets. Still to do: a green CI run on the first push |
+| 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | In progress. Done: logging, assertions, math types, `WObject`/`WClass` with incremental mark-and-sweep garbage collection, `Destroy`/`IsValid`, weak references, leak reporting. Still to do: reflection of value types and functions with the `WCLASS`/`WPROPERTY`/`WFUNCTION` header tool, ECS, scene serialization, window, input, and leak reporting for engine allocations in MSVC debug builds (D-018) |
 | 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Not started |
 | 4 | Renderer: image-based lighting, soft shadows, SSAO | Not started |
 | 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | Not started |
@@ -26,13 +26,13 @@ What exists today: the build system, the `Engine` module (`WhiteWolfEngine.dll`)
 ## Requirements
 
 - Windows 10 or 11, x64
-- Visual Studio 2022, version 17.6 or later, with the **Desktop development with C++** workload (provides MSVC, the Windows SDK and CMake)
-- Git
+- Visual Studio 2022 (version 17.6 or later) or Visual Studio 2026, with the **Desktop development with C++** workload (provides MSVC, the Windows SDK and CMake)
+- Git, on the `PATH`
 - Internet access for the first configure, which downloads the pinned third-party sources
 
 ## Build and test
 
-From a **Developer PowerShell for VS 2022**, in the repository root:
+From a **Developer PowerShell for VS**, in the repository root:
 
 ```
 cmake --workflow --preset windows-debug
@@ -40,7 +40,7 @@ cmake --workflow --preset windows-debug
 
 That one command configures the project, builds it and runs every test. Use `windows-release` for an optimised build.
 
-To work in Visual Studio, open `Build/windows/WhiteWolfEngine.sln` after the first configure. Everything else (individual steps, running single tests, the Linux cross-check presets) is described in [`AGENTS.md`](AGENTS.md).
+To work in Visual Studio, open the solution in `Build/windows/` after the first configure: `WhiteWolfEngine.slnx` with Visual Studio 2026, `WhiteWolfEngine.sln` with Visual Studio 2022. Everything else (individual steps, running single tests, the Linux cross-check presets) is described in [`AGENTS.md`](AGENTS.md).
 
 ## Repository layout
 

@@ -21,12 +21,15 @@ This file is the working agreement for every agent (and human) who changes this 
 
 | Purpose | Tool |
 | --- | --- |
-| Product compiler | MSVC, Visual Studio 2022 17.6 or later ("Desktop development with C++" workload), x64 |
+| Product compiler | MSVC, Visual Studio 2022 (17.6 or later) or Visual Studio 2026 ("Desktop development with C++" workload), x64. See D-019 |
 | Build system | CMake 3.25 or later (bundled with Visual Studio), driven through `CMakePresets.json` |
+| Source control | Git, on the `PATH`. CMake also uses it to fetch the pinned third-party sources |
 | Formatter | clang-format 18 (exactly major version 18) |
 | Development cross-checks | GCC 13+, Clang 18+ and Ninja on Linux. Not a shipping platform; see D-004 |
 
-On Windows, run every command below from a **Developer PowerShell for VS 2022** so that `cmake`, `ctest` and `git` are on the `PATH`. The first configure needs internet access to fetch the pinned third-party sources.
+On Windows, run every command below from a **Developer PowerShell for VS** (2022 or 2026) so that `cmake` and `ctest` are on the `PATH`. The developer shell does not add `git`: install Git for Windows, or add the copy bundled with Visual Studio (`Common7\IDE\CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd` under the Visual Studio installation) to the `PATH`. The first configure needs internet access to fetch the pinned third-party sources.
+
+The `windows` preset names no generator, so CMake uses the newest Visual Studio installed on the machine.
 
 ## Build commands
 
@@ -40,7 +43,7 @@ cmake --workflow --preset windows-release
 The same steps individually, for incremental work:
 
 ```
-cmake --preset windows                    # configure (generates Build/windows/WhiteWolfEngine.sln)
+cmake --preset windows                    # configure (generates the Visual Studio solution in Build/windows/)
 cmake --build --preset windows-debug      # build Debug   (or windows-release)
 ctest --preset windows-debug              # run all tests (or windows-release)
 ```
@@ -252,7 +255,7 @@ Tests that create objects start with `const FScopedObjectTest ObjectTest;` (`Tes
 - Commit message: an imperative subject line of at most 72 characters ("Add version parsing"), a blank line, then a body explaining what changed and why.
 - `main` must always build and pass every test.
 - Optional but recommended once per clone: `git config core.hooksPath Tools/GitHooks` to reject unformatted commits.
-- Continuous integration (`.github/workflows/ci.yml`) builds and tests with MSVC on Windows and with the Linux cross-check presets, and checks formatting. A milestone is complete only when CI is green on the commit that finishes it.
+- Continuous integration (`.github/workflows/ci.yml`) builds and tests with MSVC from Visual Studio 2022 and from Visual Studio 2026 on Windows and with the Linux cross-check presets, and checks formatting. A milestone is complete only when CI is green on the commit that finishes it.
 - If you worked on a machine without MSVC, say so when you hand off, and treat the change as unverified until the Windows CI job passes.
 
 ### Pre-commit review checklist

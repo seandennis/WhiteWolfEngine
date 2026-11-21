@@ -14,14 +14,19 @@ concurrency:
 
 jobs:
   windows:
-    name: Windows MSVC (${{ matrix.configuration }})
-    # windows-2022 carries Visual Studio 2022, the supported toolchain.
-    # windows-latest has moved on to Visual Studio 2026.
-    runs-on: windows-2022
+    name: Windows MSVC (${{ matrix.toolchain.name }}, ${{ matrix.configuration }})
+    runs-on: ${{ matrix.toolchain.image }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
+        # Both supported Visual Studio versions. The windows preset names no generator,
+        # so each image builds with the Visual Studio it carries.
+        toolchain:
+          - name: Visual Studio 2022
+            image: windows-2022
+          - name: Visual Studio 2026
+            image: windows-2025
         configuration: [debug, release]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
