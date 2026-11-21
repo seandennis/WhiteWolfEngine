@@ -13,7 +13,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | 1 | Repository, CMake build, test framework, `AGENTS.md`, code style tooling, first push to GitHub | Complete |
 | 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | Complete |
 | 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Complete |
-| 4 | Renderer: image-based lighting, soft shadows, SSAO | Not started |
+| 4 | Renderer: image-based lighting, soft shadows, SSAO | In progress. Done: Radiance HDR image files. Still to do: environment maps and image-based lighting, cascaded soft shadows, SSAO |
 | 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | Not started |
 | 6 | Plugin system, ChronoPhysics plugin, audio components | Not started |
 | 7 | C++ scripting module with hot reload, prefabs, full test scene | Not started |
@@ -63,7 +63,7 @@ To work in Visual Studio, open the solution in `Build/windows/` after the first 
 | [GLFW](https://github.com/glfw/glfw) | 3.4 | zlib | Windows, keyboard and mouse input |
 | [NVRHI](https://github.com/NVIDIA-RTX/NVRHI) | main, 2026-11-21 | MIT | Rendering hardware interface, with its Vulkan backend |
 | [Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers) | 1.4.352 | Apache-2.0 OR MIT | The declarations of the Vulkan API |
-| [stb](https://github.com/nothings/stb) | master, 2026-11-21 | Public domain or MIT | Reading PNG and JPEG images, writing PNG images |
+| [stb](https://github.com/nothings/stb) | master, 2026-11-21 | Public domain or MIT | Reading PNG, JPEG and Radiance HDR images, writing PNG and Radiance HDR images |
 | [cgltf](https://github.com/jkuhlmann/cgltf) | 1.15 | MIT | Reading glTF 2.0 files |
 | [glslang](https://github.com/KhronosGroup/glslang) | 16.6.0 | BSD-3-Clause, Apache-2.0, MIT | Compiles shaders to SPIR-V during the build (not shipped) |
 | [doctest](https://github.com/doctest/doctest) | 2.5.3 | MIT | Unit tests (not shipped) |

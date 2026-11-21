@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Rendering/HdrImage.h"
 #include "Rendering/Image.h"
 
 #include <cstddef>
@@ -11,7 +12,8 @@
 #include <vector>
 
 /**
- * Reads pictures from PNG and JPEG files and writes them as PNG files.
+ * Reads pictures from PNG and JPEG files and writes them as PNG files, and reads and writes pictures of light as
+ * Radiance HDR files (.hdr), the format that photographs of whole surroundings for lighting come in.
  *
  * Whatever a file holds (grey or colour, with or without transparency, 8 or 16 bits per channel) is read as the
  * four 8-bit channels of an FImage. The numbers in the file are taken as they are: an image file normally holds
@@ -62,4 +64,34 @@ public:
 	 */
 	ENGINE_API static bool SavePngToMemory(
 		const FImage& Image, std::vector<std::byte>& OutFileData, std::string& OutError);
+
+	/**
+	 * Reads a Radiance HDR file (.hdr).
+	 *
+	 * @param OutImage Receives the picture, in linear space, with alpha one. Unchanged on failure.
+	 * @param OutError Receives the reason on failure: the file cannot be read, is not a Radiance HDR image, is
+	 * damaged, or is larger than MaxDimension.
+	 * @return True if the picture was read.
+	 */
+	ENGINE_API static bool LoadHdr(const std::filesystem::path& Path, FHdrImage& OutImage, std::string& OutError);
+
+	/** Reads a Radiance HDR file that is already in memory. See LoadHdr. */
+	ENGINE_API static bool LoadHdrFromMemory(
+		std::span<const std::byte> FileData, FHdrImage& OutImage, std::string& OutError);
+
+	/**
+	 * Writes a picture of light as a Radiance HDR file. The format keeps each pixel's brightness over an enormous
+	 * range but only to about one part in two hundred, so what is read back is close to, not equal to, what
+	 * was written. It has no alpha and no negative values: alpha is left out and negative values are written as
+	 * zero.
+	 *
+	 * @param OutError Receives the reason on failure: the image is empty or larger than MaxDimension, or the file
+	 * cannot be written.
+	 * @return True if the file was written.
+	 */
+	ENGINE_API static bool SaveHdr(const FHdrImage& Image, const std::filesystem::path& Path, std::string& OutError);
+
+	/** Encodes a picture of light as the bytes of a Radiance HDR file. See SaveHdr. */
+	ENGINE_API static bool SaveHdrToMemory(
+		const FHdrImage& Image, std::vector<std::byte>& OutFileData, std::string& OutError);
 };

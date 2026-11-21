@@ -498,7 +498,7 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - **The engine does the file access.** stb is built without its own file functions (`STBI_NO_STDIO`): `FImageFile` reads and writes whole files through `FFileHelper`, which handles paths that are not ASCII and replaces a file only when the new one is complete, and hands stb memory. Only the PNG and JPEG decoders are compiled in.
 - **A picture's size is checked before it is decoded,** against a limit of 16,384 pixels a side, so a damaged or hostile file cannot make the engine allocate gigabytes.
 
-**Alternatives considered.** libpng with libjpeg-turbo is faster and more complete, but is two libraries with build systems of their own and zlib beneath them, for decoding that happens once per asset at import time. Windows Imaging Component would tie image reading to Windows and to the tests' build servers' configuration. HDR images (for image-based lighting, milestone 4) and compressed GPU textures are decided when they are needed.
+**Alternatives considered.** libpng with libjpeg-turbo is faster and more complete, but is two libraries with build systems of their own and zlib beneath them, for decoding that happens once per asset at import time. Windows Imaging Component would tie image reading to Windows and to the tests' build servers' configuration. Compressed GPU textures are decided when they are needed. (Milestone 4 added Radiance HDR files, `.hdr`, through the same two stb headers: it is the format HDRIs for lighting are published in, and stb reads and writes it. OpenEXR, the other common format, would need a library of its own.)
 
 ## D-032: Textures in materials
 

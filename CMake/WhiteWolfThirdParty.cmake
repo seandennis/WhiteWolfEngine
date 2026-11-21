@@ -91,7 +91,8 @@ FetchContent_Declare(glslang
     SYSTEM)
 FetchContent_MakeAvailable(glslang)
 
-# stb: reads PNG and JPEG images (stb_image.h) and writes PNG images (stb_image_write.h). Public
+# stb: reads PNG, JPEG and Radiance HDR images (stb_image.h) and writes PNG and Radiance HDR
+# images (stb_image_write.h). Public
 # domain, or MIT at the user's choice. stb publishes no releases; this is its master branch on
 # 2026-11-21.
 # Both are single-header libraries, which one source file of a program has to turn into code. That
@@ -114,7 +115,8 @@ file(CONFIGURE OUTPUT "${stb_implementation}" CONTENT
 " @ONLY)
 add_library(stb STATIC "${stb_implementation}")
 target_include_directories(stb SYSTEM PUBLIC "${stb_SOURCE_DIR}")
-target_compile_definitions(stb PUBLIC STBI_NO_STDIO STBI_WRITE_NO_STDIO STBI_ONLY_PNG STBI_ONLY_JPEG)
+target_compile_definitions(stb PUBLIC
+    STBI_NO_STDIO STBI_WRITE_NO_STDIO STBI_ONLY_PNG STBI_ONLY_JPEG STBI_ONLY_HDR)
 set_target_properties(stb PROPERTIES POSITION_INDEPENDENT_CODE ON FOLDER "ThirdParty")
 
 # cgltf: reads glTF 2.0 files, both .gltf and .glb (MIT). Release v1.15.
