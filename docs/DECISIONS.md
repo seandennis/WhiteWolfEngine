@@ -499,3 +499,19 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - **A picture's size is checked before it is decoded,** against a limit of 16,384 pixels a side, so a damaged or hostile file cannot make the engine allocate gigabytes.
 
 **Alternatives considered.** libpng with libjpeg-turbo is faster and more complete, but is two libraries with build systems of their own and zlib beneath them, for decoding that happens once per asset at import time. Windows Imaging Component would tie image reading to Windows and to the tests' build servers' configuration. HDR images (for image-based lighting, milestone 4) and compressed GPU textures are decided when they are needed.
+
+## D-032: Textures in materials
+
+**Status:** Accepted.
+
+**Decision.**
+
+- **A material has four optional textures, as in glTF:** base colour and emissive (sRGB), metallic-roughness and normal (linear). A texture multiplies the material's plain value, so a material without a texture needs no special case: it reads a white pixel. glTF's occlusion texture only affects ambient light, which the engine does not have before milestone 4, so it is added with image-based lighting.
+- **`WTexture` holds its picture in main memory;** the renderer owns the copy on the graphics card, exactly as for meshes (D-029): created on first use, replaced when the picture's version changes, released when the texture is collected.
+- **Mipmaps are made on the CPU** by `FMipChain` when a texture is uploaded, averaging sRGB colours as light. NVRHI has no mipmap generation on Vulkan, and doing it in the engine makes the result the same on every graphics card and testable without one.
+- **Normal mapping needs no tangents.** The fragment shader derives the tangent and bitangent from how the position and the texture coordinate change between neighbouring pixels. Vertices stay 32 bytes, importing a mesh needs no tangent generation, and mirrored texture layouts come out right because the bitangent's side is taken from the layout itself. Tangents stored in a glTF file are not used; where a file's tangents were made to deliberately disagree with its texture layout, the result differs.
+- **Textures are filtered trilinearly, without anisotropic filtering,** which would need a device feature the renderer does not yet ask for. Each texture has a wrap mode per direction: repeat, mirrored repeat or clamp.
+- **Each material has one binding set** with its four textures and their samplers, as descriptor set 1 beside the scene's data in set 0. It is made again when the material's textures, their pictures or their wrap modes change, and released when the material is collected. A texture that could be created but not yet written, because a later step of the same picture failed, is written by the next picture.
+- **A wrap mode and a texture's picture are not reflected properties yet**, so textures are not saved with a scene; they come from files, through the importer of the next step.
+
+**Testing.** A 16 by 16 pixel texture on a surface that covers exactly 16 by 16 pixels must come out pixel for pixel. That checks orientation, wrap modes and colour space exactly. Mipmapping is checked with a one-pixel checkerboard that must come out as its average, and the lit textures against the reference model, with the normal texture on four layouts: upright, turned, mirrored and repeated.

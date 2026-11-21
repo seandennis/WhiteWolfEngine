@@ -5,6 +5,8 @@
 #include "Rendering/DirectionalLightComponent.h"
 #include "Rendering/DrawData.h"
 #include "Rendering/Material.h"
+#include "Rendering/MaterialTextureSlot.h"
+#include "Rendering/MipChain.h"
 #include "Rendering/PointLightComponent.h"
 #include "Rendering/RenderDevice.h"
 #include "Rendering/RenderTarget.h"
@@ -14,6 +16,7 @@
 #include "Rendering/StaticMesh.h"
 #include "Rendering/StaticMeshComponent.h"
 #include "Rendering/StaticMeshVertex.h"
+#include "Rendering/Texture.h"
 #include "Rendering/ViewConstants.h"
 #include "Scene/Component.h"
 #include "Scene/Entity.h"
@@ -64,8 +67,12 @@ namespace
 	/** Everything of a scene that one picture needs, collected in one walk over its entities. */
 	struct FSceneContents
 	{
-		/** The meshes to draw. DrawData holds the per-mesh data of each, at the same index. */
+		/**
+		 * The meshes to draw. Materials holds the material of each, null where a component has none, and DrawData
+		 * its per-mesh data, at the same index.
+		 */
 		std::vector<WStaticMesh*> Meshes;
+		std::vector<WMaterial*> Materials;
 		std::vector<FDrawData> DrawData;
 
 		/** The lights, as the shaders receive them. */
@@ -124,12 +131,15 @@ namespace
 		Data.LocalToClip = RelativeToClip * Data.LocalToRelative;
 		Data.NormalToRelative = MakeNormalMatrix(WorldTransform);
 
-		const WMaterial* const Material = Component.Material.Get();
-		if (IsValid(Material))
+		WMaterial* const Material = IsValid(Component.Material.Get()) ? Component.Material.Get() : nullptr;
+		if (Material != nullptr)
 		{
+			const WTexture* const NormalTexture = Material->NormalTexture.Get();
+			const bool bHasNormalTexture = IsValid(NormalTexture) && NormalTexture->HasImage();
 			Data.BaseColor = Material->BaseColor;
 			Data.EmissiveColor = Material->EmissiveColor;
 			Data.MetallicRoughness = glm::vec4(Material->Metallic, Material->Roughness, 0.0f, 0.0f);
+			Data.NormalScale = glm::vec4(Material->NormalScale, bHasNormalTexture ? 1.0f : 0.0f, 0.0f, 0.0f);
 		}
 		else
 		{
@@ -139,6 +149,7 @@ namespace
 		}
 
 		Contents.Meshes.push_back(Mesh);
+		Contents.Materials.push_back(Material);
 		Contents.DrawData.push_back(Data);
 	}
 
@@ -309,7 +320,8 @@ namespace
 		nvrhi::IInputLayout* InputLayout,
 		nvrhi::IShader* VertexShader,
 		nvrhi::IShader* FragmentShader,
-		nvrhi::IBindingLayout* BindingLayout,
+		nvrhi::IBindingLayout* SceneBindingLayout,
+		nvrhi::IBindingLayout* MaterialBindingLayout,
 		nvrhi::Format ColorFormat,
 		nvrhi::Format DepthFormat)
 	{
@@ -318,7 +330,9 @@ namespace
 		Description.inputLayout = InputLayout;
 		Description.VS = VertexShader;
 		Description.PS = FragmentShader;
-		Description.bindingLayouts.push_back(BindingLayout);
+		// The order of the layouts is the number of the descriptor set each is in the shaders.
+		Description.bindingLayouts.push_back(SceneBindingLayout);
+		Description.bindingLayouts.push_back(MaterialBindingLayout);
 		// Triangles face the viewer when their corners run counter-clockwise, and the backs are not drawn.
 		Description.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Back;
 		Description.renderState.rasterState.frontCounterClockwise = true;
@@ -380,13 +394,16 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 	}
 
 	// The attributes are numbered in this order, which is the order of the inputs of StaticMesh.vert.
-	std::array<nvrhi::VertexAttributeDesc, 2> Attributes;
+	std::array<nvrhi::VertexAttributeDesc, 3> Attributes;
 	Attributes[0].name = "Position";
 	Attributes[0].format = nvrhi::Format::RGB32_FLOAT;
 	Attributes[0].offset = static_cast<uint32>(offsetof(FStaticMeshVertex, Position));
 	Attributes[1].name = "Normal";
 	Attributes[1].format = nvrhi::Format::RGB32_FLOAT;
 	Attributes[1].offset = static_cast<uint32>(offsetof(FStaticMeshVertex, Normal));
+	Attributes[2].name = "TextureCoordinate";
+	Attributes[2].format = nvrhi::Format::RG32_FLOAT;
+	Attributes[2].offset = static_cast<uint32>(offsetof(FStaticMeshVertex, TextureCoordinate));
 	for (nvrhi::VertexAttributeDesc& Attribute : Attributes)
 	{
 		Attribute.elementStride = static_cast<uint32>(sizeof(FStaticMeshVertex));
@@ -395,10 +412,13 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 		RenderInterface.createInputLayout(Attributes.data(), static_cast<uint32>(Attributes.size()), VertexShader);
 
 	// Slot 0 of the buffers is the array of FDrawData and slot 0 of the constant buffers the FViewConstants;
-	// see SceneData.glsl for how the shaders name them.
+	// see SceneData.glsl for how the shaders name them. The data of the scene is descriptor set 0 in the shaders and
+	// the textures of a material are set 1; each layout says which set it is, because both number their slots
+	// from zero.
 	NewImplementation->SceneBindingLayout =
 		RenderInterface.createBindingLayout(nvrhi::BindingLayoutDesc()
 												.setVisibility(nvrhi::ShaderType::Vertex | nvrhi::ShaderType::Pixel)
+												.setRegisterSpaceAndDescriptorSet(0)
 												.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(0))
 												.addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0)));
 	NewImplementation->TonemapBindingLayout =
@@ -406,8 +426,20 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 												.setVisibility(nvrhi::ShaderType::Pixel)
 												.addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))
 												.addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(float))));
+
+	// One texture and one sampler for each EMaterialTextureSlot; see MaterialTextures.glsl.
+	nvrhi::BindingLayoutDesc MaterialLayoutDescription;
+	MaterialLayoutDescription.setVisibility(nvrhi::ShaderType::Pixel);
+	MaterialLayoutDescription.setRegisterSpaceAndDescriptorSet(1);
+	for (uint32 Slot = 0; Slot < MaterialTextureSlotCount; ++Slot)
+	{
+		MaterialLayoutDescription.addItem(nvrhi::BindingLayoutItem::Texture_SRV(Slot));
+		MaterialLayoutDescription.addItem(nvrhi::BindingLayoutItem::Sampler(Slot));
+	}
+	NewImplementation->MaterialBindingLayout = RenderInterface.createBindingLayout(MaterialLayoutDescription);
+
 	if (InputLayout == nullptr || NewImplementation->SceneBindingLayout == nullptr ||
-		NewImplementation->TonemapBindingLayout == nullptr)
+		NewImplementation->TonemapBindingLayout == nullptr || NewImplementation->MaterialBindingLayout == nullptr)
 	{
 		OutError = "the graphics card could not create the layouts of the renderer's vertices and shader data";
 		return nullptr;
@@ -426,11 +458,18 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 		return nullptr;
 	}
 
+	if (!NewImplementation->CreateSamplersAndWhiteTexture())
+	{
+		OutError = "the graphics card could not create the samplers and the default texture of materials";
+		return nullptr;
+	}
+
 	NewImplementation->LitPipeline = CreateMeshPipeline(RenderInterface,
 		InputLayout,
 		VertexShader,
 		LitShader,
 		NewImplementation->SceneBindingLayout,
+		NewImplementation->MaterialBindingLayout,
 		FRenderTarget::FImplementation::SceneColorFormat,
 		FRenderTarget::FImplementation::DepthFormat);
 	NewImplementation->UnlitPipeline = CreateMeshPipeline(RenderInterface,
@@ -438,6 +477,7 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 		VertexShader,
 		UnlitShader,
 		NewImplementation->SceneBindingLayout,
+		NewImplementation->MaterialBindingLayout,
 		FRenderTarget::FImplementation::ColorFormat,
 		FRenderTarget::FImplementation::DepthFormat);
 	NewImplementation->TonemapPipeline = CreateTonemapPipeline(
@@ -478,17 +518,25 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	WW_CHECKF(TargetData.Context == Implementation->Context,
 		"A render target can only be drawn to by a renderer of the render device that created it");
 
-	// The copy of a mesh on the graphics card is released once the mesh itself is gone.
+	// The copy of a mesh or texture on the graphics card is released once the mesh or texture itself is gone, and
+	// so are the bindings of a material. The bindings for components without a material, under the null key, stay.
 	std::erase_if(Implementation->MeshBuffers,
 		[](const std::pair<const WStaticMesh* const, FStaticMeshBuffers>& Entry)
 		{ return Entry.second.Mesh.Get() == nullptr; });
+	std::erase_if(Implementation->Textures,
+		[](const std::pair<const WTexture* const, FTextureResource>& Entry)
+		{ return Entry.second.Texture.Get() == nullptr; });
+	std::erase_if(Implementation->Materials,
+		[](const std::pair<const WMaterial* const, FMaterialBindings>& Entry)
+		{ return Entry.first != nullptr && Entry.second.Material.Get() == nullptr; });
 
 	const bool bIsLit = ViewMode == ESceneViewMode::Lit;
 	const float AspectRatio = static_cast<float>(TargetData.Width) / static_cast<float>(TargetData.Height);
 	const FSceneContents Contents = CollectScene(Scene, View, AspectRatio, bIsLit);
 	const int32 DrawCount = static_cast<int32>(Contents.Meshes.size());
 
-	// Everything that can fail happens before the first command is recorded, so that a failure changes nothing.
+	// Everything that can fail happens before the first command is recorded, so that a failure leaves the target
+	// as it was.
 	nvrhi::IDevice& Device = *Implementation->Context->GetDevice();
 	std::vector<FMeshUpload> Uploads;
 	for (WStaticMesh* const Mesh : Contents.Meshes)
@@ -513,6 +561,19 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 			return false;
 		}
 		Uploads.push_back(std::move(Upload));
+	}
+
+	std::vector<nvrhi::IBindingSet*> MaterialBindingSets;
+	MaterialBindingSets.reserve(Contents.Materials.size());
+	for (WMaterial* const Material : Contents.Materials)
+	{
+		nvrhi::IBindingSet* const BindingSet = Implementation->FindOrCreateMaterialBindings(Material);
+		if (BindingSet == nullptr)
+		{
+			OutError = "the graphics card has no room for the textures of the scene's materials";
+			return false;
+		}
+		MaterialBindingSets.push_back(BindingSet);
 	}
 
 	if (DrawCount > Implementation->DrawBufferCapacity)
@@ -594,6 +655,8 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		Implementation->MeshBuffers.insert_or_assign(Upload.Mesh, std::move(Upload.Buffers));
 	}
 
+	const int32 UploadedTextureCount = Implementation->WritePendingTextures(CommandList);
+
 	if (DrawCount > 0)
 	{
 		CommandList.writeBuffer(
@@ -626,6 +689,7 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		State.framebuffer = bIsLit ? TargetData.SceneFramebuffer : TargetData.Framebuffer;
 		State.viewport.addViewportAndScissorRect(Viewport);
 		State.bindings.push_back(Implementation->SceneBindingSet);
+		State.bindings.push_back(nullptr);
 		State.vertexBuffers.resize(1);
 
 		for (int32 DrawIndex = 0; DrawIndex < DrawCount; ++DrawIndex)
@@ -638,6 +702,7 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 									.setBuffer(Buffers.IndexBuffer)
 									.setFormat(nvrhi::Format::R32_UINT)
 									.setOffset(0);
+			State.bindings[1] = MaterialBindingSets[static_cast<std::size_t>(DrawIndex)];
 			CommandList.setGraphicsState(State);
 
 			// The instance number is how the shaders find this mesh's FDrawData.
@@ -668,6 +733,8 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	Implementation->Statistics.DrawnMeshCount = DrawCount;
 	Implementation->Statistics.UploadedMeshCount = static_cast<int32>(Uploads.size());
 	Implementation->Statistics.CachedMeshCount = static_cast<int32>(Implementation->MeshBuffers.size());
+	Implementation->Statistics.UploadedTextureCount = UploadedTextureCount;
+	Implementation->Statistics.CachedTextureCount = static_cast<int32>(Implementation->Textures.size());
 	Implementation->Statistics.DirectionalLightCount = Contents.ViewConstants.LightCounts.x;
 	Implementation->Statistics.PointLightCount = Contents.ViewConstants.LightCounts.y;
 	return true;
@@ -676,4 +743,193 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 const FSceneRenderStatistics& FSceneRenderer::GetStatistics() const
 {
 	return Implementation->Statistics;
+}
+
+bool FSceneRenderer::FImplementation::CreateSamplersAndWhiteTexture()
+{
+	nvrhi::IDevice& Device = *Context->GetDevice();
+
+	// In the order of ETextureWrap.
+	const std::array<nvrhi::SamplerAddressMode, WrapModeCount> AddressModes{
+		nvrhi::SamplerAddressMode::Repeat,
+		nvrhi::SamplerAddressMode::MirroredRepeat,
+		nvrhi::SamplerAddressMode::ClampToEdge,
+	};
+	for (std::size_t WrapU = 0; WrapU < WrapModeCount; ++WrapU)
+	{
+		for (std::size_t WrapV = 0; WrapV < WrapModeCount; ++WrapV)
+		{
+			// Textures are read smoothly: between pixels, and between their smaller versions.
+			nvrhi::SamplerDesc Description;
+			Description.setAllFilters(true);
+			Description.setAddressU(AddressModes[WrapU]);
+			Description.setAddressV(AddressModes[WrapV]);
+
+			nvrhi::SamplerHandle& Sampler = Samplers[WrapU * WrapModeCount + WrapV];
+			Sampler = Device.createSampler(Description);
+			if (Sampler == nullptr)
+			{
+				return false;
+			}
+		}
+	}
+
+	nvrhi::TextureDesc Description;
+	Description.width = 1;
+	Description.height = 1;
+	Description.format = nvrhi::Format::RGBA8_UNORM;
+	Description.debugName = "WhiteTexture";
+	Description.initialState = nvrhi::ResourceStates::ShaderResource;
+	Description.keepInitialState = true;
+	WhiteTexture = Device.createTexture(Description);
+	if (WhiteTexture == nullptr)
+	{
+		return false;
+	}
+
+	const FColor WhitePixel(255, 255, 255, 255);
+	nvrhi::ICommandList& CommandList = *Context->GetImmediateCommandList();
+	CommandList.open();
+	CommandList.writeTexture(WhiteTexture, 0, 0, &WhitePixel, sizeof(FColor));
+	CommandList.close();
+	Device.executeCommandList(&CommandList);
+	return true;
+}
+
+nvrhi::ITexture* FSceneRenderer::FImplementation::FindOrCreateTexture(WTexture* Texture)
+{
+	if (!IsValid(Texture) || !Texture->HasImage())
+	{
+		return WhiteTexture;
+	}
+
+	const auto Existing = Textures.find(Texture);
+	if (Existing != Textures.end() && Existing->second.ImageVersion == Texture->GetImageVersion())
+	{
+		return Existing->second.Handle;
+	}
+
+	// Each smaller version halves the longer side, until it is one pixel.
+	const FImage& Image = Texture->GetImage();
+	uint32 MipCount = 1;
+	for (int32 Side = std::max(Image.GetWidth(), Image.GetHeight()); Side > 1; Side /= 2)
+	{
+		++MipCount;
+	}
+
+	nvrhi::TextureDesc Description;
+	Description.width = static_cast<uint32>(Image.GetWidth());
+	Description.height = static_cast<uint32>(Image.GetHeight());
+	Description.mipLevels = MipCount;
+	Description.format =
+		Texture->GetColorSpace() == ETextureColorSpace::Srgb ? nvrhi::Format::SRGBA8_UNORM : nvrhi::Format::RGBA8_UNORM;
+	Description.debugName = "Texture";
+	Description.initialState = nvrhi::ResourceStates::ShaderResource;
+	Description.keepInitialState = true;
+
+	FTextureResource Resource;
+	Resource.Texture = Texture;
+	Resource.ImageVersion = Texture->GetImageVersion();
+	Resource.Handle = Context->GetDevice()->createTexture(Description);
+	if (Resource.Handle == nullptr)
+	{
+		return nullptr;
+	}
+
+	nvrhi::ITexture* const Handle = Resource.Handle;
+	Textures.insert_or_assign(Texture, std::move(Resource));
+	return Handle;
+}
+
+nvrhi::ISampler* FSceneRenderer::FImplementation::GetSampler(ETextureWrap WrapU, ETextureWrap WrapV) const
+{
+	return Samplers[static_cast<std::size_t>(WrapU) * WrapModeCount + static_cast<std::size_t>(WrapV)];
+}
+
+nvrhi::IBindingSet* FSceneRenderer::FImplementation::FindOrCreateMaterialBindings(WMaterial* Material)
+{
+	// In the order of EMaterialTextureSlot.
+	std::array<WTexture*, MaterialTextureSlotCount> Sources{};
+	if (Material != nullptr)
+	{
+		Sources = {Material->BaseColorTexture.Get(),
+			Material->MetallicRoughnessTexture.Get(),
+			Material->NormalTexture.Get(),
+			Material->EmissiveTexture.Get()};
+	}
+
+	std::array<nvrhi::ITexture*, MaterialTextureSlotCount> SlotTextures{};
+	std::array<nvrhi::ISampler*, MaterialTextureSlotCount> SlotSamplers{};
+	for (std::size_t Slot = 0; Slot < MaterialTextureSlotCount; ++Slot)
+	{
+		SlotTextures[Slot] = FindOrCreateTexture(Sources[Slot]);
+		if (SlotTextures[Slot] == nullptr)
+		{
+			return nullptr;
+		}
+
+		// The white texture stands in for a missing one, and how a single pixel wraps does not matter.
+		const bool bHasOwnTexture = SlotTextures[Slot] != WhiteTexture;
+		SlotSamplers[Slot] = bHasOwnTexture ? GetSampler(Sources[Slot]->WrapU, Sources[Slot]->WrapV)
+											: GetSampler(ETextureWrap::Repeat, ETextureWrap::Repeat);
+	}
+
+	const auto Existing = Materials.find(Material);
+	const bool bIsCurrent = Existing != Materials.end() && Existing->second.Textures == SlotTextures &&
+		Existing->second.Samplers == SlotSamplers;
+	if (bIsCurrent)
+	{
+		return Existing->second.BindingSet;
+	}
+
+	nvrhi::BindingSetDesc Description;
+	for (uint32 Slot = 0; Slot < MaterialTextureSlotCount; ++Slot)
+	{
+		Description.addItem(nvrhi::BindingSetItem::Texture_SRV(Slot, SlotTextures[Slot]));
+		Description.addItem(nvrhi::BindingSetItem::Sampler(Slot, SlotSamplers[Slot]));
+	}
+
+	FMaterialBindings Bindings;
+	Bindings.Material = Material;
+	Bindings.Textures = SlotTextures;
+	Bindings.Samplers = SlotSamplers;
+	Bindings.BindingSet = Context->GetDevice()->createBindingSet(Description, MaterialBindingLayout);
+	if (Bindings.BindingSet == nullptr)
+	{
+		return nullptr;
+	}
+
+	nvrhi::IBindingSet* const BindingSet = Bindings.BindingSet;
+	Materials.insert_or_assign(Material, std::move(Bindings));
+	return BindingSet;
+}
+
+int32 FSceneRenderer::FImplementation::WritePendingTextures(nvrhi::ICommandList& CommandList)
+{
+	int32 WrittenCount = 0;
+	for (std::pair<const WTexture* const, FTextureResource>& Entry : Textures)
+	{
+		FTextureResource& Resource = Entry.second;
+		const WTexture* const Texture = Resource.Texture.Get();
+		const bool bIsToBeWritten =
+			Resource.bNeedsUpload && Texture != nullptr && Texture->GetImageVersion() == Resource.ImageVersion;
+		if (!bIsToBeWritten)
+		{
+			continue;
+		}
+
+		const std::vector<FImage> MipChain = FMipChain::Build(Texture->GetImage(), Texture->GetColorSpace());
+		for (std::size_t Mip = 0; Mip < MipChain.size(); ++Mip)
+		{
+			const FImage& Image = MipChain[Mip];
+			const std::size_t BytesPerRow = static_cast<std::size_t>(Image.GetWidth()) * sizeof(FColor);
+			CommandList.writeTexture(
+				Resource.Handle, 0, static_cast<uint32>(Mip), Image.GetPixels().data(), BytesPerRow);
+		}
+
+		Resource.bNeedsUpload = false;
+		++WrittenCount;
+	}
+
+	return WrittenCount;
 }

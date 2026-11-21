@@ -373,20 +373,10 @@ TEST_SUITE("FSceneRenderer")
 
 		CHECK(Image.GetPixel(16, 32) == Red);
 		CHECK(Image.GetPixel(48, 32) == Green);
-		CHECK(Test.Renderer->GetStatistics() ==
-			FSceneRenderStatistics{.DrawnMeshCount = 2,
-				.UploadedMeshCount = 1,
-				.CachedMeshCount = 1,
-				.DirectionalLightCount = 0,
-				.PointLightCount = 0});
+		CHECK(Test.Renderer->GetStatistics() == MakeMeshStatistics(2, 1, 1));
 
 		Test.Render(MakeWideView());
-		CHECK(Test.Renderer->GetStatistics() ==
-			FSceneRenderStatistics{.DrawnMeshCount = 2,
-				.UploadedMeshCount = 0,
-				.CachedMeshCount = 1,
-				.DirectionalLightCount = 0,
-				.PointLightCount = 0});
+		CHECK(Test.Renderer->GetStatistics() == MakeMeshStatistics(2, 0, 1));
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 
@@ -414,12 +404,7 @@ TEST_SUITE("FSceneRenderer")
 		CHECK(Image.GetPixel(17, 32) == Red);
 		CHECK(Image.GetPixel(46, 32) == Red);
 		CHECK(Image.GetPixel(15, 32) == Magenta);
-		CHECK(Test.Renderer->GetStatistics() ==
-			FSceneRenderStatistics{.DrawnMeshCount = 1,
-				.UploadedMeshCount = 1,
-				.CachedMeshCount = 1,
-				.DirectionalLightCount = 0,
-				.PointLightCount = 0});
+		CHECK(Test.Renderer->GetStatistics() == MakeMeshStatistics(1, 1, 1));
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 

@@ -49,14 +49,17 @@ inline const FVector3f AxisX(1.0f, 0.0f, 0.0f);
 inline const FVector3f AxisY(0.0f, 1.0f, 0.0f);
 inline const FVector3f AxisZ(0.0f, 0.0f, 1.0f);
 
-/** A square of one metre in the XY plane, centred on its origin, whose front faces +Z. */
+/**
+ * A square of one metre in the XY plane, centred on its origin, whose front faces +Z. A texture lies on it the way
+ * a picture hangs on a wall: its top left corner at the square's top left corner as seen from the front.
+ */
 inline WStaticMesh* MakeSquareMesh()
 {
 	const std::vector<FStaticMeshVertex> Vertices{
-		{FVector3f(-0.5f, -0.5f, 0.0f), AxisZ},
-		{FVector3f(0.5f, -0.5f, 0.0f), AxisZ},
-		{FVector3f(0.5f, 0.5f, 0.0f), AxisZ},
-		{FVector3f(-0.5f, 0.5f, 0.0f), AxisZ},
+		{FVector3f(-0.5f, -0.5f, 0.0f), AxisZ, FVector2f(0.0f, 1.0f)},
+		{FVector3f(0.5f, -0.5f, 0.0f), AxisZ, FVector2f(1.0f, 1.0f)},
+		{FVector3f(0.5f, 0.5f, 0.0f), AxisZ, FVector2f(1.0f, 0.0f)},
+		{FVector3f(-0.5f, 0.5f, 0.0f), AxisZ, FVector2f(0.0f, 0.0f)},
 	};
 
 	WStaticMesh* const Mesh = NewObject<WStaticMesh>();
@@ -114,6 +117,16 @@ inline FCameraView MakeWideView(const FVector& Location = FVector(0.0))
 	View.Location = Location;
 	View.VerticalFieldOfView = 90.0f;
 	return View;
+}
+
+/** The statistics of a picture in which meshes were drawn and nothing else happened. */
+inline FSceneRenderStatistics MakeMeshStatistics(int32 DrawnMeshCount, int32 UploadedMeshCount, int32 CachedMeshCount)
+{
+	FSceneRenderStatistics Statistics;
+	Statistics.DrawnMeshCount = DrawnMeshCount;
+	Statistics.UploadedMeshCount = UploadedMeshCount;
+	Statistics.CachedMeshCount = CachedMeshCount;
+	return Statistics;
 }
 
 /** A render device, a scene renderer and an empty scene, torn down in a safe order. */

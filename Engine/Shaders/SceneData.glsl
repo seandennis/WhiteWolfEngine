@@ -24,6 +24,9 @@ struct FDrawData
 
 	// x: metallic, y: roughness.
 	vec4 MetallicRoughness;
+
+	// x: how strongly the normal texture bends the surface's normal. y: 1 if the material has a normal texture.
+	vec4 NormalScale;
 };
 
 // A light whose rays are parallel.

@@ -4,25 +4,42 @@
 // far brighter than a display can show; Tonemap.frag fits it to the display afterwards.
 
 #include "SceneData.glsl"
+#include "MaterialTextures.glsl"
 #include "Brdf.glsl"
+#include "NormalMapping.glsl"
 
 layout(location = 0) in vec3 InRelativePosition;
 layout(location = 1) in vec3 InNormal;
-layout(location = 2) flat in int InDrawIndex;
+layout(location = 2) in vec2 InTextureCoordinate;
+layout(location = 3) flat in int InDrawIndex;
 
 layout(location = 0) out vec4 OutColor;
 
 void main()
 {
+	// A material's textures multiply its plain values, as in glTF: green is roughness and blue is metallic.
+	vec3 BaseColor = Draws[InDrawIndex].BaseColor.rgb *
+		texture(sampler2D(BaseColorTexture, BaseColorSampler), InTextureCoordinate).rgb;
+	vec4 MetallicRoughnessSample =
+		texture(sampler2D(MetallicRoughnessTexture, MetallicRoughnessSampler), InTextureCoordinate);
+	float Metallic = Draws[InDrawIndex].MetallicRoughness.x * MetallicRoughnessSample.b;
+	float Roughness = Draws[InDrawIndex].MetallicRoughness.y * MetallicRoughnessSample.g;
+	vec3 EmissiveColor = Draws[InDrawIndex].EmissiveColor.rgb *
+		texture(sampler2D(EmissiveTexture, EmissiveSampler), InTextureCoordinate).rgb;
+
+	vec3 Normal = normalize(InNormal);
+	float NormalScale = Draws[InDrawIndex].NormalScale.x;
+	bool bHasNormalTexture = Draws[InDrawIndex].NormalScale.y > 0.5;
+	if (bHasNormalTexture)
+	{
+		vec3 NormalSample = texture(sampler2D(NormalTexture, NormalSampler), InTextureCoordinate).xyz;
+		Normal = ApplyNormalTexture(Normal, InRelativePosition, InTextureCoordinate, NormalSample, NormalScale);
+	}
+
 	// The camera is the origin of camera-relative space.
 	vec3 ToCamera = normalize(-InRelativePosition);
-	FSurface Surface = MakeSurface(Draws[InDrawIndex].BaseColor.rgb,
-		Draws[InDrawIndex].MetallicRoughness.x,
-		Draws[InDrawIndex].MetallicRoughness.y,
-		normalize(InNormal),
-		ToCamera);
-
-	vec3 Light = Draws[InDrawIndex].EmissiveColor.rgb;
+	FSurface Surface = MakeSurface(BaseColor, Metallic, Roughness, Normal, ToCamera);
+	vec3 Light = EmissiveColor;
 
 	for (int Index = 0; Index < View.LightCounts.x; ++Index)
 	{
