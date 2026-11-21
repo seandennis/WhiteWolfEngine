@@ -8,6 +8,9 @@
 #include "Reflection/ArrayProperty.h"
 #include "Reflection/ObjectProperty.h"
 #include "Reflection/Property.h"
+#include "Reflection/PropertySpecifiers.h"
+#include "Reflection/PropertyValueTraits.h"
+#include "Reflection/ValueProperty.h"
 #include "Reflection/WeakObjectProperty.h"
 
 #include <memory>
@@ -24,6 +27,17 @@
  */
 template <typename ValueType>
 struct TPropertyFactory;
+
+/** A plain value: bool, a number, std::string or a math type. See TPropertyValueTraits for the full list. */
+template <typename ValueType>
+	requires requires { TPropertyValueTraits<ValueType>::TypeName; }
+struct TPropertyFactory<ValueType>
+{
+	static std::unique_ptr<FProperty> Create(std::string Name, FProperty::FValueAccessor Accessor)
+	{
+		return std::make_unique<TValueProperty<ValueType>>(std::move(Name), Accessor);
+	}
+};
 
 /** TObjectPtr<ObjectType>: a strong reference to an object. */
 template <typename ObjectType>
@@ -83,10 +97,16 @@ struct TMemberPointerTraits<Member>
  * Creates the property that describes a member variable:
  *
  *     Class.AddProperty(MakeProperty<&WDoor::Hinge>("Hinge"));
+ *
+ * @param Specifiers The flags and category given in the member's WPROPERTY().
  */
 template <auto Member>
-std::unique_ptr<FProperty> MakeProperty(std::string Name)
+std::unique_ptr<FProperty> MakeProperty(std::string Name, FPropertySpecifiers Specifiers = {})
 {
 	using FTraits = TMemberPointerTraits<Member>;
-	return TPropertyFactory<typename FTraits::FValue>::Create(std::move(Name), &FTraits::GetValuePtr);
+
+	std::unique_ptr<FProperty> Property =
+		TPropertyFactory<typename FTraits::FValue>::Create(std::move(Name), &FTraits::GetValuePtr);
+	Property->SetSpecifiers(std::move(Specifiers));
+	return Property;
 }

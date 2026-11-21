@@ -8,7 +8,7 @@ class WClass;
 
 /**
  * A property whose value is a TWeakObjectPtr: a reference to an object of a given class that does not keep the
- * object alive. The garbage collector does not follow it.
+ * object alive. The garbage collector does not follow it. It is saved and loaded like a strong reference.
  */
 class ENGINE_API FWeakObjectProperty final : public FProperty
 {
@@ -24,6 +24,11 @@ public:
 
 	/** Returns the class that the referenced objects must be instances of. */
 	WClass* GetPropertyClass() const;
+
+	std::string GetTypeName() const override;
+	FJsonValue ExportJson(const void* Value, IPropertyJsonContext& Context) const override;
+	bool ImportJson(
+		void* Value, const FJsonValue& Json, IPropertyJsonContext& Context, std::string& OutError) const override;
 
 private:
 	FClassGetter GetPropertyClassFunction;

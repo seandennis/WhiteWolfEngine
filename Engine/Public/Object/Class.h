@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 
 #include "Object/Object.h"
+#include "Reflection/Function.h"
 #include "Reflection/Property.h"
 
 #include <cstddef>
@@ -105,6 +106,21 @@ public:
 		return ReferenceProperties;
 	}
 
+	/**
+	 * Adds a reflected function to this class. Only valid while the class is being registered. The name must not
+	 * be empty or already used by a function of this class or one of its base classes.
+	 */
+	void AddFunction(std::unique_ptr<FFunction> Function);
+
+	/** Returns the functions this class declares itself, in declaration order, without inherited ones. */
+	const std::vector<std::unique_ptr<FFunction>>& GetOwnFunctions() const
+	{
+		return OwnFunctions;
+	}
+
+	/** Returns the function with the given name, declared by this class or a base class, or null. */
+	const FFunction* FindFunction(std::string_view FunctionName) const;
+
 private:
 	friend class FObjectSystem;
 
@@ -115,5 +131,6 @@ private:
 	WObject* (*ConstructFunction)(void* Memory) = nullptr;
 	std::vector<std::unique_ptr<FProperty>> OwnProperties;
 	std::vector<const FProperty*> ReferenceProperties;
+	std::vector<std::unique_ptr<FFunction>> OwnFunctions;
 	bool bIsRegistering = false;
 };

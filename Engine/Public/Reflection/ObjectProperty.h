@@ -6,7 +6,12 @@
 
 class WClass;
 
-/** A property whose value is a TObjectPtr: a strong reference to an object of a given class. */
+/**
+ * A property whose value is a TObjectPtr: a strong reference to an object of a given class.
+ *
+ * In JSON the reference is null or whatever the IPropertyJsonContext writes to identify the object. Loading a
+ * reference to an object that is not of the property's class is an error.
+ */
 class ENGINE_API FObjectProperty final : public FProperty
 {
 public:
@@ -22,8 +27,12 @@ public:
 	/** Returns the class that the referenced objects must be instances of. */
 	WClass* GetPropertyClass() const;
 
+	std::string GetTypeName() const override;
 	bool ContainsObjectReferences() const override;
 	void VisitObjectReferences(void* Value, IObjectReferenceVisitor& Visitor) const override;
+	FJsonValue ExportJson(const void* Value, IPropertyJsonContext& Context) const override;
+	bool ImportJson(
+		void* Value, const FJsonValue& Json, IPropertyJsonContext& Context, std::string& OutError) const override;
 
 private:
 	FClassGetter GetPropertyClassFunction;

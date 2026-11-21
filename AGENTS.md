@@ -109,7 +109,8 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
   Public/                 Headers other modules may include
     CoreMinimal.h         Included first by every engine header: core types, assertions, logging
     Core/                 Fundamental types and assertions: CoreTypes.h, Assert.h, Version.h, EngineVersion.h,
-                          ProcessDiagnostics.h (error dialogs, memory leak report)
+                          EnumClassFlags.h (WW_ENUM_CLASS_FLAGS), ProcessDiagnostics.h (error dialogs, memory
+                          leak report)
     Json/                 JSON text: JsonValue.h (FJsonValue), JsonReader.h (FJsonReader), JsonWriter.h (FJsonWriter)
     Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
     Math/                 Math types: Vector.h (FVector, FVector3f), Quat.h (FQuat), Transform.h (FTransform)
@@ -117,8 +118,10 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
                           WeakObjectPtr.h (TWeakObjectPtr), ObjectGlobals.h (NewObject, Cast, IsValid,
                           CollectGarbage), GarbageCollector.h (FGarbageCollector), ObjectMacros.h (class
                           registration)
-    Reflection/           Reflected properties: Property.h (FProperty), ObjectProperty.h, WeakObjectProperty.h,
-                          ArrayProperty.h, PropertyFactory.h (MakeProperty)
+    Reflection/           Reflected properties: Property.h (FProperty), ValueProperty.h and PropertyValueTraits.h
+                          (bool, numbers, strings, math types), ObjectProperty.h, WeakObjectProperty.h,
+                          ArrayProperty.h, PropertyFactory.h (MakeProperty), PropertyJsonContext.h.
+                          Reflected functions: Function.h (FFunction), FunctionFactory.h (MakeFunction)
   Private/                Sources and module-internal headers, mirroring Public/
   Tests/                  Unit tests, mirroring Public/ (EngineTests executable)
     TestSupport/          Helpers shared by tests: FScopedLogCapture, FScopedTempDirectory
@@ -238,8 +241,11 @@ void WDoor::RegisterClassMembers(WClass& Class)
 {
 	Class.AddProperty(MakeProperty<&WDoor::Hinge>("Hinge"));
 	Class.AddProperty(MakeProperty<&WDoor::Panels>("Panels"));
+	Class.AddFunction(MakeFunction<&WDoor::Open>("Open", {"Speed"}));
 }
 ```
+
+A member can be a property if it is a `bool`, a fixed-width integer, `float`, `double`, `std::string`, `FVector`, `FVector3f`, `FQuat`, `FTransform`, a `TObjectPtr`, a `TWeakObjectPtr` or a `std::vector` of any of these. Every property converts to and from JSON (`ExportJson`, `ImportJson`), which is what saving, loading and the agent interface use. A reflected function (`MakeFunction`, from `Reflection/FunctionFactory.h`) must not be static or overloaded; its parameters and return value must be property types or pointers to `WObject` classes.
 
 A class is registered when its module loads. Class names are unique across all modules. A class with a pure virtual function is abstract and cannot be created with `NewObject`.
 
