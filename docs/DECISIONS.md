@@ -170,7 +170,7 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - `FTransform` cannot represent shear, so combining a rotated child with a non-uniformly scaled parent is approximate, exactly as with Unreal's `FTransform`. Inverting a zero scale component yields zero for that axis rather than infinity.
 - Members of the glm types keep glm's lowercase names (`x`, `y`, `z`, `w`), the one place where engine code departs from PascalCase.
 
-**Not yet decided.** The world's handedness, up axis and unit of length are fixed with the renderer and glTF import in milestone 3; nothing in the transform maths depends on them.
+**Decided later.** The world's handedness, up axis and unit of length are fixed by D-028; nothing in the transform maths depends on them.
 
 ## D-015: Object model and garbage collector
 
@@ -431,3 +431,20 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - *Compiling shaders when the engine runs.* It puts a compiler in every shipped game and moves shader errors from the build to the first run.
 - *Committing compiled SPIR-V.* Binary files in the repository that can silently differ from their source.
 - *HLSL or Slang.* Either adds a much larger compiler. GLSL is enough for the renderer the specification describes.
+
+## D-028: The world is right-handed, Y-up and measured in metres; cameras render relative to themselves
+
+**Status:** Accepted. Settles what D-014 left open.
+
+**Decision.**
+
+- **Axes and units.** The world is right-handed with +Y up. An object, and a camera, faces along its own -Z axis with +X to its right. Lengths are metres. Triangles are front-facing when their corners run counter-clockwise as seen. This is exactly glTF 2.0's convention, so imported scenes need no conversion, and no axis is swapped anywhere between a file and the screen.
+- **Angles** in properties that people edit (a camera's field of view) are degrees. Rotations are quaternions.
+- **`FCameraView`** is the point of view of a picture: location (`FVector`), rotation, vertical field of view and near plane. It produces the three matrices the renderer needs:
+  - the *camera-relative matrix* of an object, whose translation is the object's location minus the camera's, subtracted in double precision and only then converted to float;
+  - the *view matrix*, the inverse of the camera's rotation, with no translation;
+  - the *projection matrix*, with reversed depth and no far plane: depth is `NearPlane / Distance`, 1 at the near plane and 0 at infinity.
+- **Clip space** has y pointing up and depth from 0 to 1, the convention NVRHI gives every backend (on Vulkan it flips the viewport).
+- **`FMatrix4f`** (`glm::mat4`) is the matrix type. Matrices are a renderer detail: gameplay code uses `FTransform`, and no matrix ever holds a position measured from the world origin.
+
+**Why.** Single precision has about seven significant digits. Ten billion kilometres from the origin, the distance the specification tests at, neighbouring floats are about a thousand kilometres apart, so nothing may reach the graphics card in world coordinates. Subtracting the camera's location first leaves numbers whose size is the distance to the camera, which is where precision is needed. Reversed depth puts floating point's dense values near zero at the far end of the scene, where a conventional depth buffer has almost no precision left, and an infinite far plane costs nothing with it.
