@@ -54,14 +54,31 @@ std::unique_ptr<FRenderTarget> FRenderDevice::CreateRenderTarget(int32 Width, in
 	nvrhi::TextureDesc TextureDescription;
 	TextureDescription.width = static_cast<uint32>(Width);
 	TextureDescription.height = static_cast<uint32>(Height);
-	TextureDescription.format = nvrhi::Format::SRGBA8_UNORM;
+	TextureDescription.format = FRenderTarget::FImplementation::ColorFormat;
 	TextureDescription.dimension = nvrhi::TextureDimension::Texture2D;
 	TextureDescription.isRenderTarget = true;
 	TextureDescription.debugName = "RenderTarget";
 	TextureDescription.enableAutomaticStateTracking(nvrhi::ResourceStates::RenderTarget);
 
-	nvrhi::TextureHandle Texture = Context->GetDevice()->createTexture(TextureDescription);
-	if (Texture == nullptr)
+	nvrhi::TextureDesc DepthDescription;
+	DepthDescription.width = TextureDescription.width;
+	DepthDescription.height = TextureDescription.height;
+	DepthDescription.format = FRenderTarget::FImplementation::DepthFormat;
+	DepthDescription.dimension = nvrhi::TextureDimension::Texture2D;
+	DepthDescription.isRenderTarget = true;
+	DepthDescription.debugName = "RenderTargetDepth";
+	DepthDescription.enableAutomaticStateTracking(nvrhi::ResourceStates::DepthWrite);
+
+	nvrhi::IDevice* const Device = Context->GetDevice();
+	nvrhi::TextureHandle Texture = Device->createTexture(TextureDescription);
+	nvrhi::TextureHandle DepthTexture = Device->createTexture(DepthDescription);
+	nvrhi::FramebufferHandle Framebuffer;
+	if (Texture != nullptr && DepthTexture != nullptr)
+	{
+		Framebuffer = Device->createFramebuffer(
+			nvrhi::FramebufferDesc().addColorAttachment(Texture).setDepthAttachment(DepthTexture));
+	}
+	if (Framebuffer == nullptr)
 	{
 		OutError = std::format("the graphics card could not create a render target of {} by {} pixels", Width, Height);
 		return nullptr;
@@ -70,6 +87,8 @@ std::unique_ptr<FRenderTarget> FRenderDevice::CreateRenderTarget(int32 Width, in
 	std::unique_ptr<FRenderTarget::FImplementation> Implementation = std::make_unique<FRenderTarget::FImplementation>();
 	Implementation->Context = Context;
 	Implementation->Texture = std::move(Texture);
+	Implementation->DepthTexture = std::move(DepthTexture);
+	Implementation->Framebuffer = std::move(Framebuffer);
 	Implementation->Width = Width;
 	Implementation->Height = Height;
 	return std::make_unique<FRenderTarget>(std::move(Implementation));

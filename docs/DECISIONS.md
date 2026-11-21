@@ -448,3 +448,20 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - **`FMatrix4f`** (`glm::mat4`) is the matrix type. Matrices are a renderer detail: gameplay code uses `FTransform`, and no matrix ever holds a position measured from the world origin.
 
 **Why.** Single precision has about seven significant digits. Ten billion kilometres from the origin, the distance the specification tests at, neighbouring floats are about a thousand kilometres apart, so nothing may reach the graphics card in world coordinates. Subtracting the camera's location first leaves numbers whose size is the distance to the camera, which is where precision is needed. Reversed depth puts floating point's dense values near zero at the far end of the scene, where a conventional depth buffer has almost no precision left, and an infinite far plane costs nothing with it.
+
+## D-029: The scene renderer
+
+**Status:** Accepted.
+
+**Decision.**
+
+- **`FSceneRenderer` draws a scene from an `FCameraView` onto an `FRenderTarget`.** It walks the entity tree once per picture, combining transforms from the roots down, and draws every visible `WStaticMeshComponent` whose mesh has geometry. Each object's matrix is built relative to the camera (D-028).
+- **The renderer owns the copies of meshes on the graphics card.** A `WStaticMesh` holds its geometry in main memory and knows nothing about the graphics card. The renderer keeps vertex and index buffers per mesh, creates them the first time the mesh is drawn, replaces them when the mesh's geometry version changes, and releases them when its weak reference to the mesh goes null. Assets therefore never keep the graphics card alive, and destroying the renderer releases everything it created.
+- **Geometry versions are unique across all meshes.** The cache is keyed by the mesh's address, and a new mesh can be allocated at the address of a collected one; because no two geometries ever share a version, a stale entry can never be mistaken for a current one.
+- **Every render target has a depth buffer** (32-bit float) and one framebuffer, created with it. All targets share their formats, so the renderer builds each pipeline once, when it is created, and reports any failure then.
+- **A failed `Render` changes nothing.** Everything that can fail (an invalid view, a destroyed scene, the graphics card refusing a buffer) happens before the first command is recorded.
+- **Per-object data reaches the shaders as push constants** (`FDrawConstants`: the local-to-clip matrix and the base colour), which need no buffer and no descriptor per object.
+- **Shading is unlit for now:** a surface has its material's base colour. This is the pipeline the editor's Unlit view mode will use; lighting is added beside it.
+- **`FSceneRenderStatistics`** reports what the last picture drew and uploaded, so that tests can check caching and skipping, which no pixel shows.
+
+**Testing.** The renderer is tested by drawing small scenes and reading pixels whose colour follows from the geometry: placement to the pixel, orientation, hierarchy, back-face culling, depth order regardless of draw order, an object 25 cm away together with ones two million kilometres away, and pixel-for-pixel equal pictures of one scene built at the origin, 1,000 km and ten billion kilometres from it.

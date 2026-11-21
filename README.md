@@ -12,7 +12,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | --- | --- | --- |
 | 1 | Repository, CMake build, test framework, `AGENTS.md`, code style tooling, first push to GitHub | Complete |
 | 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | Complete |
-| 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | In progress. Done: a headless Vulkan render device through NVRHI, render targets that can be cleared and read back as images. Still to do: shaders and pipelines, meshes and materials, glTF import, cameras with camera-relative rendering and reversed-Z, PBR, HDR and tonemapping, screenshot tests against reference images, presenting to a window |
+| 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | In progress. Done: a headless Vulkan render device through NVRHI; render targets that can be read back as images; shaders compiled and embedded at build time; static meshes, materials and a scene renderer that draws camera-relative with reversed-Z and no far plane, tested to give the same picture at the origin and ten billion kilometres from it. Still to do: lights and PBR shading, HDR and tonemapping, textures, glTF import, screenshot tests against reference images, presenting to a window |
 | 4 | Renderer: image-based lighting, soft shadows, SSAO | Not started |
 | 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | Not started |
 | 6 | Plugin system, ChronoPhysics plugin, audio components | Not started |

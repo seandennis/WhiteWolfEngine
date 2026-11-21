@@ -13,7 +13,8 @@ class FRenderContext;
 /**
  * A surface the renderer draws on, in memory on the graphics card: what a window shows, or what a screenshot is
  * taken of. Its pixels are 8 bits per channel and sRGB-encoded, ready to display or save; the graphics card does
- * the encoding, so colours are drawn to it in linear space.
+ * the encoding, so colours are drawn to it in linear space. It has a depth buffer of the same size, which the
+ * renderer uses to let nearer surfaces hide farther ones.
  *
  * Render targets are created by FRenderDevice::CreateRenderTarget. A render target stays usable after the
  * FRenderDevice object that created it is gone; the graphics card is released with the last thing that uses it.
@@ -38,7 +39,7 @@ public:
 	ENGINE_API int32 GetWidth() const;
 	ENGINE_API int32 GetHeight() const;
 
-	/** Fills the whole surface with one colour, given in linear space. */
+	/** Fills the whole surface with one colour, given in linear space. The depth buffer is left as it is. */
 	ENGINE_API void Clear(const FLinearColor& Color);
 
 	/**
@@ -53,6 +54,7 @@ public:
 
 private:
 	friend class FRenderDevice;
+	friend class FSceneRenderer;
 
 	std::unique_ptr<FImplementation> Implementation;
 };

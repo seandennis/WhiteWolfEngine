@@ -42,8 +42,40 @@ function(ww_generate_reflection target)
     source_group("Generated" FILES "${generated_source}")
 endfunction()
 
-# ww_add_module(<name>
-#     [OUTPUT_NAME <file name>]
+# ww_add_shaders(<target> ROOT <dir>)
+#
+# Runs WhiteWolfShaderCompiler over the GLSL shaders (*.vert, *.frag) below the given directory
+# and compiles the source file it writes into <target>. That file holds the compiled SPIR-V of
+# every shader, so the shaders are part of the module and no shader file is needed at run time.
+#
+# The tool runs on every build, so a shader, or a file a shader includes, that was added, changed
+# or deleted is always picked up, and a shader that does not compile fails the build. It leaves
+# the generated file untouched when its content would not change.
+function(ww_add_shaders target)
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "ROOT" "")
+    if(arg_UNPARSED_ARGUMENTS OR NOT arg_ROOT)
+        message(FATAL_ERROR "ww_add_shaders(${target}): expected ROOT <dir>")
+    endif()
+
+    set(generated_source "${CMAKE_CURRENT_BINARY_DIR}/Generated/${target}.shaders.cpp")
+    # Listed as the sources of the custom target only so that an IDE shows them.
+    file(GLOB_RECURSE shader_files CONFIGURE_DEPENDS "${arg_ROOT}/*")
+
+    add_custom_target(${target}Shaders
+        COMMAND WhiteWolfShaderCompiler --output "${generated_source}" --root "${arg_ROOT}"
+        BYPRODUCTS "${generated_source}"
+        COMMENT "Compiling shaders for ${target}"
+        VERBATIM
+        SOURCES ${shader_files})
+    set_target_properties(${target}Shaders PROPERTIES FOLDER "Generated")
+    source_group(TREE "${arg_ROOT}" FILES ${shader_files})
+
+    target_sources(${target} PRIVATE "${generated_source}")
+    add_dependencies(${target} ${target}Shaders)
+    source_group("Generated" FILES "${generated_source}")
+endfunction()
+
+# ww_add_module(<name>#     [OUTPUT_NAME <file name>]
 #     [PUBLIC_DEPENDENCIES <target>...]
 #     [PRIVATE_DEPENDENCIES <target>...])
 #

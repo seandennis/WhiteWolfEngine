@@ -103,7 +103,7 @@ CMakePresets.json         Configure, build, test and workflow presets
 .claude/skills/           Step-by-step procedures for common development tasks
 CMake/                    Build helpers
   WhiteWolfCompilerSettings.cmake   Warning levels, conformance flags, sanitizers
-  WhiteWolfModule.cmake             ww_add_module(), ww_add_module_tests(), ww_generate_reflection()
+  WhiteWolfModule.cmake             ww_add_module(), ww_add_module_tests(), ww_generate_reflection(), ww_add_shaders()
   WhiteWolfThirdParty.cmake         Pinned engine dependencies (glm, GLFW, Vulkan-Headers, NVRHI, glslang)
   WhiteWolfThirdPartyTesting.cmake  Pinned test-only dependencies (doctest)
 Engine/                   The core engine module (WhiteWolfEngine.dll)
@@ -125,7 +125,7 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Platform/             The window system: Platform.h (FPlatform), Window.h (FWindow)
     Rendering/            The renderer: RenderDevice.h (FRenderDevice), RenderTarget.h (FRenderTarget), Image.h (FImage),
                           CameraView.h (FCameraView), StaticMesh.h (WStaticMesh), Material.h (WMaterial),
-                          StaticMeshComponent.h (WStaticMeshComponent)
+                          StaticMeshComponent.h (WStaticMeshComponent), SceneRenderer.h (FSceneRenderer)
     Reflection/           Reflected properties: Property.h (FProperty), ValueProperty.h and PropertyValueTraits.h
                           (bool, numbers, strings, math types), ObjectProperty.h, WeakObjectProperty.h,
                           ArrayProperty.h, PropertyFactory.h (MakeProperty), PropertyJsonContext.h.
@@ -133,9 +133,11 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Scene/                Scenes: Scene.h (WScene), Entity.h (WEntity), Component.h (WComponent),
                           SceneSerializer.h (FSceneSerializer: scene files), MissingComponent.h
   Private/                Sources and module-internal headers, mirroring Public/
+  Shaders/                GLSL shaders (*.vert, *.frag) and the files they include (*.glsl), compiled into the DLL
   Tests/                  Unit tests, mirroring Public/ (EngineTests executable)
     TestSupport/          Helpers shared by tests: FScopedLogCapture, FScopedTempDirectory
     Object/TestObjects.h  WObject classes used by the object system tests, and FScopedObjectTest
+    Rendering/TestRendering.h  Helpers for tests that draw: a validated device, reading a target back, checking the log
 Tools/
   Format.cmake            Formats or checks all C++ sources
   GitHooks/pre-commit     Optional hook that runs the format check
@@ -309,6 +311,9 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 
 - **Nothing reaches the graphics card in world coordinates.** An `FCameraView` is the point of view of a picture. Its `GetCameraRelativeMatrix` subtracts the camera's location from an object's in double precision, and only that offset is converted to float; the view matrix has no translation. Use it for everything that is drawn, so that rendering is the same at any distance from the world origin.
 - **What is drawn.** A `WStaticMesh` is a shape: vertices and triangle indices in its own space, set with `SetGeometry`, which refuses anything that is not a valid list of triangles. A `WMaterial` says what a surface looks like. A `WStaticMeshComponent` on an entity shows a mesh with a material at the entity's place in the world. Meshes and materials are objects like any other: a component's reference keeps them alive, and many components can share one.
+- **`FSceneRenderer`** draws a scene's visible static mesh components, as seen from an `FCameraView`, onto a render target: `Renderer->Render(*Scene, View, *Target, Error)`. It keeps each mesh's geometry on the graphics card, copies it again when `SetGeometry` gives the mesh a new version, and releases it when the mesh is collected. `GetStatistics()` says what the last call drew and uploaded.
+- **Shaders** are GLSL 4.60 files in `Engine/Shaders/`: `*.vert` and `*.frag` are shaders, anything else (`*.glsl`) is there to be included, with paths relative to that directory. The build compiles them with `WhiteWolfShaderCompiler` and embeds the result in the DLL; a shader error fails the build like a C++ error. Engine code gets a shader's SPIR-V with `FShaderLibrary::GetCode("Unlit.frag")` (`Private/Rendering/ShaderLibrary.h`). A structure that C++ and a shader share, such as `FDrawConstants`, is declared once on each side with a comment that names the other; keep the two identical. A new module gets shaders with `ww_add_shaders(<Module> ROOT <dir>)`.
+- **Test what is drawn by reading pixels.** Draw a small scene to a small render target and check pixels whose colour follows from the geometry (see `Tests/Rendering/SceneRendererTests.cpp`). Use colours that encode to exact byte values, such as pure red, so that the check does not depend on how a driver rounds.
 - **Depth is reversed and has no far plane:** 1 at the near plane, towards 0 at infinity. Clear depth to 0 and draw with a greater-or-equal depth test.
 - `FRenderDevice::Create` opens the graphics card through Vulkan and NVRHI. It needs no window. Only one render device can exist at a time.
 - An `FRenderTarget` is a surface to draw on; `ReadPixels` copies it into an `FImage`, which is how tests and screenshots see what was drawn. Colours given to the renderer are linear (`FLinearColor`); pixels read back are sRGB-encoded bytes (`FColor`).

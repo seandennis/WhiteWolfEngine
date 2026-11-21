@@ -59,6 +59,8 @@ public:
 	ENGINE_API std::unique_ptr<FRenderTarget> CreateRenderTarget(int32 Width, int32 Height, std::string& OutError);
 
 private:
+	friend class FSceneRenderer;
+
 	/** Shared with everything created from this device, so that the graphics card outlives all of it. */
 	std::shared_ptr<FRenderContext> Context;
 };

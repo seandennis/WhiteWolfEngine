@@ -7,6 +7,9 @@ ww_add_module(Engine
     PUBLIC_DEPENDENCIES Threads::Threads glm::glm-header-only
     PRIVATE_DEPENDENCIES glfw nvrhi nvrhi_vk Vulkan::Headers ${CMAKE_DL_LIBS})
 
+# The engine's shaders are compiled while it is built and become part of the DLL.
+ww_add_shaders(Engine ROOT "${CMAKE_CURRENT_SOURCE_DIR}/Shaders")
+
 # The engine version comes from the top-level project() call and nowhere else.
 set_source_files_properties(Private/Core/EngineVersion.cpp PROPERTIES
     COMPILE_DEFINITIONS

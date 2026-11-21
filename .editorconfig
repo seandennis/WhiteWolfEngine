@@ -8,8 +8,8 @@ trim_trailing_whitespace = true
 indent_style = space
 indent_size = 4
 
-# C++ follows the Epic C++ Coding Standard: tabs, four columns wide.
-[*.{h,cpp}]
+# C++ follows the Epic C++ Coding Standard: tabs, four columns wide. Shaders are laid out like C++.
+[*.{h,cpp,vert,frag,glsl}]
 indent_style = tab
 tab_width = 4
 

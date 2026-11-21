@@ -1,5 +1,6 @@
 # WhiteWolfShaderCompiler: compiles a module's GLSL shaders to SPIR-V with the glslang library and
-# writes a source file that embeds them in the module. See D-027 in docs/DECISIONS.md.
+# writes a source file that embeds them in the module (see ww_add_shaders in
+# CMake/WhiteWolfModule.cmake, and D-027 in docs/DECISIONS.md).
 #
 # Like the header tool it cannot link to the engine, because the engine is built with it. It uses
 # the engine's fixed-width integer types (Core/CoreTypes.h, a header without dependencies) and
