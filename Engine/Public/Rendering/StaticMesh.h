@@ -31,8 +31,8 @@ public:
 	 * Replaces the geometry of the mesh.
 	 *
 	 * The geometry is refused, and the mesh left as it was, unless there is at least one triangle, the number of
-	 * indices is a multiple of three, every index names an existing vertex, every position and normal is a finite
-	 * number, and neither list is longer than MaxElementCount.
+	 * indices is a multiple of three, every index names an existing vertex, every position, normal and texture
+	 * coordinate is a finite number, and neither list is longer than MaxElementCount.
 	 *
 	 * @param OutError Receives the reason when the geometry is refused.
 	 * @return True if the mesh now has the given geometry.

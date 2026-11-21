@@ -20,6 +20,9 @@ using FVector = glm::dvec3;
  */
 using FVector3f = glm::vec3;
 
+/** A position on a texture or another pair of numbers, in single precision. Components are x and y. */
+using FVector2f = glm::vec2;
+
 /** A position or size in two dimensions, in double precision: a point in a window, a scroll amount. Components are x
  * and y. */
 using FVector2D = glm::dvec2;

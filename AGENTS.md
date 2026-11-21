@@ -116,7 +116,7 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Input/                Keyboard and mouse: InputState.h (FInputState), Key.h (EKey), MouseButton.h (EMouseButton)
     Json/                 JSON text: JsonValue.h (FJsonValue), JsonReader.h (FJsonReader), JsonWriter.h (FJsonWriter)
     Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
-    Math/                 Math types: Vector.h (FVector, FVector3f, FVector2D), Quat.h (FQuat), Transform.h (FTransform),
+    Math/                 Math types: Vector.h (FVector, FVector3f, FVector2f, FVector2D), Quat.h (FQuat), Transform.h (FTransform),
                           LinearColor.h (FLinearColor), Color.h (FColor), Matrix.h (FMatrix4f)
     Object/               The object system: Object.h (WObject), Class.h (WClass), ObjectPtr.h (TObjectPtr),
                           WeakObjectPtr.h (TWeakObjectPtr), ObjectGlobals.h (NewObject, Cast, IsValid,
@@ -124,7 +124,7 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
                           registration)
     Platform/             The window system: Platform.h (FPlatform), Window.h (FWindow)
     Rendering/            The renderer: RenderDevice.h (FRenderDevice), RenderTarget.h (FRenderTarget), Image.h (FImage),
-                          ImageFile.h (FImageFile: PNG and JPEG files),
+                          ImageFile.h (FImageFile: PNG and JPEG files), Texture.h (WTexture), MipChain.h (FMipChain),
                           CameraView.h (FCameraView), StaticMesh.h (WStaticMesh), Material.h (WMaterial),
                           StaticMeshComponent.h (WStaticMeshComponent), DirectionalLightComponent.h,
                           PointLightComponent.h, SceneRenderer.h (FSceneRenderer), SceneViewMode.h
@@ -313,7 +313,7 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 ## Rendering
 
 - **Nothing reaches the graphics card in world coordinates.** An `FCameraView` is the point of view of a picture. Its `GetCameraRelativeMatrix` subtracts the camera's location from an object's in double precision, and only that offset is converted to float; the view matrix has no translation. Use it for everything that is drawn, so that rendering is the same at any distance from the world origin.
-- **What is drawn.** A `WStaticMesh` is a shape: vertices and triangle indices in its own space, set with `SetGeometry`, which refuses anything that is not a valid list of triangles. A `WMaterial` says what a surface looks like. A `WStaticMeshComponent` on an entity shows a mesh with a material at the entity's place in the world. Meshes and materials are objects like any other: a component's reference keeps them alive, and many components can share one.
+- **What is drawn.** A `WStaticMesh` is a shape: vertices and triangle indices in its own space, set with `SetGeometry`, which refuses anything that is not a valid list of triangles. A vertex has a position, a normal and a texture coordinate, whose (0, 0) is the top left corner of a texture, as in glTF. A `WTexture` is a picture (`SetImage`) with a colour space, sRGB for colours and linear for data, and a wrap mode per direction. A `WMaterial` says what a surface looks like. A `WStaticMeshComponent` on an entity shows a mesh with a material at the entity's place in the world. Meshes and materials are objects like any other: a component's reference keeps them alive, and many components can share one.
 - **`FSceneRenderer`** draws a scene's visible static mesh components, as seen from an `FCameraView`, onto a render target: `Renderer->Render(*Scene, View, *Target, Error)`. It keeps each mesh's geometry on the graphics card, copies it again when `SetGeometry` gives the mesh a new version, and releases it when the mesh is collected. `GetStatistics()` says what the last call drew, uploaded and lit with.
 - **Lighting is physically based and in high dynamic range.** Materials follow glTF's metallic-roughness model (`WMaterial`: `BaseColor`, `Metallic`, `Roughness`, `EmissiveColor`). Lights are components: `WDirectionalLightComponent` shines along its entity's -Z axis with an `Intensity` in lux, `WPointLightComponent` shines from its entity's location with an `Intensity` in candela and an optional `Range`. Light may be any amount brighter than white; `FCameraView::Exposure` scales it and a tone mapper fits it to the display. One picture is lit by at most `FSceneRenderer::MaxDirectionalLights` and `MaxPointLights` lights.
 - **View modes.** `FSceneRenderer::ViewMode` is `Lit` by default. `Unlit` shows every surface in exactly its base colour, with no lights, exposure or tone mapping; use it for tests that check where things are drawn.

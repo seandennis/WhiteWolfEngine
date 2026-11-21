@@ -100,7 +100,7 @@ TEST_SUITE("WStaticMesh")
 		CHECK_FALSE(Mesh->HasGeometry());
 	}
 
-	TEST_CASE("Geometry with a position or normal that is not a finite number is refused")
+	TEST_CASE("Geometry with a position, normal or texture coordinate that is not a finite number is refused")
 	{
 		const FScopedObjectTest ObjectTest;
 		WStaticMesh* const Mesh = NewObject<WStaticMesh>();
@@ -109,12 +109,17 @@ TEST_SUITE("WStaticMesh")
 		std::vector<FStaticMeshVertex> Vertices = MakeTriangleVertices();
 		Vertices[1].Position.y = std::numeric_limits<float>::infinity();
 		CHECK_FALSE(Mesh->SetGeometry(Vertices, {0, 1, 2}, Error));
-		CHECK(Error == "vertex 1 has a position or normal that is not a finite number");
+		CHECK(Error == "vertex 1 has a position, normal or texture coordinate that is not a finite number");
 
 		Vertices = MakeTriangleVertices();
 		Vertices[2].Normal.x = std::numeric_limits<float>::quiet_NaN();
 		CHECK_FALSE(Mesh->SetGeometry(Vertices, {0, 1, 2}, Error));
-		CHECK(Error == "vertex 2 has a position or normal that is not a finite number");
+		CHECK(Error == "vertex 2 has a position, normal or texture coordinate that is not a finite number");
+
+		Vertices = MakeTriangleVertices();
+		Vertices[0].TextureCoordinate.y = std::numeric_limits<float>::infinity();
+		CHECK_FALSE(Mesh->SetGeometry(Vertices, {0, 1, 2}, Error));
+		CHECK(Error == "vertex 0 has a position, normal or texture coordinate that is not a finite number");
 
 		CHECK_FALSE(Mesh->HasGeometry());
 	}

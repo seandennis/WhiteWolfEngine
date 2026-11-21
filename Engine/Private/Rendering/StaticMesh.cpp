@@ -14,6 +14,11 @@ namespace
 	{
 		return std::isfinite(Vector.x) && std::isfinite(Vector.y) && std::isfinite(Vector.z);
 	}
+
+	bool IsFinite(const FVector2f& Vector)
+	{
+		return std::isfinite(Vector.x) && std::isfinite(Vector.y);
+	}
 }
 
 bool WStaticMesh::SetGeometry(
@@ -56,9 +61,10 @@ bool WStaticMesh::SetGeometry(
 	for (std::size_t VertexIndex = 0; VertexIndex < InVertices.size(); ++VertexIndex)
 	{
 		const FStaticMeshVertex& Vertex = InVertices[VertexIndex];
-		if (!IsFinite(Vertex.Position) || !IsFinite(Vertex.Normal))
+		if (!IsFinite(Vertex.Position) || !IsFinite(Vertex.Normal) || !IsFinite(Vertex.TextureCoordinate))
 		{
-			OutError = std::format("vertex {} has a position or normal that is not a finite number", VertexIndex);
+			OutError = std::format(
+				"vertex {} has a position, normal or texture coordinate that is not a finite number", VertexIndex);
 			return false;
 		}
 	}

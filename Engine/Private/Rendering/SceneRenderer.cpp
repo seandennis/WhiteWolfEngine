@@ -35,7 +35,8 @@
 #include <vector>
 
 // Vertices are copied to the graphics card as they are, and the pipelines read them at these offsets.
-static_assert(sizeof(FStaticMeshVertex) == 24, "FStaticMeshVertex must be a position and a normal without padding");
+static_assert(sizeof(FStaticMeshVertex) == 32,
+	"FStaticMeshVertex must be a position, a normal and a texture coordinate without padding");
 
 namespace
 {
