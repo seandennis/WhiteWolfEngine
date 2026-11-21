@@ -11,7 +11,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | # | Milestone | Status |
 | --- | --- | --- |
 | 1 | Repository, CMake build, test framework, `AGENTS.md`, code style tooling, first push to GitHub | Complete |
-| 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | In progress. Done: logging, assertions, math types, `WObject`/`WClass` with incremental mark-and-sweep garbage collection, `Destroy`/`IsValid`, weak references, leak reporting for objects and for memory allocations, JSON, reflection of properties and functions with the `WCLASS`/`WPROPERTY`/`WFUNCTION` header tool, scenes of entities and components with double-precision world transforms, scene files, windows and keyboard and mouse input. Still to do: a green CI run on the commit that finishes it |
+| 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | Complete |
 | 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Not started |
 | 4 | Renderer: image-based lighting, soft shadows, SSAO | Not started |
 | 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | Not started |
