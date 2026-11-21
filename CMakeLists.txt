@@ -48,6 +48,7 @@ include(WhiteWolfModule)
 
 ww_enable_sanitizers("${WW_SANITIZERS}")
 
+include(WhiteWolfThirdParty)
 if(WW_BUILD_TESTS)
     enable_testing()
     include(WhiteWolfThirdPartyTesting)

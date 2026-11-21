@@ -97,6 +97,7 @@ CMakePresets.json         Configure, build, test and workflow presets
 CMake/                    Build helpers
   WhiteWolfCompilerSettings.cmake   Warning levels, conformance flags, sanitizers
   WhiteWolfModule.cmake             ww_add_module() and ww_add_module_tests()
+  WhiteWolfThirdParty.cmake         Pinned engine dependencies (glm)
   WhiteWolfThirdPartyTesting.cmake  Pinned test-only dependencies (doctest)
 Engine/                   The core engine module (WhiteWolfEngine.dll)
   CMakeLists.txt
@@ -104,6 +105,7 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     CoreMinimal.h         Included first by every engine header: core types, assertions, logging
     Core/                 Fundamental types and assertions: CoreTypes.h, Assert.h, Version.h, EngineVersion.h
     Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
+    Math/                 Math types: Vector.h (FVector, FVector3f), Quat.h (FQuat), Transform.h (FTransform)
   Private/                Sources and module-internal headers, mirroring Public/
   Tests/                  Unit tests, mirroring Public/ (EngineTests executable)
     TestSupport/          Helpers shared by tests: FScopedLogCapture, FScopedTempDirectory
@@ -160,6 +162,7 @@ The code follows the [Epic C++ Coding Standard](https://dev.epicgames.com/docume
 ### Language use
 
 - C++20. Use the standard library (`std::string`, `std::vector`, `std::optional`, `std::format`) directly; this project does not reimplement Unreal's containers (D-009). Strings are UTF-8 `std::string`; there is no `TEXT()` macro.
+- Math types are glm types under engine names: `FVector` (`glm::dvec3`) for every world-space position, `FVector3f` (`glm::vec3`) for directions, scales and mesh-local data, `FQuat` (`glm::quat`, constructed as w, x, y, z) for rotations, and `FTransform` for location, rotation and scale. Their components are glm's lowercase `x`, `y`, `z`, `w`. Never store a world-space position in single precision.
 - Integer types: `int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64` from `Core/CoreTypes.h`. Use `int32` for counts and indices in engine APIs; use `std::size_t` only where a standard container requires it.
 - `auto` only for lambdas, iterators and types that cannot be spelled; otherwise write the type.
 - `nullptr`, never `NULL` or `0`. `override` on every override. `enum class` always. `static_assert` for compile-time invariants.

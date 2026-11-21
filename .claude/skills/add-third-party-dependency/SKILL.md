@@ -27,7 +27,7 @@ Declare the dependency in the right CMake file:
 | --- | --- |
 | Tests only | `CMake/WhiteWolfThirdPartyTesting.cmake` |
 | A plugin | That plugin's `CMakeLists.txt`, inside its `WW_PLUGIN_<NAME>` option, so a disabled plugin fetches nothing |
-| The engine, editor or runtime | A `CMake/WhiteWolfThirdParty<Area>.cmake` file included from the top-level `CMakeLists.txt` |
+| The engine, editor or runtime | `CMake/WhiteWolfThirdParty.cmake` |
 
 Follow this pattern exactly:
 
