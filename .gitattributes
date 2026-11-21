@@ -1,0 +1,24 @@
+# Text files are stored and checked out with LF line endings on every platform, so that
+# clang-format output, reference files and diffs are identical on Windows and in CI.
+* text=auto eol=lf
+
+# Windows command scripts must keep CRLF to run correctly.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets are never converted or diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.hdr binary
+*.exr binary
+*.ktx2 binary
+*.glb binary
+*.bin binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
+*.flac binary
+*.ttf binary
+*.otf binary
+*.ico binary

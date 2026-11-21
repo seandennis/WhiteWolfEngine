@@ -1,0 +1,17 @@
+# Build trees (one per CMake preset) and local CMake overrides
+/Build/
+CMakeUserPresets.json
+
+# IDE and editor state
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+*~
+
+# OS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store
