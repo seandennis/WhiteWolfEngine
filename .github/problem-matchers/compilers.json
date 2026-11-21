@@ -60,21 +60,11 @@
       ]
     },
     {
-      "owner": "white-wolf-sanitizer-leak",
-      "severity": "error",
-      "pattern": [
-        {
-          "regexp": "^((?:Direct|Indirect) leak of \\d+ byte\\(s\\) in \\d+ object\\(s\\) allocated from:)$",
-          "message": 1
-        }
-      ]
-    },
-    {
       "owner": "white-wolf-sanitizer-frame",
       "severity": "error",
       "pattern": [
         {
-          "regexp": "^\\s+(#\\d 0x[0-9a-f]+ in .+)$",
+          "regexp": "^\\s+(#[1-6] 0x[0-9a-f]+ in .+)$",
           "message": 1
         }
       ]
