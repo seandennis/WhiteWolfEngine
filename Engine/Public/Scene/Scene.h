@@ -25,7 +25,9 @@ extern ENGINE_API FLogCategory LogScene;
  * component of a scene has an identifier, a positive number that is unique within the scene, never reused, and
  * saved with the scene, so that files and tools can refer to an object by it.
  *
- * Destroy() destroys the scene together with everything in it.
+ * Destroy() destroys the scene together with everything in it, and asks the garbage collector to start a
+ * collection on its next tick instead of waiting for its timer, so that the memory of the old scene is on its way
+ * out before a new one is loaded.
  */
 WCLASS()
 class ENGINE_API WScene : public WObject

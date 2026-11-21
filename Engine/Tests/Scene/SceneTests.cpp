@@ -2,6 +2,7 @@
 
 #include "Object/GarbageCollector.h"
 #include "Object/ObjectGlobals.h"
+#include "Object/TestObjects.h"
 #include "Object/WeakObjectPtr.h"
 #include "Scene/TestSceneObjects.h"
 #include "TestSupport/ScopedLogCapture.h"
@@ -259,6 +260,26 @@ TEST_SUITE("WScene")
 		REQUIRE(Fresh != nullptr);
 		CHECK(Fresh->GetId() > OtherId);
 		CHECK(Scene->GetRootEntities().size() == 1);
+	}
+
+	TEST_CASE("Destroying a scene makes the next collector tick collect, without waiting for the timer")
+	{
+		const FScopedSceneTest SceneTest;
+		// A timer that never fires and a budget that never runs out: only a request can start a collection.
+		const FScopedCollectorSettings Settings(
+			FGarbageCollectorSettings{.IntervalSeconds = 1.0e9, .TimeBudgetSeconds = 3600.0});
+		WScene* const Scene = NewObject<WScene>();
+		Scene->AddToRoot();
+		Scene->CreateEntity("Entity")->AddComponent<WTestComponent>();
+		const int32 ObjectCountBefore = FGarbageCollector::GetObjectCount();
+
+		FGarbageCollector::Tick(1.0);
+		CHECK(FGarbageCollector::GetObjectCount() == ObjectCountBefore);
+
+		Scene->Destroy();
+		FGarbageCollector::Tick(0.0);
+
+		CHECK(FGarbageCollector::GetObjectCount() == ObjectCountBefore - 3);
 	}
 
 	TEST_CASE("Destroying a scene destroys everything in it")

@@ -58,28 +58,6 @@ namespace
 		}
 	}
 
-	/** Restores the collector settings when the test ends. */
-	class FScopedCollectorSettings
-	{
-	public:
-		explicit FScopedCollectorSettings(const FGarbageCollectorSettings& Settings)
-			: Previous(FGarbageCollector::GetSettings())
-		{
-			FGarbageCollector::SetSettings(Settings);
-		}
-
-		~FScopedCollectorSettings()
-		{
-			FGarbageCollector::SetSettings(Previous);
-		}
-
-		FScopedCollectorSettings(const FScopedCollectorSettings&) = delete;
-		FScopedCollectorSettings& operator=(const FScopedCollectorSettings&) = delete;
-
-	private:
-		FGarbageCollectorSettings Previous;
-	};
-
 	/** A time budget that never runs out within a test. */
 	constexpr double GenerousTimeBudgetSeconds = 3600.0;
 }

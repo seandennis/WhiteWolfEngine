@@ -1,5 +1,6 @@
 #include "Object/TestObjects.h"
 
+#include "Object/GarbageCollector.h"
 #include "Object/ObjectGlobals.h"
 
 FTestObjectStats& FTestObjectStats::Get()
@@ -94,6 +95,17 @@ void WTestMisbehavingObject::BeginDestroy()
 	}
 
 	Super::BeginDestroy();
+}
+
+FScopedCollectorSettings::FScopedCollectorSettings(const FGarbageCollectorSettings& Settings)
+	: Previous(FGarbageCollector::GetSettings())
+{
+	FGarbageCollector::SetSettings(Settings);
+}
+
+FScopedCollectorSettings::~FScopedCollectorSettings()
+{
+	FGarbageCollector::SetSettings(Previous);
 }
 
 FScopedObjectTest::FScopedObjectTest()

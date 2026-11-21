@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Object/GarbageCollectorSettings.h"
 #include "Object/ObjectMacros.h"
 #include "Object/ObjectPtr.h"
 #include "Object/WeakObjectPtr.h"
@@ -132,6 +133,20 @@ public:
 
 protected:
 	void BeginDestroy() override;
+};
+
+/** Changes the settings of the garbage collector for the duration of a test and restores them afterwards. */
+class FScopedCollectorSettings
+{
+public:
+	explicit FScopedCollectorSettings(const FGarbageCollectorSettings& Settings);
+	~FScopedCollectorSettings();
+
+	FScopedCollectorSettings(const FScopedCollectorSettings&) = delete;
+	FScopedCollectorSettings& operator=(const FScopedCollectorSettings&) = delete;
+
+private:
+	FGarbageCollectorSettings Previous;
 };
 
 /**

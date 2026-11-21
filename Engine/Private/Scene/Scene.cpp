@@ -1,5 +1,7 @@
 #include "Scene/Scene.h"
 
+#include "Object/GarbageCollector.h"
+
 #include <algorithm>
 #include <utility>
 
@@ -143,6 +145,10 @@ void WScene::OnDestroyed()
 {
 	Super::OnDestroyed();
 	DestroyAllEntities();
+
+	// A whole scene has just become garbage. Collecting it soon, rather than when the timer next comes round,
+	// frees its memory and resources before the next scene needs them.
+	FGarbageCollector::RequestCollection();
 }
 
 int64 WScene::AllocateId()
