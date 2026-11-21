@@ -110,6 +110,7 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     CoreMinimal.h         Included first by every engine header: core types, assertions, logging
     Core/                 Fundamental types and assertions: CoreTypes.h, Assert.h, Version.h, EngineVersion.h,
                           ProcessDiagnostics.h (error dialogs, memory leak report)
+    Json/                 JSON text: JsonValue.h (FJsonValue), JsonReader.h (FJsonReader), JsonWriter.h (FJsonWriter)
     Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
     Math/                 Math types: Vector.h (FVector, FVector3f), Quat.h (FQuat), Transform.h (FTransform)
     Object/               The object system: Object.h (WObject), Class.h (WClass), ObjectPtr.h (TObjectPtr),
