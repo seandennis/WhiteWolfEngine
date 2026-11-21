@@ -24,6 +24,18 @@ WTestObject::~WTestObject()
 	}
 }
 
+void WTestObject::OnDestroyed()
+{
+	FTestObjectStats& Stats = FTestObjectStats::Get();
+	++Stats.OnDestroyedCount;
+	if (!IsValid(this))
+	{
+		++Stats.InvalidInOnDestroyedCount;
+	}
+
+	Super::OnDestroyed();
+}
+
 void WTestObject::BeginDestroy()
 {
 	FTestObjectStats& Stats = FTestObjectStats::Get();

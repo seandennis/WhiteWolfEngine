@@ -21,6 +21,12 @@ struct FTestObjectStats
 	/** Total destructor calls. */
 	int32 DestructorCount = 0;
 
+	/** Total OnDestroyed calls. */
+	int32 OnDestroyedCount = 0;
+
+	/** OnDestroyed calls that found IsValid already false for the object. */
+	int32 InvalidInOnDestroyedCount = 0;
+
 	/** BeginDestroy calls that found the object's WeakOther reference still valid. */
 	int32 ValidWeakOtherInBeginDestroyCount = 0;
 
@@ -60,6 +66,7 @@ public:
 	std::string Name;
 
 protected:
+	void OnDestroyed() override;
 	void BeginDestroy() override;
 };
 

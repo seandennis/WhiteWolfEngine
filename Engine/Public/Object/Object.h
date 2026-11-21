@@ -69,6 +69,17 @@ protected:
 	WObject();
 
 	/**
+	 * Called once, by the first call to Destroy, after the object has been marked for destruction: IsValid is
+	 * already false for it. Override it to destroy the objects this one owns and to remove it from whatever holds
+	 * it, so that destroying an entity destroys its components and children in the same step. Overrides must call
+	 * Super::OnDestroyed().
+	 *
+	 * This is not the place to release resources; that is BeginDestroy, which the collector calls later and for
+	 * every object, including those that become unreachable without Destroy ever being called.
+	 */
+	virtual void OnDestroyed();
+
+	/**
 	 * Called once, before the object is destroyed, to release resources other than memory: GPU buffers, audio
 	 * handles, physics bodies. Every other object is still allocated at this point, although objects destroyed in
 	 * the same collection may already have released their own resources. Overrides must call Super::BeginDestroy().

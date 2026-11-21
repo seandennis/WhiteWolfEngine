@@ -122,6 +122,7 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
                           (bool, numbers, strings, math types), ObjectProperty.h, WeakObjectProperty.h,
                           ArrayProperty.h, PropertyFactory.h (MakeProperty), PropertyJsonContext.h.
                           Reflected functions: Function.h (FFunction), FunctionFactory.h (MakeFunction)
+    Scene/                Scenes: Scene.h (WScene), Entity.h (WEntity), Component.h (WComponent)
   Private/                Sources and module-internal headers, mirroring Public/
   Tests/                  Unit tests, mirroring Public/ (EngineTests executable)
     TestSupport/          Helpers shared by tests: FScopedLogCapture, FScopedTempDirectory
@@ -218,6 +219,7 @@ First-party code compiles with `/W4 /WX` on MSVC and an equivalent strict set on
 - **`TWeakObjectPtr<T>`** refers to an object without keeping it alive. `Get()` returns null once the object is destroyed or marked for destruction, so it never dangles. Use it for back-pointers, caches and observers.
 - **`Destroy()`** marks an object for destruction: `IsValid(Object)` is false and weak references are null from that call on, and the next collection destroys it and sets every remaining `TObjectPtr` to it to null. Check `IsValid()` before using a reference that something else may have destroyed.
 - **Roots.** An object survives if it is rooted with `AddToRoot()` or reachable from a rooted object through registered properties. Classes are rooted automatically. Pair every `AddToRoot()` with a `RemoveFromRoot()`.
+- **`OnDestroyed()`** runs once, inside the first `Destroy()` call, when the object is already invalid. Override it to destroy what the object owns, as an entity destroys its components and children. Always call `Super::OnDestroyed()`. It does not run for an object that is collected without `Destroy()`, so it is not the place to release resources.
 - **`BeginDestroy()`** is where an object releases GPU, audio, physics and other non-memory resources. Always call `Super::BeginDestroy()`. All other objects are still allocated while it runs. **Destructors** run later and must not touch any other object.
 - **Collection is incremental.** `FGarbageCollector::Tick()` runs once per frame and does a small, time-budgeted part of a collection, so game code runs between the steps of a collection. Never keep a raw pointer to an object from one frame to the next: only registered `TObjectPtr` properties, weak references and the root set are safe across frames. This applies to engine systems as much as to game code.
 - **Storing a reference tells the collector.** Every construction, copy and assignment of a `TObjectPtr` goes through the collector, which is what makes incremental collection correct. Never copy objects that contain `TObjectPtr` members with `memcpy` or similar. Storing a reference to a destroyed object stores null.
@@ -267,6 +269,17 @@ The generated file includes every reflected header of its module, so a forward d
 A class is registered when its module loads. Class names are unique across all modules. A class with a pure virtual function is abstract and cannot be created with `NewObject`.
 
 Tests that create objects start with `const FScopedObjectTest ObjectTest;` (`Tests/Object/TestObjects.h`), which collects garbage before and after the test so that tests cannot affect each other.
+
+## Scenes, entities and components
+
+A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform relative to its parent, and a list of `WComponent` objects that give it data and behaviour.
+
+- **Create through the owner.** Entities come from `Scene->CreateEntity("Name", Parent)` and components from `Entity->AddComponent<WMyComponent>()`. Do not create either with `NewObject`. A scene itself is created with `NewObject<WScene>()` and must be held by a reflected `TObjectPtr` or added to the root set.
+- **A new component type is one class.** Derive from `WComponent`, mark it with `WCLASS()` and its data with `WPROPERTY()`. It can then be added to entities, is saved and loaded with the scene, and appears in the editor, with no further code. Override `OnAttached()` and `OnDetached()` to react to joining and leaving an entity; call the `Super` version in both.
+- **Transforms.** `GetRelativeTransform()` is relative to the parent; `GetWorldTransform()` and `GetWorldLocation()` are in world space and are calculated from the ancestors on every call. Locations are double precision (`FVector`).
+- **Destroying.** `Entity->Destroy()` destroys the entity, its components and all its descendants at once and removes it from its parent. `Component->Destroy()` and `Entity->RemoveComponent()` remove one component. These change the lists returned by `GetChildren()`, `GetComponents()` and `GetRootEntities()`: copy a list before destroying things while going through it.
+- **Identifiers.** Every entity and component has an identifier that is unique within its scene and never reused (`GetId()`, `Scene->FindEntityById()`). Scene files and tools refer to objects by it.
+- **Failures are return values.** `CreateEntity`, `AddComponent` and `SetParent` refuse invalid requests (a parent from another scene, an abstract component class, an entity made its own ancestor) by returning null or false and logging a warning to `LogScene`; they are not assertions, because editor and agent commands can ask for them.
 
 ## Third-party dependencies
 

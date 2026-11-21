@@ -40,7 +40,17 @@ bool WObject::IsRooted() const
 
 void WObject::Destroy()
 {
+	const bool bWasAlreadyDestroyed = HasInternalFlag(EInternalFlags::PendingDestruction);
 	FObjectSystem::Get().DestroyObject(this);
+
+	if (!bWasAlreadyDestroyed)
+	{
+		OnDestroyed();
+	}
+}
+
+void WObject::OnDestroyed()
+{
 }
 
 void WObject::BeginDestroy()

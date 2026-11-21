@@ -32,6 +32,32 @@ TEST_SUITE("WObject::Destroy")
 		CHECK(IsValid(WTestObject::StaticClass()));
 	}
 
+	TEST_CASE("OnDestroyed runs once, during the first Destroy, when the object is already invalid")
+	{
+		const FScopedObjectTest ObjectTest;
+		WTestObject* const Object = NewObject<WTestObject>();
+
+		CHECK(FTestObjectStats::Get().OnDestroyedCount == 0);
+
+		Object->Destroy();
+		CHECK(FTestObjectStats::Get().OnDestroyedCount == 1);
+		CHECK(FTestObjectStats::Get().InvalidInOnDestroyedCount == 1);
+
+		Object->Destroy();
+		CHECK(FTestObjectStats::Get().OnDestroyedCount == 1);
+	}
+
+	TEST_CASE("OnDestroyed is not called for an object that is collected without Destroy")
+	{
+		const FScopedObjectTest ObjectTest;
+		NewObject<WTestObject>();
+
+		CollectGarbage();
+
+		CHECK(FTestObjectStats::Get().DestructorCount == 1);
+		CHECK(FTestObjectStats::Get().OnDestroyedCount == 0);
+	}
+
 	TEST_CASE("A destroyed object is invalid immediately but stays allocated until the next collection")
 	{
 		const FScopedObjectTest ObjectTest;
