@@ -171,10 +171,13 @@ WComponent* WEntity::AddComponent(WClass* ComponentClass)
 	}
 
 	WScene* const OwningScene = Scene;
-	return AddComponentWithId(ComponentClass, OwningScene != nullptr ? OwningScene->AllocateId() : 0);
+	WComponent* const Component =
+		CreateComponentWithId(ComponentClass, OwningScene != nullptr ? OwningScene->AllocateId() : 0);
+	NotifyComponentAttached(*Component);
+	return Component;
 }
 
-WComponent* WEntity::AddComponentWithId(WClass* ComponentClass, int64 ComponentId)
+WComponent* WEntity::CreateComponentWithId(WClass* ComponentClass, int64 ComponentId)
 {
 	WComponent* const Component = NewObject<WComponent>(ComponentClass);
 	Component->Owner = this;
@@ -187,8 +190,12 @@ WComponent* WEntity::AddComponentWithId(WClass* ComponentClass, int64 ComponentI
 		OwningScene->RegisterObject(ComponentId, *Component);
 	}
 
-	Component->OnAttached();
 	return Component;
+}
+
+void WEntity::NotifyComponentAttached(WComponent& Component)
+{
+	Component.OnAttached();
 }
 
 const std::vector<TObjectPtr<WComponent>>& WEntity::GetComponents() const

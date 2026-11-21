@@ -130,8 +130,14 @@ private:
 	friend class WComponent;
 	friend class WScene;
 
-	/** Adds a component with a given identifier. ComponentClass must be a concrete component class. */
-	WComponent* AddComponentWithId(WClass* ComponentClass, int64 ComponentId);
+	/**
+	 * Creates a component with a given identifier and adds it to this entity without telling it; the caller calls
+	 * NotifyComponentAttached once the component is ready. ComponentClass must be a concrete component class.
+	 */
+	WComponent* CreateComponentWithId(WClass* ComponentClass, int64 ComponentId);
+
+	/** Calls OnAttached on a component of this entity. */
+	void NotifyComponentAttached(WComponent& Component);
 
 	/** Tells a component that it is leaving this entity and forgets its identifier. Does not touch the list. */
 	void DetachComponent(WComponent& Component);

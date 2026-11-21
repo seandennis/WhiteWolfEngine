@@ -11,7 +11,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | # | Milestone | Status |
 | --- | --- | --- |
 | 1 | Repository, CMake build, test framework, `AGENTS.md`, code style tooling, first push to GitHub | Complete |
-| 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | In progress. Done: logging, assertions, math types, `WObject`/`WClass` with incremental mark-and-sweep garbage collection, `Destroy`/`IsValid`, weak references, leak reporting for objects and for memory allocations, JSON, reflection of properties and functions with the `WCLASS`/`WPROPERTY`/`WFUNCTION` header tool, scenes of entities and components with double-precision world transforms. Still to do: scene serialization, window, input |
+| 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | In progress. Done: logging, assertions, math types, `WObject`/`WClass` with incremental mark-and-sweep garbage collection, `Destroy`/`IsValid`, weak references, leak reporting for objects and for memory allocations, JSON, reflection of properties and functions with the `WCLASS`/`WPROPERTY`/`WFUNCTION` header tool, scenes of entities and components with double-precision world transforms, scene files. Still to do: window, input |
 | 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Not started |
 | 4 | Renderer: image-based lighting, soft shadows, SSAO | Not started |
 | 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | Not started |
@@ -21,7 +21,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | 9 | Blueprint visual scripting, and Tetris rebuilt with Blueprints only | Not started |
 | 10 | ChronoVehicle plugin | Not started |
 
-What exists today: the build system, the `Engine` module (`WhiteWolfEngine.dll`) with versioning (`FVersion`, `FEngineVersion`), logging (`WW_LOG`, categories, console, file and in-memory sinks) assertions (`WW_CHECK`), math types (`FVector`, `FQuat`, `FTransform`) the object system (`WObject`, `WClass`, `NewObject`, `TObjectPtr`, `TWeakObjectPtr`, garbage collection), JSON reading and writing (`FJsonValue`) and reflection (`WCLASS()`, `WPROPERTY()`, `WFUNCTION()`, with `WhiteWolfHeaderTool` generating the registration code), scenes (`WScene`, `WEntity`, `WComponent`), the unit test harness, formatting tooling and continuous integration.
+What exists today: the build system, the `Engine` module (`WhiteWolfEngine.dll`) with versioning (`FVersion`, `FEngineVersion`), logging (`WW_LOG`, categories, console, file and in-memory sinks) assertions (`WW_CHECK`), math types (`FVector`, `FQuat`, `FTransform`) the object system (`WObject`, `WClass`, `NewObject`, `TObjectPtr`, `TWeakObjectPtr`, garbage collection), JSON reading and writing (`FJsonValue`) and reflection (`WCLASS()`, `WPROPERTY()`, `WFUNCTION()`, with `WhiteWolfHeaderTool` generating the registration code), scenes (`WScene`, `WEntity`, `WComponent`) that are saved and loaded as JSON text (`FSceneSerializer`), the unit test harness, formatting tooling and continuous integration.
 
 ## Requirements
 

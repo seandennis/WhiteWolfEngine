@@ -109,8 +109,8 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
   Public/                 Headers other modules may include
     CoreMinimal.h         Included first by every engine header: core types, assertions, logging
     Core/                 Fundamental types and assertions: CoreTypes.h, Assert.h, Version.h, EngineVersion.h,
-                          EnumClassFlags.h (WW_ENUM_CLASS_FLAGS), ProcessDiagnostics.h (error dialogs, memory
-                          leak report)
+                          EnumClassFlags.h (WW_ENUM_CLASS_FLAGS), FileHelper.h (FFileHelper: whole text files),
+                          ProcessDiagnostics.h (error dialogs, memory leak report)
     Json/                 JSON text: JsonValue.h (FJsonValue), JsonReader.h (FJsonReader), JsonWriter.h (FJsonWriter)
     Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
     Math/                 Math types: Vector.h (FVector, FVector3f), Quat.h (FQuat), Transform.h (FTransform)
@@ -122,7 +122,8 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
                           (bool, numbers, strings, math types), ObjectProperty.h, WeakObjectProperty.h,
                           ArrayProperty.h, PropertyFactory.h (MakeProperty), PropertyJsonContext.h.
                           Reflected functions: Function.h (FFunction), FunctionFactory.h (MakeFunction)
-    Scene/                Scenes: Scene.h (WScene), Entity.h (WEntity), Component.h (WComponent)
+    Scene/                Scenes: Scene.h (WScene), Entity.h (WEntity), Component.h (WComponent),
+                          SceneSerializer.h (FSceneSerializer: scene files), MissingComponent.h
   Private/                Sources and module-internal headers, mirroring Public/
   Tests/                  Unit tests, mirroring Public/ (EngineTests executable)
     TestSupport/          Helpers shared by tests: FScopedLogCapture, FScopedTempDirectory
@@ -279,6 +280,7 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 - **Transforms.** `GetRelativeTransform()` is relative to the parent; `GetWorldTransform()` and `GetWorldLocation()` are in world space and are calculated from the ancestors on every call. Locations are double precision (`FVector`).
 - **Destroying.** `Entity->Destroy()` destroys the entity, its components and all its descendants at once and removes it from its parent. `Component->Destroy()` and `Entity->RemoveComponent()` remove one component. These change the lists returned by `GetChildren()`, `GetComponents()` and `GetRootEntities()`: copy a list before destroying things while going through it.
 - **Identifiers.** Every entity and component has an identifier that is unique within its scene and never reused (`GetId()`, `Scene->FindEntityById()`). Scene files and tools refer to objects by it.
+- **Saving and loading.** `FSceneSerializer` writes a scene as JSON text (`SaveToFile`, `SaveToText`) and creates a scene from it (`LoadFromFile`, `LoadFromText`). Every `WPROPERTY()` that is not `Transient` is saved; nothing has to be written per component. A reference to an entity or component of the same scene is saved as its identifier. Loading reports problems with single values as warnings and refuses only a file whose structure is wrong; the format is described in `Scene/SceneSerializer.h` and D-024. A loaded scene is returned unreferenced: hold it before the next collection. In a component, do in `OnAttached()` whatever depends on property values; it runs after a loaded scene's properties are all set.
 - **Failures are return values.** `CreateEntity`, `AddComponent` and `SetParent` refuse invalid requests (a parent from another scene, an abstract component class, an entity made its own ancestor) by returning null or false and logging a warning to `LogScene`; they are not assertions, because editor and agent commands can ask for them.
 
 ## Third-party dependencies
