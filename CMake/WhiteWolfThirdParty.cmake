@@ -74,6 +74,10 @@ target_link_libraries(nvrhi_vk PRIVATE nvrhi)
 # (BSD-3-Clause, with parts under Apache-2.0 and MIT). Release 16.6.0.
 # It is linked into WhiteWolfShaderCompiler, a build tool, and not into the engine. glslang's own
 # command-line compiler is not built, because building it needs Python.
+# It is built with run-time type information, which it leaves out by default: the shader compiler
+# derives from glslang's classes, and the undefined behaviour sanitizer checks such objects through
+# their type information, which the library must then contain.
+set(ENABLE_RTTI ON CACHE BOOL "" FORCE)
 set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
 set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
 set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
