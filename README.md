@@ -11,7 +11,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | # | Milestone | Status |
 | --- | --- | --- |
 | 1 | Repository, CMake build, test framework, `AGENTS.md`, code style tooling, first push to GitHub | In progress: everything is in place and passes on the Linux cross-check presets. Still to do: the first MSVC build and test run, and the first push |
-| 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | In progress. Done: logging, assertions, math types. Not yet built with MSVC |
+| 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | In progress. Done: logging, assertions, math types, `WObject`/`WClass` with mark-and-sweep garbage collection. Not yet built with MSVC |
 | 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Not started |
 | 4 | Renderer: image-based lighting, soft shadows, SSAO | Not started |
 | 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | Not started |
@@ -21,7 +21,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | 9 | Blueprint visual scripting, and Tetris rebuilt with Blueprints only | Not started |
 | 10 | ChronoVehicle plugin | Not started |
 
-What exists today: the build system, the `Engine` module (`WhiteWolfEngine.dll`) with versioning (`FVersion`, `FEngineVersion`), logging (`WW_LOG`, categories, console, file and in-memory sinks) assertions (`WW_CHECK`) and math types (`FVector`, `FQuat`, `FTransform`), the unit test harness, formatting tooling and continuous integration.
+What exists today: the build system, the `Engine` module (`WhiteWolfEngine.dll`) with versioning (`FVersion`, `FEngineVersion`), logging (`WW_LOG`, categories, console, file and in-memory sinks) assertions (`WW_CHECK`), math types (`FVector`, `FQuat`, `FTransform`) and the object system (`WObject`, `WClass`, `NewObject`, `TObjectPtr`, garbage collection), the unit test harness, formatting tooling and continuous integration.
 
 ## Requirements
 

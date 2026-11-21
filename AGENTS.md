@@ -106,9 +106,14 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Core/                 Fundamental types and assertions: CoreTypes.h, Assert.h, Version.h, EngineVersion.h
     Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
     Math/                 Math types: Vector.h (FVector, FVector3f), Quat.h (FQuat), Transform.h (FTransform)
+    Object/               The object system: Object.h (WObject), Class.h (WClass), ObjectPtr.h (TObjectPtr),
+                          ObjectGlobals.h (NewObject, Cast, CollectGarbage), ObjectMacros.h (class registration)
+    Reflection/           Reflected properties: Property.h (FProperty), ObjectProperty.h, ArrayProperty.h,
+                          PropertyFactory.h (MakeProperty)
   Private/                Sources and module-internal headers, mirroring Public/
   Tests/                  Unit tests, mirroring Public/ (EngineTests executable)
     TestSupport/          Helpers shared by tests: FScopedLogCapture, FScopedTempDirectory
+    Object/TestObjects.h  WObject classes used by the object system tests, and FScopedObjectTest
 Tools/
   Format.cmake            Formats or checks all C++ sources
   GitHooks/pre-commit     Optional hook that runs the format check
@@ -125,6 +130,7 @@ Reserved by the specification and created by later milestones: `Editor/` (editor
 - **Exporting from a module**: mark every function or class that another module (including the tests) must link to with the module's API macro, `ENGINE_API` for the Engine module. Annotate individual functions on value types and whole classes when they have virtual functions. Symbols without the macro are not visible outside the DLL on any compiler.
 - **Include order**: a `.cpp` includes its own header first. Every engine header starts with `#include "CoreMinimal.h"` (the headers that `CoreMinimal.h` itself includes start with `Core/CoreTypes.h` instead). Then project headers, then a blank line, then third-party and standard headers. Include exactly what the file uses; do not rely on indirect includes. Prefer forward declarations in headers.
 - **Tests**: add `<Module>/Tests/<Area>/<Subject>Tests.cpp` in the same commit as the code it tests.
+- **Test helper types** that exist only to exercise one feature may share a single `Test<Feature>.h`/`.cpp` pair, as `Tests/Object/TestObjects.h` does. This is the only exception to one type per file.
 - **A new module**: call `ww_add_module(<Name>)` and `ww_add_module_tests(<Name>)` from the module's `CMakeLists.txt`; see `Engine/CMakeLists.txt`.
 
 ## Code style
@@ -146,7 +152,7 @@ The code follows the [Epic C++ Coding Standard](https://dev.epicgames.com/docume
 
 - Boolean variables and members start with `b`: `bIsVisible`. Functions that return `bool` ask a question: `IsValid()`, `ShouldTick()`.
 - Functions are verbs; types and variables are nouns. Names are descriptive and unambiguous; do not abbreviate.
-- Parameters written by the function are prefixed with `Out` (`OutVersion`, `bOutSucceeded`). Prefix a parameter with `In` when it would otherwise shadow a member (`InName`). Shadowing is not allowed.
+- Parameters written by the function are prefixed with `Out` (`OutVersion`, `bOutSucceeded`). Prefix a parameter with `In` when it would otherwise shadow a member (`InName`). Shadowing is not allowed: a parameter or local variable must never have the name of a data member of its class or of a base class, in static member functions too. MSVC rejects it (C4458) even where GCC and Clang do not.
 - Macros are `UPPER_SNAKE_CASE` with the `WW_` prefix. The exceptions are the reflection macros named by the specification (`WCLASS()`, `WPROPERTY()`, `WFUNCTION()`), the module API macros (`ENGINE_API`) and `DLLEXPORT`/`DLLIMPORT`.
 - CMake functions are `ww_snake_case`, cache options are `WW_UPPER_SNAKE_CASE`, local variables are `snake_case`.
 
@@ -186,6 +192,44 @@ The code follows the [Epic C++ Coding Standard](https://dev.epicgames.com/docume
 ### Warnings
 
 First-party code compiles with `/W4 /WX` on MSVC and an equivalent strict set on GCC and Clang (`CMake/WhiteWolfCompilerSettings.cmake`). Fix warnings in the code. A warning may be disabled only project-wide, in that file, with the reason recorded in `docs/DECISIONS.md`.
+
+## Objects and garbage collection
+
+`WObject` is the base of every garbage-collected object. The rules below are not style; breaking them corrupts memory or is a fatal error.
+
+- **Create objects with `NewObject<T>()` only.** Never `new`, `delete`, a stack variable or a by-value member of a `WObject` class. Constructing one any other way is a fatal error.
+- **A reference keeps its target alive only if the collector can see it**: it must be a `TObjectPtr<T>` (or a `std::vector` of them) that is registered as a property of its class. A raw pointer or an unregistered `TObjectPtr` does not keep anything alive. Raw `T*` is fine for parameters and locals that do not outlive the current call.
+- **Roots.** An object survives if it is rooted with `AddToRoot()` or reachable from a rooted object through registered properties. Classes are rooted automatically. Pair every `AddToRoot()` with a `RemoveFromRoot()`.
+- **`BeginDestroy()`** is where an object releases GPU, audio, physics and other non-memory resources. Always call `Super::BeginDestroy()`. All other objects are still allocated while it runs. **Destructors** run later and must not touch any other object.
+- **Collection points.** `CollectGarbage()` destroys everything unreachable before it returns. Never call it while a function further up the stack holds a raw pointer to an object that nothing else keeps alive, and never from `BeginDestroy()`.
+- **Main thread only.** Objects are created, used and collected on the main thread.
+
+Declaring a class, until the header tool generates this from `WCLASS()` and `WPROPERTY()`:
+
+```cpp
+// Door.h
+class ENGINE_API WDoor : public WObject
+{
+	WW_DECLARE_CLASS(WDoor, WObject)
+
+public:
+	TObjectPtr<WHinge> Hinge;
+	std::vector<TObjectPtr<WPanel>> Panels;
+};
+
+// Door.cpp
+WW_IMPLEMENT_CLASS(WDoor)
+
+void WDoor::RegisterClassMembers(WClass& Class)
+{
+	Class.AddProperty(MakeProperty<&WDoor::Hinge>("Hinge"));
+	Class.AddProperty(MakeProperty<&WDoor::Panels>("Panels"));
+}
+```
+
+A class is registered when its module loads. Class names are unique across all modules. A class with a pure virtual function is abstract and cannot be created with `NewObject`.
+
+Tests that create objects start with `const FScopedObjectTest ObjectTest;` (`Tests/Object/TestObjects.h`), which collects garbage before and after the test so that tests cannot affect each other.
 
 ## Third-party dependencies
 
