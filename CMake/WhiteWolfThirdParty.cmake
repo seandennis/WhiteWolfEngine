@@ -90,3 +90,29 @@ FetchContent_Declare(glslang
     GIT_TAG e1b562a8bed273a02f30b59b66a5d499793cede5
     SYSTEM)
 FetchContent_MakeAvailable(glslang)
+
+# stb: reads PNG and JPEG images (stb_image.h) and writes PNG images (stb_image_write.h). Public
+# domain, or MIT at the user's choice. stb publishes no releases; this is its master branch on
+# 2026-11-21.
+# Both are single-header libraries, which one source file of a program has to turn into code. That
+# file is written here and compiled as a library of its own, so that stb is built as third-party
+# code and not with the engine's warnings. The engine reads and writes files itself, so stb's own
+# file functions are left out, as are the image formats the engine does not support.
+FetchContent_Declare(stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG 6b5799bae8a1fe3792691ef4b72ae26434c3e799
+    SYSTEM)
+FetchContent_MakeAvailable(stb)
+
+set(stb_implementation "${CMAKE_BINARY_DIR}/ThirdParty/StbImplementation.cpp")
+file(CONFIGURE OUTPUT "${stb_implementation}" CONTENT
+"// Written by CMake/WhiteWolfThirdParty.cmake.
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
+" @ONLY)
+add_library(stb STATIC "${stb_implementation}")
+target_include_directories(stb SYSTEM PUBLIC "${stb_SOURCE_DIR}")
+target_compile_definitions(stb PUBLIC STBI_NO_STDIO STBI_WRITE_NO_STDIO STBI_ONLY_PNG STBI_ONLY_JPEG)
+set_target_properties(stb PROPERTIES POSITION_INDEPENDENT_CODE ON FOLDER "ThirdParty")

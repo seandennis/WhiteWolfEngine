@@ -484,3 +484,18 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - **`ESceneViewMode::Unlit`** draws base colours straight to the surface and skips lights, exposure and tone mapping.
 
 **Testing.** The lighting model and the tone mapper are written a second time, in C++ and double precision, in the lighting tests. A test lights a square and compares the pixel in the middle of the picture with that reference, within two steps of 255, for matte, metallic, rough and smooth surfaces, tilted and stretched surfaces, directional and point lights, ranges, several lights at once, exposure and real-world light levels. A lit scene must also come out pixel for pixel equal at the origin, 1,000 km and ten billion kilometres from it.
+
+## D-031: Image files are read and written with stb
+
+**Status:** Accepted.
+
+**Dependency.** **stb** (commit `6b5799bae8a1fe3792691ef4b72ae26434c3e799`, the master branch on 2026-11-21; public domain or MIT, at the user's choice): `stb_image.h` to read PNG and JPEG and `stb_image_write.h` to write PNG. stb publishes no releases, so the pin is a commit of its master branch, with the date noted.
+
+**Decision.**
+
+- **`FImageFile` reads PNG and JPEG and writes PNG.** These are the two formats glTF allows for textures, and PNG, which is lossless, is what screenshots and reference images are stored as. Everything is read as four 8-bit channels into an `FImage`.
+- **stb is compiled as a library of its own.** Its two headers are turned into code by one source file that the third-party CMake script writes, so stb is built without the engine's warnings-as-errors and only `ImageFile.cpp` includes its declarations.
+- **The engine does the file access.** stb is built without its own file functions (`STBI_NO_STDIO`): `FImageFile` reads and writes whole files through `FFileHelper`, which handles paths that are not ASCII and replaces a file only when the new one is complete, and hands stb memory. Only the PNG and JPEG decoders are compiled in.
+- **A picture's size is checked before it is decoded,** against a limit of 16,384 pixels a side, so a damaged or hostile file cannot make the engine allocate gigabytes.
+
+**Alternatives considered.** libpng with libjpeg-turbo is faster and more complete, but is two libraries with build systems of their own and zlib beneath them, for decoding that happens once per asset at import time. Windows Imaging Component would tie image reading to Windows and to the tests' build servers' configuration. HDR images (for image-based lighting, milestone 4) and compressed GPU textures are decided when they are needed.
