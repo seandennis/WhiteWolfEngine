@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows MSVC (${{ matrix.configuration }})
+    # windows-2022 carries Visual Studio 2022, the supported toolchain.
+    # windows-latest has moved on to Visual Studio 2026.
+    runs-on: windows-2022
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [debug, release]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Configure, build and test
+        run: cmake --workflow --preset windows-${{ matrix.configuration }}
+
+  linux:
+    name: Linux development build (${{ matrix.preset }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [linux-gcc-debug, linux-gcc-release, linux-clang-debug, linux-sanitize]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install --yes ninja-build
+      - name: Configure, build and test
+        run: cmake --workflow --preset ${{ matrix.preset }}
+
+  format:
+    name: Code style (clang-format 18)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install clang-format 18
+        run: sudo apt-get update && sudo apt-get install --yes clang-format-18
+      - name: Check formatting
+        # Without ALLOW_SKIP the script fails if clang-format 18 is missing, so this job
+        # can never pass by silently skipping the check.
+        run: cmake -DCHECK=ON -DCLANG_FORMAT=clang-format-18 -P Tools/Format.cmake
