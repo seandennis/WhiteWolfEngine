@@ -37,6 +37,16 @@
       ]
     },
     {
+      "owner": "white-wolf-doctest-context",
+      "severity": "error",
+      "pattern": [
+        {
+          "regexp": "^\\s+logged:\\s+(.+)$",
+          "message": 1
+        }
+      ]
+    },
+    {
       "owner": "white-wolf-doctest",
       "severity": "error",
       "pattern": [

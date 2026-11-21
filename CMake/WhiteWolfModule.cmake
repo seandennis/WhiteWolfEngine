@@ -109,6 +109,11 @@ function(ww_add_test_executable target)
     ww_apply_compiler_settings(${target})
     target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Tests")
     target_link_libraries(${target} PRIVATE doctest::doctest ${arg_DEPENDENCIES})
+    # doctest keeps per-thread state in thread_local containers, and a thread_local is created in
+    # every thread that starts, including the worker threads of a graphics driver. Those threads
+    # are still running when the process exits, so their copies are never destroyed and show up
+    # as leaks. Tests assert on the main thread only, so doctest needs no per-thread state.
+    target_compile_definitions(${target} PRIVATE DOCTEST_CONFIG_NO_MULTITHREADING)
     set_target_properties(${target} PROPERTIES FOLDER "Tests")
 
     source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${test_sources})

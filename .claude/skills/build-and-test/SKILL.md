@@ -70,6 +70,8 @@ New source files are picked up automatically; no CMake edit or reconfigure is ne
 | doctest fails to compile with `use of undefined type 'std::basic_ostream'` (MSVC) | A `CHECK` compares a type that doctest prints with `operator<<`, such as `std::string_view`, and the test file does not include `<ostream>`. Include it. |
 | An error of the form `Header.h(12): error: ...` from the step "Generating reflection code" | `WhiteWolfHeaderTool` rejected a `WCLASS()`, `WPROPERTY()` or `WFUNCTION()` declaration. The message says what to change; the rules are in "Objects and garbage collection" in `AGENTS.md`. |
 | A compile error inside `<Module>.generated.cpp` | A reflected member has a type that cannot be reflected, or the header of a class from another module is not included. Fix the declaration in the header; never edit the generated file. |
+| Renderer tests fail with "Vulkan is not installed" or "no graphics card on this machine can be used" | The machine has no Vulkan 1.3. Install a graphics driver, or a software implementation: on Linux `sudo apt-get install libvulkan1 mesa-vulkan-drivers` (Lavapipe). |
+| `Detected memory leaks!` only when a test uses the render device | A `thread_local` object with a destructor exists in the test executable or the engine. Graphics drivers start threads that never exit cleanly, and each gets its own copy that is never destroyed. Remove the `thread_local`; see D-026. |
 | `CodeStyle.ClangFormat` fails | Run `cmake -P Tools/Format.cmake`, review the changes, rebuild. |
 | A sanitizer report under `linux-sanitize` | A real memory, leak or undefined-behaviour bug. Fix it; never suppress it. |
 | Stale or confusing build state | Delete `Build/<configure preset>/` and run the workflow preset again. |

@@ -30,6 +30,26 @@ jobs:
         configuration: [debug, release]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The renderer tests draw with Vulkan, and a hosted runner has neither a graphics card nor
+      # Vulkan. This installs the Vulkan loader (vulkan-1.dll) and Lavapipe, Mesa's implementation
+      # of Vulkan on the processor, and registers Lavapipe with the loader.
+      - name: Install Vulkan with a software driver
+        uses: jakoch/install-vulkan-sdk-action@7fe84289ddbf750f7eff9f8e4588e600e1dd06c8 # v1.8.1
+        with:
+          install_runtime_only: true
+          install_lavapipe: true
+          cache: true
+      # The engine loads vulkan-1.dll by name, as it would on a machine with a graphics driver,
+      # so the loader has to be somewhere Windows looks.
+      - name: Put the Vulkan loader on the PATH
+        shell: pwsh
+        run: |
+          if (Test-Path "$env:WINDIR\System32\vulkan-1.dll") { Write-Host "vulkan-1.dll is in System32"; exit 0 }
+          $loader = Get-ChildItem C:\VulkanSDK -Recurse -Filter vulkan-1.dll -ErrorAction SilentlyContinue |
+            Where-Object { $_.DirectoryName -notmatch "x86|32" } | Select-Object -First 1
+          if (-not $loader) { Write-Host "::error::vulkan-1.dll was not installed"; exit 1 }
+          Write-Host "Using $($loader.FullName)"
+          Add-Content -Path $env:GITHUB_PATH -Value $loader.DirectoryName
       # Compiler, linker and failed-test messages become annotations on the run, so the cause of a
       # failure can be read on the summary page without opening the log.
       - name: Report errors as annotations
@@ -47,8 +67,10 @@ jobs:
         preset: [linux-gcc-debug, linux-gcc-release, linux-clang-debug, linux-sanitize]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install --yes ninja-build
+      # libvulkan1 is the Vulkan loader and mesa-vulkan-drivers contains Lavapipe, Mesa's
+      # implementation of Vulkan on the processor, which the renderer tests draw with.
+      - name: Install build tools and a software Vulkan driver
+        run: sudo apt-get update && sudo apt-get install --yes ninja-build libvulkan1 mesa-vulkan-drivers
       # Compiler, linker and failed-test messages become annotations on the run, so the cause of a
       # failure can be read on the summary page without opening the log.
       - name: Report errors as annotations

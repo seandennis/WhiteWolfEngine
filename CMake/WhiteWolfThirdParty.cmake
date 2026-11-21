@@ -35,3 +35,34 @@ FetchContent_Declare(glfw
     SYSTEM)
 FetchContent_MakeAvailable(glfw)
 set_target_properties(glfw PROPERTIES FOLDER "ThirdParty")
+
+# Vulkan-Headers: the declarations of the Vulkan API (Apache-2.0 OR MIT). Release v1.4.352,
+# the version NVRHI is developed against. Declared here so that it is pinned to a commit;
+# NVRHI would otherwise fetch it by tag.
+set(VULKAN_HEADERS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+set(VULKAN_HEADERS_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(VULKAN_HEADERS_ENABLE_MODULE OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(vulkan_headers
+    GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
+    GIT_TAG 015e25c3c91b70eb1a754d36fb14c4ba6ad9b0b9
+    SYSTEM)
+FetchContent_MakeAvailable(vulkan_headers)
+
+# NVRHI: the rendering hardware interface, used with its Vulkan backend (MIT).
+# NVRHI publishes no release tags; this is its main branch as of 2026-11-21.
+set(NVRHI_WITH_VULKAN ON CACHE BOOL "" FORCE)
+set(NVRHI_FETCH_VULKAN_HEADERS OFF CACHE BOOL "" FORCE)
+set(NVRHI_WITH_VALIDATION ON CACHE BOOL "" FORCE)
+set(NVRHI_WITH_DX11 OFF CACHE BOOL "" FORCE)
+set(NVRHI_WITH_DX12 OFF CACHE BOOL "" FORCE)
+set(NVRHI_WITH_NVAPI OFF CACHE BOOL "" FORCE)
+set(NVRHI_WITH_RTXMU OFF CACHE BOOL "" FORCE)
+set(NVRHI_WITH_AFTERMATH OFF CACHE BOOL "" FORCE)
+set(NVRHI_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(NVRHI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(NVRHI_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(nvrhi
+    GIT_REPOSITORY https://github.com/NVIDIA-RTX/NVRHI.git
+    GIT_TAG bf0bbd9b666a7297492beb1999a4ddc0dfded143
+    SYSTEM)
+FetchContent_MakeAvailable(nvrhi)

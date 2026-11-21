@@ -24,6 +24,7 @@ This file is the working agreement for every agent (and human) who changes this 
 | Product compiler | MSVC, Visual Studio 2022 (17.6 or later) or Visual Studio 2026 ("Desktop development with C++" workload), x64. See D-019 |
 | Build system | CMake 3.25 or later (bundled with Visual Studio), driven through `CMakePresets.json` |
 | Source control | Git, on the `PATH`. CMake also uses it to fetch the pinned third-party sources |
+| Graphics | Vulkan 1.3, from the driver of a graphics card or from a software implementation such as Lavapipe. Needed to run the renderer and its tests, not to build. No Vulkan SDK is required |
 | Formatter | clang-format 18 (exactly major version 18) |
 | Development cross-checks | GCC 13+, Clang 18+ and Ninja on Linux. Not a shipping platform; see D-004 |
 
@@ -76,7 +77,8 @@ Build\windows\Binaries\Debug\EngineTests.exe --test-case="*Parse*"
 ```
 
 - Tests use [doctest](https://github.com/doctest/doctest). Each module has one test executable, `<Module>Tests`, built from every file under `<Module>/Tests/`, and one CTest entry of the same name. The header tool has its own, `HeaderToolTests`.
-- Tests are headless: they never open a window, wait for input or need a GPU-attached display. A test that needs a window creates an `FScopedHeadlessPlatform` (`Tests/Platform/ScopedHeadlessPlatform.h`), under which `FWindow::Create` makes windows that exist in memory only, and feeds input through `Window->GetInput().HandleKeyEvent(...)`.
+- Tests are headless: they never open a window, wait for input or need a display. The renderer tests do need Vulkan 1.3: they create an `FRenderDevice`, draw to an `FRenderTarget` and read the pixels back, on whatever graphics card or software driver the machine has. A machine without Vulkan fails them; it does not skip them.
+- Test executables are built with `DOCTEST_CONFIG_NO_MULTITHREADING`: call doctest assertions (`CHECK`, `REQUIRE`) on the main thread only. A test may start threads that run engine code. A test that needs a window creates an `FScopedHeadlessPlatform` (`Tests/Platform/ScopedHeadlessPlatform.h`), under which `FWindow::Create` makes windows that exist in memory only, and feeds input through `Window->GetInput().HandleKeyEvent(...)`.
 - `EngineTests.DetectsMemoryLeaks` is a CTest entry that leaks memory on purpose and passes only if the leak is reported. It exists in MSVC Debug builds and under `linux-sanitize`, the builds that can detect leaked allocations.
 - A test executable's `main` starts with `FProcessDiagnostics::DisableErrorDialogs()` and `FProcessDiagnostics::EnableMemoryLeakReport()`, so a crash cannot hang the run in a dialog and leaks are reported at exit.
 - `CodeStyle.ClangFormat` is a CTest entry that runs the format check. It reports **Skipped** (not Passed) when clang-format 18 is not installed; install it rather than committing unchecked code.
@@ -102,7 +104,7 @@ CMakePresets.json         Configure, build, test and workflow presets
 CMake/                    Build helpers
   WhiteWolfCompilerSettings.cmake   Warning levels, conformance flags, sanitizers
   WhiteWolfModule.cmake             ww_add_module(), ww_add_module_tests(), ww_generate_reflection()
-  WhiteWolfThirdParty.cmake         Pinned engine dependencies (glm, GLFW)
+  WhiteWolfThirdParty.cmake         Pinned engine dependencies (glm, GLFW, Vulkan-Headers, NVRHI)
   WhiteWolfThirdPartyTesting.cmake  Pinned test-only dependencies (doctest)
 Engine/                   The core engine module (WhiteWolfEngine.dll)
   CMakeLists.txt
@@ -114,12 +116,14 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Input/                Keyboard and mouse: InputState.h (FInputState), Key.h (EKey), MouseButton.h (EMouseButton)
     Json/                 JSON text: JsonValue.h (FJsonValue), JsonReader.h (FJsonReader), JsonWriter.h (FJsonWriter)
     Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
-    Math/                 Math types: Vector.h (FVector, FVector3f, FVector2D), Quat.h (FQuat), Transform.h (FTransform)
+    Math/                 Math types: Vector.h (FVector, FVector3f, FVector2D), Quat.h (FQuat), Transform.h (FTransform),
+                          LinearColor.h (FLinearColor), Color.h (FColor)
     Object/               The object system: Object.h (WObject), Class.h (WClass), ObjectPtr.h (TObjectPtr),
                           WeakObjectPtr.h (TWeakObjectPtr), ObjectGlobals.h (NewObject, Cast, IsValid,
                           CollectGarbage), GarbageCollector.h (FGarbageCollector), ObjectMacros.h (class
                           registration)
     Platform/             The window system: Platform.h (FPlatform), Window.h (FWindow)
+    Rendering/            The renderer: RenderDevice.h (FRenderDevice), RenderTarget.h (FRenderTarget), Image.h (FImage)
     Reflection/           Reflected properties: Property.h (FProperty), ValueProperty.h and PropertyValueTraits.h
                           (bool, numbers, strings, math types), ObjectProperty.h, WeakObjectProperty.h,
                           ArrayProperty.h, PropertyFactory.h (MakeProperty), PropertyJsonContext.h.
@@ -292,6 +296,14 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 - **Input is read from an `FInputState`,** one per window: `IsKeyDown` for held keys, `WasKeyPressed` and `WasKeyReleased` for what changed in the current frame, and the mouse position, movement and scroll amount. Keys are `EKey` values named after their position on a US keyboard.
 - **Input can be simulated.** The `Handle...` functions of `FInputState` are public: a window calls them with real events, and tests and tools call them to press keys and move the mouse without a person. Never read keys from GLFW directly.
 - No GLFW type or header appears outside `Engine/Private/Platform/`. Include `Platform/Glfw.h` there, never `<GLFW/glfw3.h>`.
+
+## Rendering
+
+- `FRenderDevice::Create` opens the graphics card through Vulkan and NVRHI. It needs no window. Only one render device can exist at a time.
+- An `FRenderTarget` is a surface to draw on; `ReadPixels` copies it into an `FImage`, which is how tests and screenshots see what was drawn. Colours given to the renderer are linear (`FLinearColor`); pixels read back are sRGB-encoded bytes (`FColor`).
+- Everything created from a render device keeps the graphics card alive, so the order in which the device and its resources are destroyed does not matter.
+- No NVRHI or Vulkan type or header appears outside `Engine/Private/Rendering/`. Include `Rendering/VulkanApi.h` there, never `<vulkan/vulkan.hpp>`, so that the engine and NVRHI configure Vulkan identically; call Vulkan through the function table it sets up, with the plain C functions.
+- Test rendering with validation on (`FRenderDeviceDescription::bEnableValidation`) and check that nothing was logged as an error: the validation layer reports misuse of the rendering interface to `LogRendering`.
 
 ## Third-party dependencies
 

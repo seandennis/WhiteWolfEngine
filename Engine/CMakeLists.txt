@@ -5,7 +5,7 @@ find_package(Threads REQUIRED)
 ww_add_module(Engine
     OUTPUT_NAME WhiteWolfEngine
     PUBLIC_DEPENDENCIES Threads::Threads glm::glm-header-only
-    PRIVATE_DEPENDENCIES glfw)
+    PRIVATE_DEPENDENCIES glfw nvrhi nvrhi_vk Vulkan::Headers ${CMAKE_DL_LIBS})
 
 # The engine version comes from the top-level project() call and nowhere else.
 set_source_files_properties(Private/Core/EngineVersion.cpp PROPERTIES

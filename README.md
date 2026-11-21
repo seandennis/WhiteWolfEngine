@@ -12,7 +12,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | --- | --- | --- |
 | 1 | Repository, CMake build, test framework, `AGENTS.md`, code style tooling, first push to GitHub | Complete |
 | 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | Complete |
-| 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Not started |
+| 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | In progress. Done: a headless Vulkan render device through NVRHI, render targets that can be cleared and read back as images. Still to do: shaders and pipelines, meshes and materials, glTF import, cameras with camera-relative rendering and reversed-Z, PBR, HDR and tonemapping, screenshot tests against reference images, presenting to a window |
 | 4 | Renderer: image-based lighting, soft shadows, SSAO | Not started |
 | 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | Not started |
 | 6 | Plugin system, ChronoPhysics plugin, audio components | Not started |
@@ -27,6 +27,7 @@ What exists today: the build system, the `Engine` module (`WhiteWolfEngine.dll`)
 
 - Windows 10 or 11, x64
 - Visual Studio 2022 (version 17.6 or later) or Visual Studio 2026, with the **Desktop development with C++** workload (provides MSVC, the Windows SDK and CMake)
+- A graphics card with a Vulkan 1.3 driver, to run the renderer and its tests (building needs neither a graphics card nor the Vulkan SDK)
 - Git, on the `PATH`
 - Internet access for the first configure, which downloads the pinned third-party sources
 
@@ -60,6 +61,8 @@ To work in Visual Studio, open the solution in `Build/windows/` after the first 
 | --- | --- | --- | --- |
 | [glm](https://github.com/g-truc/glm) | 1.0.3 | MIT | Vector, quaternion and matrix math |
 | [GLFW](https://github.com/glfw/glfw) | 3.4 | zlib | Windows, keyboard and mouse input |
+| [NVRHI](https://github.com/NVIDIA-RTX/NVRHI) | main, 2026-11-21 | MIT | Rendering hardware interface, with its Vulkan backend |
+| [Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers) | 1.4.352 | Apache-2.0 OR MIT | The declarations of the Vulkan API |
 | [doctest](https://github.com/doctest/doctest) | 2.5.3 | MIT | Unit tests (not shipped) |
 
 Dependencies are downloaded at configure time, pinned to exact commits. See [`docs/DECISIONS.md`](docs/DECISIONS.md) for why each was chosen.

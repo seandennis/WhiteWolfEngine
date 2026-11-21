@@ -130,7 +130,7 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 
 **Status:** Accepted.
 
-**Decision.** `.github/workflows/ci.yml` runs on every push to `main` and every pull request: MSVC Debug and Release on `windows-2022` (the hosted image that carries Visual Studio 2022) and on `windows-2025` (which carries Visual Studio 2026; see D-019), the four Linux cross-check presets on `ubuntu-24.04`, and a formatting job. Actions are pinned to commit SHAs.
+**Decision.** `.github/workflows/ci.yml` runs on every push to `main` and every pull request: MSVC Debug and Release on `windows-2022` (the hosted image that carries Visual Studio 2022) and on `windows-2025` (which carries Visual Studio 2026; see D-019), the four Linux cross-check presets on `ubuntu-24.04`, and a formatting job. Actions are pinned to commit SHAs. The build jobs install a software Vulkan driver for the renderer tests (D-026), and problem matchers turn compiler and test errors into annotations on the run.
 
 **Reasons.** The specification forbids committing a broken build and names MSVC as the compiler. CI is the only check that runs on the product toolchain no matter where a change was written.
 
@@ -381,3 +381,31 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - **Windows are created without an OpenGL context** (`GLFW_NO_API`); the renderer attaches a Vulkan surface in milestone 3.
 
 **Limits.** The forwarding of real GLFW events into `FInputState` is a few lines that no unit test executes, because the null platform produces no events; the key codes are checked at compile time and the state logic by its own tests. Text entry, gamepads, cursor capture and full-screen modes are added when the editor and scripting need them.
+
+## D-026: The render device: Vulkan through NVRHI, without a window
+
+**Status:** Accepted.
+
+**Dependencies.**
+
+- **NVRHI** (commit `bf0bbd9b666a7297492beb1999a4ddc0dfded143`, the main branch on 2026-11-21; MIT licence), as the specification requires, with only its Vulkan backend and its validation layer built. NVRHI publishes no release tags, so the pin is a commit of its main branch, with the date noted.
+- **Vulkan-Headers** v1.4.352 (commit `015e25c3c91b70eb1a754d36fb14c4ba6ad9b0b9`; Apache-2.0 OR MIT), the version NVRHI asks for. NVRHI would fetch it itself, by tag; the engine declares it first so that it is pinned to a commit like every other dependency.
+- Both are linked privately into the engine DLL. Neither the Vulkan SDK nor a Vulkan library is needed to build: the Vulkan loader (`vulkan-1.dll`), which comes with graphics drivers, is opened at run time, and a machine without it gets an error message, not a failure to start.
+
+**Decision.**
+
+- **Rendering does not need a window.** `FRenderDevice::Create` makes a Vulkan instance and device with no surface. What is drawn goes to an `FRenderTarget`, and `ReadPixels` returns it as an `FImage`. Screenshot tests, the agent interface's "capture a screenshot" and exporting all use this path; presenting to a window is one more consumer of a render target, added later, rather than the foundation.
+- **The engine creates the Vulkan device; NVRHI is given it.** That is NVRHI's design. The engine requires Vulkan 1.3 with timeline semaphores, dynamic rendering and synchronization2, which NVRHI's backend uses unconditionally, and picks the most capable graphics card: dedicated, then integrated, then software.
+- **One render device at a time.** NVRHI's Vulkan backend calls Vulkan through vulkan.hpp's default dispatcher, one global table of function pointers that is bound to one device. The engine defines that table (NVRHI, built as a static library, leaves it to the application) and refuses to create a second device while one exists.
+- **Vulkan is included one way only.** `Private/Rendering/VulkanApi.h` includes vulkan.hpp configured exactly as NVRHI configures it, because the two must agree on the dispatcher. The engine then calls plain C Vulkan functions through the dispatcher's pointers. It does not use vulkan.hpp's C++ wrappers: their error handling is switched by macros, and a setting different from NVRHI's would give the same inline functions two definitions in one program.
+- **Resources keep the device alive.** `FRenderDevice` and everything created from it share one `FRenderContext`, released with the last of them, so nothing can outlive the graphics card it lives on and no destruction order has to be remembered.
+- **No NVRHI or Vulkan type appears in an engine header.** Public classes hold a private implementation, as `FWindow` does for GLFW.
+- **Render targets are 8-bit sRGB.** Colours are drawn in linear space and the graphics card encodes them, so an image read back is ready to save or compare.
+
+**Testing.**
+
+- The renderer tests run for real, on whatever Vulkan the machine has, with NVRHI's validation layer on, and fail if it logs an error. They are not skipped where Vulkan is missing: a skipped rendering test would let the renderer break unnoticed.
+- CI has no graphics card, so it installs **Lavapipe**, Mesa's implementation of Vulkan on the processor: from the `mesa-vulkan-drivers` package on Linux, and on Windows with the action `jakoch/install-vulkan-sdk-action` (v1.8.1, pinned to its commit), which also installs the Vulkan loader and registers Lavapipe with it.
+- **doctest runs single-threaded** (`DOCTEST_CONFIG_NO_MULTITHREADING`). doctest keeps per-thread state in `thread_local` containers. A `thread_local` is constructed in every thread that starts in the process, including the worker threads of a graphics driver, which are still running when the process exits; their copies are never destroyed, and the debug heap reported them as leaks as soon as a test opened the graphics card. The tests assert on the main thread only, so nothing is lost. The same reasoning applies to engine code: a `thread_local` with a destructor will be reported as a leak by the same mechanism.
+
+**Not yet.** Shaders and pipelines, a swap chain for windows, and Vulkan's own validation layers (which need the Vulkan SDK) come with the next steps of milestone 3.
