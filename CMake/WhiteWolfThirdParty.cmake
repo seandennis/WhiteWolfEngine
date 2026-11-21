@@ -66,3 +66,6 @@ FetchContent_Declare(nvrhi
     GIT_TAG bf0bbd9b666a7297492beb1999a4ddc0dfded143
     SYSTEM)
 FetchContent_MakeAvailable(nvrhi)
+# NVRHI's Vulkan backend calls into its common library but does not say so. Linkers that resolve
+# static libraries in command-line order (GNU ld) need to be told, or the symbols are not found.
+target_link_libraries(nvrhi_vk PRIVATE nvrhi)
