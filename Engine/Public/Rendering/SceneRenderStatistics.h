@@ -29,6 +29,9 @@ struct FSceneRenderStatistics
 	/** One if a sky light lit the picture, zero if not. Always zero in the unlit view mode. */
 	int32 SkyLightCount = 0;
 
+	/** How many shadow maps were drawn: four for each directional light that cast shadows. */
+	int32 ShadowMapCount = 0;
+
 	/** How many directional lights lit the picture. Always zero in the unlit view mode. */
 	int32 DirectionalLightCount = 0;
 

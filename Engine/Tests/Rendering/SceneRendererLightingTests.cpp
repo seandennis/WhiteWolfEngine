@@ -647,7 +647,10 @@ TEST_SUITE("FSceneRenderer lighting")
 				Floor,
 				MakeTransform(Origin + FVector(0.0, -0.5, -2.0), Turn(-90.0f, AxisX), FVector3f(6.0f)));
 
-			AddSun(*Test.Scene.Get(), Turn(-50.0f, AxisX) * Turn(20.0f, AxisY), FLinearColor(1.0f, 0.95f, 0.9f), 2.0f);
+			// Without shadows: a shadow map is laid out on a grid that is fixed in the world, so its soft edges
+			// are not the same to the last bit in two places. The shadow tests cover that.
+			AddSun(*Test.Scene.Get(), Turn(-50.0f, AxisX) * Turn(20.0f, AxisY), FLinearColor(1.0f, 0.95f, 0.9f), 2.0f)
+				->bCastShadows = false;
 			AddLamp(*Test.Scene.Get(), Origin + FVector(0.25, 0.75, -1.5), 3.0f)->Color =
 				FLinearColor(0.4f, 0.6f, 1.0f);
 			AddLamp(*Test.Scene.Get(), Origin + FVector(-1.0, 0.125, -1.0), 2.0f, 4.0f);

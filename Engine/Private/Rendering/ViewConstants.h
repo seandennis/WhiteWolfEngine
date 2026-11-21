@@ -6,6 +6,7 @@
 #include "Rendering/DirectionalLightData.h"
 #include "Rendering/PointLightData.h"
 #include "Rendering/SceneRenderer.h"
+#include "Rendering/ShadowCascades.h"
 
 #include <glm/vec4.hpp>
 
@@ -40,7 +41,25 @@ struct FViewConstants
 	 * the environment's reflection cube map. w: the level of detail the sky is read at.
 	 */
 	glm::vec4 SkyParameters = glm::vec4(0.0f);
+
+	/** xyz: the way the camera looks, a unit vector. w: how far from the camera shadows reach. */
+	glm::vec4 CameraForward = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
+
+	/** The distance from the camera, along the way it looks, at which each shadow cascade ends. */
+	glm::vec4 ShadowCascadeFarDistances = glm::vec4(0.0f);
+
+	/**
+	 * For each cascade, x: the size of one pixel of its shadow maps in the world, y: that size as a part of the
+	 * depth the maps cover.
+	 */
+	std::array<glm::vec4, FShadowCascades::CascadeCount> ShadowCascadeScales{};
+
+	/** x: one divided by the width of a shadow map in pixels. */
+	glm::vec4 ShadowParameters = glm::vec4(0.0f);
+
+	/** Takes a camera-relative position into each shadow map. A light's maps follow each other, one per cascade. */
+	std::array<FMatrix4f, FSceneRenderer::MaxDirectionalLights * FShadowCascades::CascadeCount> ShadowMatrices{};
 };
 
-static_assert(sizeof(FViewConstants) == 16 + 4 * 32 + 32 * 32 + 9 * 16 + 64 + 64 + 16,
+static_assert(sizeof(FViewConstants) == 16 + 4 * 32 + 32 * 32 + 9 * 16 + 64 + 64 + 16 + 16 + 16 + 4 * 16 + 16 + 16 * 64,
 	"FViewConstants must be laid out as the shaders declare it");

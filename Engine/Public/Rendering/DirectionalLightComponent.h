@@ -28,6 +28,13 @@ public:
 	WPROPERTY(BlueprintReadWrite, Category = "Light")
 	float Intensity = 3.14159274f;
 
+	/**
+	 * Whether things that stand in the light cast shadows. Shadows reach as far from the camera as the renderer's
+	 * shadow distance.
+	 */
+	WPROPERTY(BlueprintReadWrite, Category = "Light")
+	bool bCastShadows = true;
+
 	/** Whether the light shines at all. */
 	WPROPERTY(BlueprintReadWrite, Category = "Light")
 	bool bVisible = true;

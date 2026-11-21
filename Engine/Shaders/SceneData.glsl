@@ -33,7 +33,8 @@ struct FDrawData
 // A light whose rays are parallel.
 struct FDirectionalLightData
 {
-	// xyz: the unit vector from a surface towards the light.
+	// xyz: the unit vector from a surface towards the light. w: the number of the first of the light's shadow
+	// maps in ShadowMaps, or -1 if the light casts no shadows.
 	vec4 DirectionToLight;
 
 	// rgb: the light arriving at a surface that faces the light, colour times illuminance.
@@ -56,6 +57,9 @@ const float MaxSceneLight = 65000.0;
 
 const int MaxDirectionalLights = 4;
 const int MaxPointLights = 32;
+
+// The number of shadow maps a directional light has, one per slice of the view. See FShadowCascades in C++.
+const int ShadowCascadeCount = 4;
 
 layout(set = 0, binding = 0, std430) readonly buffer FDrawBuffer
 {
@@ -86,6 +90,23 @@ layout(set = 0, binding = 256, std140) uniform FViewConstants
 	// x: the intensity of the sky light, zero if the scene has none. y: the number of the last, roughest level of
 	// the environment's reflection cube map. w: the level of detail the sky is read at.
 	vec4 SkyParameters;
+
+	// xyz: the way the camera looks, a unit vector. w: how far from the camera shadows reach.
+	vec4 CameraForward;
+
+	// The distance from the camera, along the way it looks, at which each shadow cascade ends.
+	vec4 ShadowCascadeFarDistances;
+
+	// For each cascade, x: the size of one pixel of its shadow maps in the world, y: that size as a part of the
+	// depth the maps cover.
+	vec4 ShadowCascadeScales[ShadowCascadeCount];
+
+	// x: one divided by the width of a shadow map in pixels.
+	vec4 ShadowParameters;
+
+	// Takes a camera-relative position into each shadow map: x and y from -1 to 1 across it, depth from 0 at the
+	// light's side to 1. A light's maps follow each other, one per cascade.
+	mat4 ShadowMatrices[MaxDirectionalLights * ShadowCascadeCount];
 } View;
 
 // The environment of the sky light: blurred by roughness for reflections, and as it is for the sky. Textures are
@@ -94,3 +115,8 @@ layout(set = 0, binding = 1) uniform textureCube EnvironmentReflections;
 layout(set = 0, binding = 2) uniform texture2D EnvironmentPicture;
 layout(set = 0, binding = 128) uniform sampler EnvironmentReflectionsSampler;
 layout(set = 0, binding = 129) uniform sampler EnvironmentPictureSampler;
+
+// The shadow maps of the directional lights: the depth of what each light sees, one layer per light and cascade.
+// The sampler compares a depth with the map's and answers how much of the light gets through.
+layout(set = 0, binding = 3) uniform texture2DArray ShadowMaps;
+layout(set = 0, binding = 130) uniform samplerShadow ShadowSampler;

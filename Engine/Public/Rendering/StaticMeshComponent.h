@@ -27,6 +27,10 @@ public:
 	WPROPERTY(BlueprintReadWrite, Category = "Rendering")
 	TObjectPtr<WMaterial> Material;
 
+	/** Whether the mesh casts a shadow in the light of directional lights. An invisible mesh casts none. */
+	WPROPERTY(BlueprintReadWrite, Category = "Rendering")
+	bool bCastShadows = true;
+
 	/** Whether the mesh is drawn at all. */
 	WPROPERTY(BlueprintReadWrite, Category = "Rendering")
 	bool bVisible = true;

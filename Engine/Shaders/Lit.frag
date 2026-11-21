@@ -9,6 +9,7 @@
 #include "Environment.glsl"
 #include "AmbientLight.glsl"
 #include "NormalMapping.glsl"
+#include "Shadows.glsl"
 
 layout(location = 0) in vec3 InRelativePosition;
 layout(location = 1) in vec3 InNormal;
@@ -50,8 +51,10 @@ void main()
 
 	for (int Index = 0; Index < View.LightCounts.x; ++Index)
 	{
-		Light += ReflectLight(
-			Surface, View.DirectionalLights[Index].DirectionToLight.xyz, View.DirectionalLights[Index].Illuminance.rgb);
+		float Visibility = GetShadowVisibility(Index, InRelativePosition);
+		Light += ReflectLight(Surface,
+			View.DirectionalLights[Index].DirectionToLight.xyz,
+			View.DirectionalLights[Index].Illuminance.rgb * Visibility);
 	}
 
 	for (int Index = 0; Index < View.LightCounts.y; ++Index)

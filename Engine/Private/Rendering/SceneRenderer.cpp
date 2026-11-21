@@ -14,6 +14,8 @@
 #include "Rendering/RenderTargetImplementation.h"
 #include "Rendering/SceneRendererImplementation.h"
 #include "Rendering/ShaderLibrary.h"
+#include "Rendering/ShadowCascades.h"
+#include "Rendering/ShadowMaps.h"
 #include "Rendering/SkyLightComponent.h"
 #include "Rendering/SphericalHarmonics.h"
 #include "Rendering/StaticMesh.h"
@@ -78,6 +80,13 @@ namespace
 		std::vector<WStaticMesh*> Meshes;
 		std::vector<WMaterial*> Materials;
 		std::vector<FDrawData> DrawData;
+
+		/** For each mesh, whether it casts a shadow. */
+		std::vector<bool> CastsShadows;
+
+		/** For each directional light in ViewConstants, whether it casts shadows, and its rotation. */
+		std::array<bool, FSceneRenderer::MaxDirectionalLights> bLightCastsShadows{};
+		std::array<FQuat, FSceneRenderer::MaxDirectionalLights> LightRotations{};
 
 		/** The lights, as the shaders receive them. */
 		FViewConstants ViewConstants;
@@ -161,6 +170,7 @@ namespace
 		Contents.Meshes.push_back(Mesh);
 		Contents.Materials.push_back(Material);
 		Contents.DrawData.push_back(Data);
+		Contents.CastsShadows.push_back(Component.bCastShadows);
 	}
 
 	/** Adds a directional light to Contents, if it shines and there is room for it. */
@@ -182,8 +192,11 @@ namespace
 
 		const FVector3f Direction = glm::normalize(WorldTransform.Rotation * ForwardDirection);
 		FDirectionalLightData& Data = Contents.ViewConstants.DirectionalLights[static_cast<std::size_t>(Index)];
-		Data.DirectionToLight = glm::vec4(-Direction, 0.0f);
+		// Which shadow maps the light gets, if any, is decided when the picture is drawn.
+		Data.DirectionToLight = glm::vec4(-Direction, -1.0f);
 		Data.Illuminance = ToVector(Light.Color, Light.Intensity);
+		Contents.bLightCastsShadows[static_cast<std::size_t>(Index)] = Light.bCastShadows;
+		Contents.LightRotations[static_cast<std::size_t>(Index)] = glm::normalize(WorldTransform.Rotation);
 		Contents.ViewConstants.LightCounts.x = Index + 1;
 	}
 
@@ -489,8 +502,10 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 												.addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
 												.addItem(nvrhi::BindingLayoutItem::Texture_SRV(1))
 												.addItem(nvrhi::BindingLayoutItem::Texture_SRV(2))
+												.addItem(nvrhi::BindingLayoutItem::Texture_SRV(3))
 												.addItem(nvrhi::BindingLayoutItem::Sampler(0))
-												.addItem(nvrhi::BindingLayoutItem::Sampler(1)));
+												.addItem(nvrhi::BindingLayoutItem::Sampler(1))
+												.addItem(nvrhi::BindingLayoutItem::Sampler(2)));
 	NewImplementation->TonemapBindingLayout =
 		RenderInterface.createBindingLayout(nvrhi::BindingLayoutDesc()
 												.setVisibility(nvrhi::ShaderType::Pixel)
@@ -525,6 +540,12 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 	if (NewImplementation->ViewBuffer == nullptr)
 	{
 		OutError = "the graphics card could not create the buffer for the lights of a scene";
+		return nullptr;
+	}
+
+	if (!NewImplementation->Shadows.Initialize(NewImplementation->Context))
+	{
+		OutError = "the graphics card could not create what shadows need";
 		return nullptr;
 	}
 
@@ -657,6 +678,29 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		MaterialBindingSets.push_back(BindingSet);
 	}
 
+	// Each directional light that casts shadows gets one shadow map for each cascade. There are none in a picture
+	// without lighting, without a usable shadow distance, or in which nothing casts a shadow.
+	const bool bAnyMeshCastsShadows = std::ranges::find(Contents.CastsShadows, true) != Contents.CastsShadows.end();
+	const bool bShadowsArePossible =
+		bIsLit && bAnyMeshCastsShadows && std::isfinite(ShadowDistance) && ShadowDistance > 0.0f;
+	std::vector<int32> ShadowLights;
+	for (int32 LightIndex = 0; bShadowsArePossible && LightIndex < Contents.ViewConstants.LightCounts.x; ++LightIndex)
+	{
+		if (Contents.bLightCastsShadows[static_cast<std::size_t>(LightIndex)])
+		{
+			ShadowLights.push_back(LightIndex);
+		}
+	}
+	const int32 ShadowMapCount = static_cast<int32>(ShadowLights.size()) * FShadowCascades::CascadeCount;
+	const int32 ClampedShadowMapSize = std::clamp(ShadowMapSize, MinShadowMapSize, MaxShadowMapSize);
+	if (ShadowMapCount > 0 && !Implementation->Shadows.Prepare(ShadowMapCount, ClampedShadowMapSize))
+	{
+		OutError = std::format("the graphics card has no room for {} shadow maps of {} pixels a side",
+			ShadowMapCount,
+			ClampedShadowMapSize);
+		return false;
+	}
+
 	// The environment of the scene's sky light, or the black one if it has none.
 	const FEnvironmentResource* const Environment = Contents.SkyEnvironment != nullptr
 		? Implementation->Environments.FindOrCreate(Contents.SkyEnvironment)
@@ -697,6 +741,7 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	// another than before.
 	const bool bBindingsAreCurrent = Implementation->SceneBindingSet != nullptr &&
 		DrawBuffer == Implementation->DrawBuffer &&
+		Implementation->BoundShadowMaps == Implementation->Shadows.GetTexture() &&
 		Implementation->BoundReflections == Environment->Reflections.Get() &&
 		Implementation->BoundPicture == Environment->Picture.Get();
 	if (!bBindingsAreCurrent)
@@ -707,8 +752,10 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 				.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, Implementation->ViewBuffer))
 				.addItem(nvrhi::BindingSetItem::Texture_SRV(1, Environment->Reflections))
 				.addItem(nvrhi::BindingSetItem::Texture_SRV(2, Environment->Picture))
+				.addItem(nvrhi::BindingSetItem::Texture_SRV(3, Implementation->Shadows.GetTexture()))
 				.addItem(nvrhi::BindingSetItem::Sampler(0, Implementation->Environments.GetReflectionsSampler()))
-				.addItem(nvrhi::BindingSetItem::Sampler(1, Implementation->Environments.GetPictureSampler())),
+				.addItem(nvrhi::BindingSetItem::Sampler(1, Implementation->Environments.GetPictureSampler()))
+				.addItem(nvrhi::BindingSetItem::Sampler(2, Implementation->Shadows.GetSampler())),
 			Implementation->SceneBindingLayout);
 		if (NewBindingSet == nullptr)
 		{
@@ -719,12 +766,43 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		Implementation->SceneBindingSet = std::move(NewBindingSet);
 		Implementation->BoundReflections = Environment->Reflections.Get();
 		Implementation->BoundPicture = Environment->Picture.Get();
+		Implementation->BoundShadowMaps = Implementation->Shadows.GetTexture();
 	}
 	Implementation->DrawBuffer = std::move(DrawBuffer);
 	Implementation->DrawBufferCapacity = DrawBufferCapacity;
 
-	// The lights of the picture, with what the sky light adds to them.
+	if (ShadowMapCount > 0 &&
+		!Implementation->Shadows.BindSceneData(Implementation->DrawBuffer, Implementation->ViewBuffer))
+	{
+		OutError = "the graphics card could not bind the data of the scene for drawing shadows";
+		return false;
+	}
+
+	// The lights of the picture, with what the sky light and the shadows add to them.
 	FViewConstants ViewConstants = Contents.ViewConstants;
+	for (std::size_t ShadowIndex = 0; ShadowIndex < ShadowLights.size(); ++ShadowIndex)
+	{
+		const std::size_t LightIndex = static_cast<std::size_t>(ShadowLights[ShadowIndex]);
+		const std::size_t FirstLayer = ShadowIndex * FShadowCascades::CascadeCount;
+		const FShadowCascades Cascades = FShadowCascades::Compute(
+			View, AspectRatio, Contents.LightRotations[LightIndex], ShadowDistance, ClampedShadowMapSize);
+
+		ViewConstants.DirectionalLights[LightIndex].DirectionToLight.w = static_cast<float>(FirstLayer);
+		for (std::size_t Cascade = 0; Cascade < Cascades.Cascades.size(); ++Cascade)
+		{
+			// How the view is cut into cascades, and how large their pixels are, is the same for every light.
+			const FShadowCascade& Source = Cascades.Cascades[Cascade];
+			ViewConstants.ShadowMatrices[FirstLayer + Cascade] = Source.RelativeToShadow;
+			ViewConstants.ShadowCascadeFarDistances[static_cast<glm::length_t>(Cascade)] = Source.FarDistance;
+			ViewConstants.ShadowCascadeScales[Cascade] =
+				glm::vec4(Source.TexelSize, Source.TexelSize / Source.DepthRange, 0.0f, 0.0f);
+		}
+	}
+	if (ShadowMapCount > 0)
+	{
+		ViewConstants.CameraForward = glm::vec4(View.Rotation * ForwardDirection, ShadowDistance);
+		ViewConstants.ShadowParameters = glm::vec4(1.0f / static_cast<float>(ClampedShadowMapSize), 0.0f, 0.0f, 0.0f);
+	}
 	const bool bHasSky = bIsLit && Environment != &Implementation->Environments.GetBlack();
 	if (bHasSky)
 	{
@@ -807,6 +885,53 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	if (bIsLit)
 	{
 		CommandList.writeBuffer(Implementation->ViewBuffer, &ViewConstants, sizeof(FViewConstants));
+	}
+
+	// The shadow maps: every mesh that casts a shadow, drawn from each light's point of view, once per cascade.
+	for (int32 Layer = 0; Layer < ShadowMapCount; ++Layer)
+	{
+		const nvrhi::TextureSubresourceSet LayerOnly(0, 1, static_cast<nvrhi::ArraySlice>(Layer), 1);
+		const bool bClearShadowDepth = true;
+		const bool bClearShadowStencil = false;
+		CommandList.clearDepthStencilTexture(Implementation->Shadows.GetTexture(),
+			LayerOnly,
+			bClearShadowDepth,
+			FShadowMaps::FarthestDepth,
+			bClearShadowStencil,
+			0);
+
+		const float MapSize = static_cast<float>(Implementation->Shadows.GetMapSize());
+		nvrhi::GraphicsState State;
+		State.pipeline = Implementation->Shadows.GetPipeline();
+		State.framebuffer = Implementation->Shadows.GetLayerTarget(Layer);
+		State.viewport.addViewportAndScissorRect(nvrhi::Viewport(MapSize, MapSize));
+		State.bindings.push_back(Implementation->Shadows.GetPassBindings());
+		State.vertexBuffers.resize(1);
+
+		FShadowMaps::FPassConstants PassConstants;
+		PassConstants.MatrixIndex = Layer;
+		for (int32 DrawIndex = 0; DrawIndex < DrawCount; ++DrawIndex)
+		{
+			if (!Contents.CastsShadows[static_cast<std::size_t>(DrawIndex)])
+			{
+				continue;
+			}
+
+			const FStaticMeshBuffers& Buffers =
+				Implementation->MeshBuffers.at(Contents.Meshes[static_cast<std::size_t>(DrawIndex)]);
+			State.vertexBuffers[0] =
+				nvrhi::VertexBufferBinding().setBuffer(Buffers.VertexBuffer).setSlot(0).setOffset(0);
+			State.indexBuffer = nvrhi::IndexBufferBinding()
+									.setBuffer(Buffers.IndexBuffer)
+									.setFormat(nvrhi::Format::R32_UINT)
+									.setOffset(0);
+			CommandList.setGraphicsState(State);
+			// Setting the state forgets the constants, so they are given again for every mesh.
+			CommandList.setPushConstants(&PassConstants, sizeof(FShadowMaps::FPassConstants));
+			CommandList.drawIndexed(nvrhi::DrawArguments()
+										.setVertexCount(Buffers.IndexCount)
+										.setStartInstanceLocation(static_cast<uint32>(DrawIndex)));
+		}
 	}
 
 	// A lit scene is drawn into the high dynamic range buffer; an unlit one straight onto the surface.
@@ -894,6 +1019,7 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	Implementation->Statistics.UploadedEnvironmentCount = UploadedEnvironmentCount;
 	Implementation->Statistics.CachedEnvironmentCount = Implementation->Environments.GetCount();
 	Implementation->Statistics.SkyLightCount = bHasSky ? 1 : 0;
+	Implementation->Statistics.ShadowMapCount = ShadowMapCount;
 	Implementation->Statistics.DirectionalLightCount = Contents.ViewConstants.LightCounts.x;
 	Implementation->Statistics.PointLightCount = Contents.ViewConstants.LightCounts.y;
 	return true;

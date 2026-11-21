@@ -64,6 +64,24 @@ public:
 	/** How surfaces are shaded. */
 	ESceneViewMode ViewMode = ESceneViewMode::Lit;
 
+	/** The smallest and largest width and height a shadow map can have, in pixels. */
+	static constexpr int32 MinShadowMapSize = 64;
+	static constexpr int32 MaxShadowMapSize = 8192;
+
+	/**
+	 * How far from the camera the shadows of directional lights reach, in metres. Shadows fade out towards this
+	 * distance. A shorter distance gives sharper shadows, because the same shadow maps cover less. Zero or less
+	 * switches shadows off.
+	 */
+	float ShadowDistance = 100.0f;
+
+	/**
+	 * The width and height of each shadow map, in pixels; values outside MinShadowMapSize to MaxShadowMapSize are
+	 * taken as the nearest of the two. Larger maps give sharper shadows and need four times the memory for twice
+	 * the size: each directional light that casts shadows has four maps.
+	 */
+	int32 ShadowMapSize = 2048;
+
 	/**
 	 * Draws a scene onto a render target, replacing what the target showed.
 	 *

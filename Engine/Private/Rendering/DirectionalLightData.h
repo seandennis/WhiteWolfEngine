@@ -10,8 +10,11 @@
  */
 struct FDirectionalLightData
 {
-	/** xyz: the unit vector from a surface towards the light. */
-	glm::vec4 DirectionToLight = glm::vec4(0.0f);
+	/**
+	 * xyz: the unit vector from a surface towards the light. w: the number of the first of the light's shadow
+	 * maps, or -1 if the light casts no shadows.
+	 */
+	glm::vec4 DirectionToLight = glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
 
 	/** rgb: the light arriving at a surface that faces the light, colour times illuminance. */
 	glm::vec4 Illuminance = glm::vec4(0.0f);

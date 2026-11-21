@@ -27,6 +27,13 @@ namespace
 	/** The fraction of the pixels that may differ from the reference by more than the tolerance. */
 	constexpr double MaxDifferentPixelFraction = 0.02;
 
+	/**
+	 * The same two limits for pictures of the scene in different places drawn by the same machine, which differ
+	 * only at the soft edges of shadows.
+	 */
+	constexpr int32 SameMachineChannelTolerance = 6;
+	constexpr double SameMachineMaxDifferentPixelFraction = 0.002;
+
 	std::filesystem::path PathFromUtf8(std::string_view Text)
 	{
 		return std::filesystem::path(std::u8string(Text.begin(), Text.end()));
@@ -124,10 +131,13 @@ TEST_SUITE("Renderer test scene")
 			CAPTURE(Distance);
 			// It matches the same reference image as the scene at the origin does.
 			CheckAgainstReference(FarAway, "RendererTestScene");
-			// More than that, it is the same picture pixel for pixel: everything is drawn relative to the camera.
-			const FImageDifference Difference = FImageDifference::Measure(FarAway, AtOrigin, 0);
+			// More than that, it is the picture the same machine drew at the origin, because everything is drawn
+			// relative to the camera. Only the soft edges of shadows may differ by a shade: a shadow map is laid
+			// out on a grid that is fixed in the world, and the scene sits on that grid differently in each place.
+			const FImageDifference Difference =
+				FImageDifference::Measure(FarAway, AtOrigin, SameMachineChannelTolerance);
 			INFO("Difference from the picture at the origin: ", Difference.Describe());
-			CHECK(Difference.DifferentPixelCount == 0);
+			CHECK(Difference.IsWithin(SameMachineMaxDifferentPixelFraction));
 		}
 	}
 }

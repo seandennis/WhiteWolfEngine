@@ -7,6 +7,7 @@
 #include "Rendering/RenderContext.h"
 #include "Rendering/SceneRenderStatistics.h"
 #include "Rendering/SceneRenderer.h"
+#include "Rendering/ShadowMaps.h"
 #include "Rendering/StaticMeshBuffers.h"
 #include "Rendering/TextureResource.h"
 #include "Rendering/TextureWrap.h"
@@ -49,6 +50,10 @@ struct FSceneRenderer::FImplementation
 	nvrhi::BindingSetHandle SceneBindingSet;
 	nvrhi::ITexture* BoundReflections = nullptr;
 	nvrhi::ITexture* BoundPicture = nullptr;
+	nvrhi::ITexture* BoundShadowMaps = nullptr;
+
+	/** The shadow maps of the directional lights. SceneBindingSet binds them too. */
+	FShadowMaps Shadows;
 
 	/** Draws the sky light's environment behind the scene. */
 	nvrhi::GraphicsPipelineHandle SkyPipeline;
