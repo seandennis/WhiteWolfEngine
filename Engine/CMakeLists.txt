@@ -4,7 +4,8 @@ find_package(Threads REQUIRED)
 
 ww_add_module(Engine
     OUTPUT_NAME WhiteWolfEngine
-    PUBLIC_DEPENDENCIES Threads::Threads glm::glm-header-only)
+    PUBLIC_DEPENDENCIES Threads::Threads glm::glm-header-only
+    PRIVATE_DEPENDENCIES glfw)
 
 # The engine version comes from the top-level project() call and nowhere else.
 set_source_files_properties(Private/Core/EngineVersion.cpp PROPERTIES

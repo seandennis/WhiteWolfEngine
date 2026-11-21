@@ -2,6 +2,7 @@
 
 #include "Core/CoreTypes.h"
 
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
 /**
@@ -18,3 +19,7 @@ using FVector = glm::dvec3;
  * Use FVector, not this type, for anything measured from the world origin.
  */
 using FVector3f = glm::vec3;
+
+/** A position or size in two dimensions, in double precision: a point in a window, a scroll amount. Components are x
+ * and y. */
+using FVector2D = glm::dvec2;

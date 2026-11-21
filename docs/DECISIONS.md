@@ -59,7 +59,7 @@ Two MSVC warnings are disabled project-wide: **C4251** and **C4275**. They repor
 
 **Status:** Accepted.
 
-**Decision.** The engine ships for Windows x64 built with MSVC from Visual Studio 2022, as the specification requires, or from Visual Studio 2026 (D-019). The code is also kept compiling and passing its tests with GCC and Clang on Linux through the `linux-gcc`, `linux-clang` and `linux-sanitize` presets. Linux is not a supported platform for users of the engine.
+**Decision.** The engine ships for Windows x64 built with MSVC from Visual Studio 2022, as the specification requires, or from Visual Studio 2026 (D-019). The code is also kept compiling and passing its tests with GCC and Clang on Linux through the `linux-gcc`, `linux-clang` and `linux-sanitize` presets. Linux is not a supported platform for users of the engine. The Linux builds run headless only: they cannot open a window (D-025).
 
 **Reasons.** Three independent compilers catch more defects than one. AddressSanitizer, LeakSanitizer and UBSan on Linux are the strongest available check on a garbage-collected object system, and they run on every commit. Agents frequently work in Linux environments and must be able to verify their changes; a Windows-only codebase would leave that work unverified until CI. The cost is keeping platform-specific code behind small interfaces, which the Epic standard asks for anyway.
 
@@ -364,3 +364,19 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - **Files are replaced atomically.** `FFileHelper::SaveStringToFile` writes a temporary file and renames it over the target, so a crash while saving cannot leave half a scene.
 
 **Versioning.** `"Version"` is 1. A change that an older build could misread raises it, and a build refuses a version newer than its own instead of guessing.
+
+## D-025: Windows and input on GLFW
+
+**Status:** Accepted.
+
+**Decision.**
+
+- **GLFW 3.4** (commit `7b6aead9fb88b3623e3b3725ebb42670cbe4c579`, zlib licence) provides windows and input, as the specification requires. It is built as a static library and linked privately into the engine DLL. No GLFW type appears in an engine header; `FWindow` hides its GLFW handle behind a private implementation struct, and one private header, `Platform/Glfw.h`, is the only place that includes GLFW.
+- **Headless mode is GLFW's null platform.** GLFW 3.4 always contains a platform that creates windows in memory and touches no window system. `FPlatform::Initialize(EPlatformMode::Headless)` selects it, so the same `FWindow` code runs in tests, on build servers and in tools as on a desktop, and the specification's requirement that the engine runs with no window and no user input is met by one switch rather than by a second code path.
+- **The Linux development builds contain only the null platform.** GLFW's X11 and Wayland back ends are switched off there. Linux is not a shipping platform (D-004), its builds only run headless, and this way they need no window system packages to compile. `FPlatform::Initialize(EPlatformMode::Windowed)` fails with an error on such a build.
+- **Input state is engine code, separate from the window.** `FInputState` holds what is down, what changed in the current frame and how the mouse moved. A window forwards GLFW's events to it through public `Handle...` functions, and tests and tools call the same functions to simulate input. That is how input is unit-tested without a window system, and how the agent interface will press keys in play mode.
+- **`EKey` and `EMouseButton` have GLFW's code values,** so an event becomes an engine key with a range check and a cast. `Private/Platform/GlfwInputCodes.cpp` holds a `static_assert` for every value, which turns any disagreement, now or after a GLFW update, into a compile error. A conversion table would need a test that the null platform cannot provide, because it never produces key events.
+- **Per-frame input.** `FPlatform::PollEvents()` starts a new input frame for every window and then delivers the events, so "pressed this frame" has one meaning everywhere. A window that loses the focus releases all its keys, because their releases go to another window.
+- **Windows are created without an OpenGL context** (`GLFW_NO_API`); the renderer attaches a Vulkan surface in milestone 3.
+
+**Limits.** The forwarding of real GLFW events into `FInputState` is a few lines that no unit test executes, because the null platform produces no events; the key codes are checked at compile time and the state logic by its own tests. Text entry, gamepads, cursor capture and full-screen modes are added when the editor and scripting need them.

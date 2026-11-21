@@ -76,7 +76,7 @@ Build\windows\Binaries\Debug\EngineTests.exe --test-case="*Parse*"
 ```
 
 - Tests use [doctest](https://github.com/doctest/doctest). Each module has one test executable, `<Module>Tests`, built from every file under `<Module>/Tests/`, and one CTest entry of the same name. The header tool has its own, `HeaderToolTests`.
-- Tests are headless: they never open a window, wait for input or need a GPU-attached display.
+- Tests are headless: they never open a window, wait for input or need a GPU-attached display. A test that needs a window creates an `FScopedHeadlessPlatform` (`Tests/Platform/ScopedHeadlessPlatform.h`), under which `FWindow::Create` makes windows that exist in memory only, and feeds input through `Window->GetInput().HandleKeyEvent(...)`.
 - `EngineTests.DetectsMemoryLeaks` is a CTest entry that leaks memory on purpose and passes only if the leak is reported. It exists in MSVC Debug builds and under `linux-sanitize`, the builds that can detect leaked allocations.
 - A test executable's `main` starts with `FProcessDiagnostics::DisableErrorDialogs()` and `FProcessDiagnostics::EnableMemoryLeakReport()`, so a crash cannot hang the run in a dialog and leaks are reported at exit.
 - `CodeStyle.ClangFormat` is a CTest entry that runs the format check. It reports **Skipped** (not Passed) when clang-format 18 is not installed; install it rather than committing unchecked code.
@@ -102,7 +102,7 @@ CMakePresets.json         Configure, build, test and workflow presets
 CMake/                    Build helpers
   WhiteWolfCompilerSettings.cmake   Warning levels, conformance flags, sanitizers
   WhiteWolfModule.cmake             ww_add_module(), ww_add_module_tests(), ww_generate_reflection()
-  WhiteWolfThirdParty.cmake         Pinned engine dependencies (glm)
+  WhiteWolfThirdParty.cmake         Pinned engine dependencies (glm, GLFW)
   WhiteWolfThirdPartyTesting.cmake  Pinned test-only dependencies (doctest)
 Engine/                   The core engine module (WhiteWolfEngine.dll)
   CMakeLists.txt
@@ -111,13 +111,15 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Core/                 Fundamental types and assertions: CoreTypes.h, Assert.h, Version.h, EngineVersion.h,
                           EnumClassFlags.h (WW_ENUM_CLASS_FLAGS), FileHelper.h (FFileHelper: whole text files),
                           ProcessDiagnostics.h (error dialogs, memory leak report)
+    Input/                Keyboard and mouse: InputState.h (FInputState), Key.h (EKey), MouseButton.h (EMouseButton)
     Json/                 JSON text: JsonValue.h (FJsonValue), JsonReader.h (FJsonReader), JsonWriter.h (FJsonWriter)
     Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
-    Math/                 Math types: Vector.h (FVector, FVector3f), Quat.h (FQuat), Transform.h (FTransform)
+    Math/                 Math types: Vector.h (FVector, FVector3f, FVector2D), Quat.h (FQuat), Transform.h (FTransform)
     Object/               The object system: Object.h (WObject), Class.h (WClass), ObjectPtr.h (TObjectPtr),
                           WeakObjectPtr.h (TWeakObjectPtr), ObjectGlobals.h (NewObject, Cast, IsValid,
                           CollectGarbage), GarbageCollector.h (FGarbageCollector), ObjectMacros.h (class
                           registration)
+    Platform/             The window system: Platform.h (FPlatform), Window.h (FWindow)
     Reflection/           Reflected properties: Property.h (FProperty), ValueProperty.h and PropertyValueTraits.h
                           (bool, numbers, strings, math types), ObjectProperty.h, WeakObjectProperty.h,
                           ArrayProperty.h, PropertyFactory.h (MakeProperty), PropertyJsonContext.h.
@@ -282,6 +284,14 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 - **Identifiers.** Every entity and component has an identifier that is unique within its scene and never reused (`GetId()`, `Scene->FindEntityById()`). Scene files and tools refer to objects by it.
 - **Saving and loading.** `FSceneSerializer` writes a scene as JSON text (`SaveToFile`, `SaveToText`) and creates a scene from it (`LoadFromFile`, `LoadFromText`). Every `WPROPERTY()` that is not `Transient` is saved; nothing has to be written per component. A reference to an entity or component of the same scene is saved as its identifier. Loading reports problems with single values as warnings and refuses only a file whose structure is wrong; the format is described in `Scene/SceneSerializer.h` and D-024. A loaded scene is returned unreferenced: hold it before the next collection. In a component, do in `OnAttached()` whatever depends on property values; it runs after a loaded scene's properties are all set.
 - **Failures are return values.** `CreateEntity`, `AddComponent` and `SetParent` refuse invalid requests (a parent from another scene, an abstract component class, an entity made its own ancestor) by returning null or false and logging a warning to `LogScene`; they are not assertions, because editor and agent commands can ask for them.
+
+## Windows and input
+
+- `FPlatform::Initialize(EPlatformMode::Windowed or Headless, Error)` starts the window system, `FWindow::Create` makes a window, and `FPlatform::Shutdown()` stops it after the last window is destroyed. `FPlatform::PollEvents()` is called once per frame. Everything runs on the main thread.
+- **Headless mode** creates windows that exist in memory only. It needs no display, which is what lets tests, build servers and tools run the whole engine unattended. The Linux development builds support only this mode (D-025).
+- **Input is read from an `FInputState`,** one per window: `IsKeyDown` for held keys, `WasKeyPressed` and `WasKeyReleased` for what changed in the current frame, and the mouse position, movement and scroll amount. Keys are `EKey` values named after their position on a US keyboard.
+- **Input can be simulated.** The `Handle...` functions of `FInputState` are public: a window calls them with real events, and tests and tools call them to press keys and move the mouse without a person. Never read keys from GLFW directly.
+- No GLFW type or header appears outside `Engine/Private/Platform/`. Include `Platform/Glfw.h` there, never `<GLFW/glfw3.h>`.
 
 ## Third-party dependencies
 
