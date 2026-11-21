@@ -78,6 +78,8 @@ Build\windows\Binaries\Debug\EngineTests.exe --test-case="*Parse*"
 - Test files mirror the source tree and are named `<Subject>Tests.cpp`, for example `Engine/Tests/Core/VersionTests.cpp` tests `Engine/Public/Core/Version.h`.
 - Group the cases for a type in `TEST_SUITE("<TypeName>")`. Name each `TEST_CASE` as a sentence that states the expected behaviour.
 - Test the contract, including every failure path: malformed input, boundaries, overflow, empty input.
+- To test logging or a fatal error, create an `FScopedLogCapture` (`TestSupport/ScopedLogCapture.h`). While it is alive, log messages are recorded and a Fatal message or failed `WW_CHECK` throws `FFatalErrorException` instead of terminating: `CHECK_THROWS_AS(DoBadThing(), FFatalErrorException);`.
+- Tests that write files use an `FScopedTempDirectory` (`TestSupport/ScopedTempDirectory.h`) and never write into the repository.
 
 ## Directory layout
 
@@ -99,10 +101,12 @@ CMake/                    Build helpers
 Engine/                   The core engine module (WhiteWolfEngine.dll)
   CMakeLists.txt
   Public/                 Headers other modules may include
-    CoreMinimal.h         Included first by every engine header
-    Core/                 Fundamental types: CoreTypes.h, Version.h, EngineVersion.h
+    CoreMinimal.h         Included first by every engine header: core types, assertions, logging
+    Core/                 Fundamental types and assertions: CoreTypes.h, Assert.h, Version.h, EngineVersion.h
+    Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
   Private/                Sources and module-internal headers, mirroring Public/
   Tests/                  Unit tests, mirroring Public/ (EngineTests executable)
+    TestSupport/          Helpers shared by tests: FScopedLogCapture, FScopedTempDirectory
 Tools/
   Format.cmake            Formats or checks all C++ sources
   GitHooks/pre-commit     Optional hook that runs the format check
@@ -117,7 +121,7 @@ Reserved by the specification and created by later milestones: `Editor/` (editor
 - **A new class or struct**: one type per header/source pair. Put the header in `<Module>/Public/<Area>/` if other modules may use it, otherwise in `<Module>/Private/<Area>/`. Put the source in `<Module>/Private/<Area>/`. The file name is the type name without its prefix: `FVersion` lives in `Version.h` and `Version.cpp`.
 - **No CMake edit is needed** for new files: modules glob their `Public/`, `Private/` and `Tests/` directories.
 - **Exporting from a module**: mark every function or class that another module (including the tests) must link to with the module's API macro, `ENGINE_API` for the Engine module. Annotate individual functions on value types and whole classes when they have virtual functions. Symbols without the macro are not visible outside the DLL on any compiler.
-- **Include order**: a `.cpp` includes its own header first. Every engine header starts with `#include "CoreMinimal.h"`. Then project headers, then a blank line, then third-party and standard headers. Include exactly what the file uses; do not rely on indirect includes. Prefer forward declarations in headers.
+- **Include order**: a `.cpp` includes its own header first. Every engine header starts with `#include "CoreMinimal.h"` (the headers that `CoreMinimal.h` itself includes start with `Core/CoreTypes.h` instead). Then project headers, then a blank line, then third-party and standard headers. Include exactly what the file uses; do not rely on indirect includes. Prefer forward declarations in headers.
 - **Tests**: add `<Module>/Tests/<Area>/<Subject>Tests.cpp` in the same commit as the code it tests.
 - **A new module**: call `ww_add_module(<Name>)` and `ww_add_module_tests(<Name>)` from the module's `CMakeLists.txt`; see `Engine/CMakeLists.txt`.
 
@@ -166,6 +170,9 @@ The code follows the [Epic C++ Coding Standard](https://dev.epicgames.com/docume
 - Avoid `bool` parameters in public APIs; prefer an `enum class`. Name literal arguments with a constant when their meaning is not obvious at the call site.
 - Use named intermediate variables to make complicated conditions readable: `const bool bIsLastComponent = ...;`.
 - Handle every error. Functions that can fail return `std::optional`, `bool` with an `Out` parameter, or a result type; they never fail silently.
+- Engine code does not throw exceptions and does not catch them. Report failures through return values and the log.
+- Assert programming errors with `WW_CHECK(Condition)` or `WW_CHECKF(Condition, "format", Args...)`. A failed check logs a Fatal error and terminates. Checks are active in every build configuration. Never use a check for something that can happen in a correct program, such as bad input or a missing file.
+- Log with `WW_LOG(LogCategory, Verbosity, "format {}", Args...)`, using `std::format` syntax. Verbosities: `Fatal` (terminates), `Error`, `Warning`, `Display` (also shown on the console), `Log`, `Verbose`, `VeryVerbose`. Each subsystem defines its own category: `extern ENGINE_API FLogCategory LogMySystem;` in a header and `constinit FLogCategory LogMySystem("LogMySystem", ELogVerbosity::Log);` in the source.
 - Do not call C runtime functions that MSVC deprecates (`fopen`, `strcpy`, `sprintf`, `localtime`, `getenv`, ...); they are errors under `/WX`. Use the C++ standard library equivalents.
 
 ### Comments
