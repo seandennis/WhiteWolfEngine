@@ -129,7 +129,7 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
                           ImageDifference.h (FImageDifference),
                           Texture.h (WTexture), MipChain.h (FMipChain), MeshShapes.h (FMeshShapes: box, sphere, plane),
                           EnvironmentMap.h (WEnvironmentMap), SphericalHarmonics.h (FSphericalHarmonics),
-                          SkyLightComponent.h (WSkyLightComponent),
+                          SkyLightComponent.h (WSkyLightComponent), ShadowCascades.h (FShadowCascades),
                           CameraView.h (FCameraView), StaticMesh.h (WStaticMesh), Material.h (WMaterial),
                           StaticMeshComponent.h (WStaticMeshComponent), DirectionalLightComponent.h,
                           PointLightComponent.h, SceneRenderer.h (FSceneRenderer), SceneViewMode.h,
