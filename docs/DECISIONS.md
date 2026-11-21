@@ -128,7 +128,7 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 
 ## D-011: Continuous integration on GitHub Actions
 
-**Status:** Accepted. Not yet exercised: the workflow first runs when the repository is pushed.
+**Status:** Accepted.
 
 **Decision.** `.github/workflows/ci.yml` runs on every push to `main` and every pull request: MSVC Debug and Release on `windows-2022` (the hosted image that carries Visual Studio 2022) and on `windows-2025` (which carries Visual Studio 2026; see D-019), the four Linux cross-check presets on `ubuntu-24.04`, and a formatting job. Actions are pinned to commit SHAs.
 
