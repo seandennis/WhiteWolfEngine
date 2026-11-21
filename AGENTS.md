@@ -76,7 +76,7 @@ Build\windows\Binaries\Debug\EngineTests.exe --test-suite="FVersion"
 Build\windows\Binaries\Debug\EngineTests.exe --test-case="*Parse*"
 ```
 
-- Tests use [doctest](https://github.com/doctest/doctest). Each module has one test executable, `<Module>Tests`, built from every file under `<Module>/Tests/`, and one CTest entry of the same name. The header tool has its own, `HeaderToolTests`.
+- Tests use [doctest](https://github.com/doctest/doctest). Each module has one test executable, `<Module>Tests`, built from every file under `<Module>/Tests/`, and one CTest entry of the same name. The build tools have their own: `HeaderToolTests` and `ShaderCompilerTests`.
 - Tests are headless: they never open a window, wait for input or need a display. The renderer tests do need Vulkan 1.3: they create an `FRenderDevice`, draw to an `FRenderTarget` and read the pixels back, on whatever graphics card or software driver the machine has. A machine without Vulkan fails them; it does not skip them.
 - Test executables are built with `DOCTEST_CONFIG_NO_MULTITHREADING`: call doctest assertions (`CHECK`, `REQUIRE`) on the main thread only. A test may start threads that run engine code. A test that needs a window creates an `FScopedHeadlessPlatform` (`Tests/Platform/ScopedHeadlessPlatform.h`), under which `FWindow::Create` makes windows that exist in memory only, and feeds input through `Window->GetInput().HandleKeyEvent(...)`.
 - `EngineTests.DetectsMemoryLeaks` is a CTest entry that leaks memory on purpose and passes only if the leak is reported. It exists in MSVC Debug builds and under `linux-sanitize`, the builds that can detect leaked allocations.
@@ -104,7 +104,7 @@ CMakePresets.json         Configure, build, test and workflow presets
 CMake/                    Build helpers
   WhiteWolfCompilerSettings.cmake   Warning levels, conformance flags, sanitizers
   WhiteWolfModule.cmake             ww_add_module(), ww_add_module_tests(), ww_generate_reflection()
-  WhiteWolfThirdParty.cmake         Pinned engine dependencies (glm, GLFW, Vulkan-Headers, NVRHI)
+  WhiteWolfThirdParty.cmake         Pinned engine dependencies (glm, GLFW, Vulkan-Headers, NVRHI, glslang)
   WhiteWolfThirdPartyTesting.cmake  Pinned test-only dependencies (doctest)
 Engine/                   The core engine module (WhiteWolfEngine.dll)
   CMakeLists.txt
@@ -141,6 +141,11 @@ Tools/
     Main.cpp              Entry point
     Private/              Tokenizer, header parser, code generator
     Tests/                Unit tests (HeaderToolTests executable)
+  ShaderCompiler/         WhiteWolfShaderCompiler: compiles GLSL shaders to SPIR-V and writes them as C++ source
+    Main.cpp              Entry point
+    Private/              GLSL compiler (on the glslang library), code generator
+    Tests/                Unit tests (ShaderCompilerTests executable)
+  ToolSupport/            File helpers shared by the build tools
 docs/
   DECISIONS.md            Decision log
 ```

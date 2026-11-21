@@ -69,3 +69,20 @@ FetchContent_MakeAvailable(nvrhi)
 # NVRHI's Vulkan backend calls into its common library but does not say so. Linkers that resolve
 # static libraries in command-line order (GNU ld) need to be told, or the symbols are not found.
 target_link_libraries(nvrhi_vk PRIVATE nvrhi)
+
+# glslang: compiles the engine's GLSL shaders to SPIR-V while the engine is built
+# (BSD-3-Clause, with parts under Apache-2.0 and MIT). Release 16.6.0.
+# It is linked into WhiteWolfShaderCompiler, a build tool, and not into the engine. glslang's own
+# command-line compiler is not built, because building it needs Python.
+set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
+set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
+set(ENABLE_SPVREMAPPER OFF CACHE BOOL "" FORCE)
+set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
+set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(BUILD_EXTERNAL OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(glslang
+    GIT_REPOSITORY https://github.com/KhronosGroup/glslang.git
+    GIT_TAG e1b562a8bed273a02f30b59b66a5d499793cede5
+    SYSTEM)
+FetchContent_MakeAvailable(glslang)

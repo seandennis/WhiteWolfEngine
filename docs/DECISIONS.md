@@ -409,3 +409,25 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - **doctest runs single-threaded** (`DOCTEST_CONFIG_NO_MULTITHREADING`). doctest keeps per-thread state in `thread_local` containers. A `thread_local` is constructed in every thread that starts in the process, including the worker threads of a graphics driver, which are still running when the process exits; their copies are never destroyed, and the debug heap reported them as leaks as soon as a test opened the graphics card. The tests assert on the main thread only, so nothing is lost. The same reasoning applies to engine code: a `thread_local` with a destructor will be reported as a leak by the same mechanism.
 
 **Not yet.** Shaders and pipelines, a swap chain for windows, and Vulkan's own validation layers (which need the Vulkan SDK) come with the next steps of milestone 3.
+
+## D-027: Shaders are GLSL, compiled while the engine is built
+
+**Status:** Accepted.
+
+**Dependency.** **glslang** 16.6.0 (commit `e1b562a8bed273a02f30b59b66a5d499793cede5`; BSD-3-Clause, with parts under Apache-2.0 and MIT), Khronos's reference compiler from GLSL to SPIR-V. Only its library is built, without its optimiser, its HLSL front end and its command-line program. It is linked into a build tool and is not part of the engine or of a shipped game.
+
+**Decision.**
+
+- **Shaders are written in GLSL 4.60 and compiled to SPIR-V 1.6 for Vulkan 1.3 during the build**, by `WhiteWolfShaderCompiler`, a first-party tool in `Tools/ShaderCompiler/` built on the glslang library. A shader that does not compile fails the build with `file(line): error: message`, like a C++ error, and warnings are errors.
+- **The compiled shaders are embedded in the module that uses them.** The tool writes one C++ source file that holds the SPIR-V of every shader as arrays of numbers. The engine therefore needs no shader files beside it at run time, cannot be run with shaders that do not match its code, and contains no shader compiler.
+- **The tool compiles `*.vert` and `*.frag` below one directory**, names each shader by its path below that directory, and resolves `#include` against that directory. Other stages are added to the tool when the renderer first needs them.
+- **Only the first error of a shader is reported.** That is glslang's behaviour; the errors it would print after the first are mostly consequences of it.
+- **File helpers shared by the build tools** (finding files in a fixed order, writing a file only when it changed) moved to `Tools/ToolSupport/`, used by the header tool and the shader compiler.
+
+**Alternatives considered.**
+
+- *The compilers of the Vulkan SDK (`glslc`, `dxc`).* The SDK is a large separate installation that every developer and build server would need, in a matching version. The toolchain needs none today.
+- *glslang's own command-line compiler.* Building it runs a Python script; Python would become a requirement of the build for one generated header.
+- *Compiling shaders when the engine runs.* It puts a compiler in every shipped game and moves shader errors from the build to the first run.
+- *Committing compiled SPIR-V.* Binary files in the repository that can silently differ from their source.
+- *HLSL or Slang.* Either adds a much larger compiler. GLSL is enough for the renderer the specification describes.

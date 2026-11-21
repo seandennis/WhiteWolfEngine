@@ -15,6 +15,7 @@ ww_apply_compiler_settings(HeaderToolLibrary)
 target_include_directories(HeaderToolLibrary PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/Private"
     "${PROJECT_SOURCE_DIR}/Engine/Public")
+target_link_libraries(HeaderToolLibrary PUBLIC ToolSupportLibrary)
 set_target_properties(HeaderToolLibrary PROPERTIES FOLDER "Tools")
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${header_tool_sources})
 

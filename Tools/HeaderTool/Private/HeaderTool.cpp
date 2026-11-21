@@ -3,17 +3,14 @@
 #include "CodeGenerator.h"
 #include "HeaderParser.h"
 #include "ReflectedHeader.h"
+#include "ToolFiles.h"
 
-#include <algorithm>
 #include <cstddef>
 #include <filesystem>
 #include <format>
-#include <fstream>
-#include <iterator>
 #include <map>
 #include <ostream>
 #include <string_view>
-#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -23,14 +20,10 @@ namespace
 	constexpr int32 ExitHeaderError = 1;
 	constexpr int32 ExitUsageError = 2;
 
-	constexpr std::string_view Usage = "usage: WhiteWolfHeaderTool --output <file> --root <dir> [--root <dir>...]";
+	/** The files the tool reads. */
+	constexpr std::string_view HeaderExtensions[] = {".h"};
 
-	/** Returns a path as UTF-8 text with forward slashes, which is how paths are printed and written to #includes. */
-	std::string ToUtf8(const std::filesystem::path& Path)
-	{
-		const std::u8string Text = Path.generic_u8string();
-		return std::string(Text.begin(), Text.end());
-	}
+	constexpr std::string_view Usage = "usage: WhiteWolfHeaderTool --output <file> --root <dir> [--root <dir>...]";
 
 	struct FArguments
 	{
@@ -74,80 +67,6 @@ namespace
 
 		return true;
 	}
-
-	/** Collects every header below Root, sorted so that the output does not depend on the file system's order. */
-	bool FindHeaders(
-		const std::filesystem::path& Root, std::vector<std::filesystem::path>& OutHeaders, std::ostream& ErrorStream)
-	{
-		std::error_code Error;
-		std::filesystem::recursive_directory_iterator Iterator(Root, Error);
-		if (Error)
-		{
-			ErrorStream << std::format("error: cannot read the directory '{}': {}\n", ToUtf8(Root), Error.message());
-			return false;
-		}
-
-		const std::filesystem::recursive_directory_iterator End;
-		while (Iterator != End)
-		{
-			const std::filesystem::directory_entry& Entry = *Iterator;
-			std::error_code EntryError;
-			if (Entry.is_regular_file(EntryError) && Entry.path().extension() == ".h")
-			{
-				OutHeaders.push_back(Entry.path());
-			}
-
-			Iterator.increment(Error);
-			if (Error)
-			{
-				ErrorStream << std::format(
-					"error: cannot read the directory '{}': {}\n", ToUtf8(Root), Error.message());
-				return false;
-			}
-		}
-
-		std::ranges::sort(OutHeaders,
-			[](const std::filesystem::path& Left, const std::filesystem::path& Right)
-			{ return Left.generic_u8string() < Right.generic_u8string(); });
-		return true;
-	}
-
-	bool ReadFile(const std::filesystem::path& Path, std::string& OutText)
-	{
-		std::ifstream Stream(Path, std::ios::binary);
-		if (!Stream)
-		{
-			return false;
-		}
-
-		OutText.assign(std::istreambuf_iterator<char>(Stream), std::istreambuf_iterator<char>());
-		return !Stream.bad();
-	}
-
-	/**
-	 * Writes Text to the file at Path, unless the file already holds exactly that text. Leaving an unchanged file
-	 * alone keeps its modification time, so the build does not compile it again.
-	 */
-	bool WriteFileIfChanged(const std::filesystem::path& Path, std::string_view Text)
-	{
-		std::string ExistingText;
-		if (ReadFile(Path, ExistingText) && ExistingText == Text)
-		{
-			return true;
-		}
-
-		std::error_code Error;
-		std::filesystem::create_directories(Path.parent_path(), Error);
-		if (Error)
-		{
-			return false;
-		}
-
-		std::ofstream Stream(Path, std::ios::binary | std::ios::trunc);
-		Stream.write(Text.data(), static_cast<std::streamsize>(Text.size()));
-		Stream.flush();
-		return Stream.good();
-	}
 }
 
 int32 FHeaderTool::Run(std::span<const std::string> Arguments, std::ostream& ErrorStream)
@@ -166,17 +85,19 @@ int32 FHeaderTool::Run(std::span<const std::string> Arguments, std::ostream& Err
 	for (const std::filesystem::path& Root : Options.Roots)
 	{
 		std::vector<std::filesystem::path> HeaderPaths;
-		if (!FindHeaders(Root, HeaderPaths, ErrorStream))
+		std::string FindError;
+		if (!FToolFiles::FindFiles(Root, HeaderExtensions, HeaderPaths, FindError))
 		{
+			ErrorStream << std::format("error: {}\n", FindError);
 			return ExitUsageError;
 		}
 
 		for (const std::filesystem::path& HeaderPath : HeaderPaths)
 		{
 			std::string Source;
-			if (!ReadFile(HeaderPath, Source))
+			if (!FToolFiles::ReadTextFile(HeaderPath, Source))
 			{
-				ErrorStream << std::format("error: cannot read '{}'\n", ToUtf8(HeaderPath));
+				ErrorStream << std::format("error: cannot read '{}'\n", FToolFiles::ToUtf8(HeaderPath));
 				return ExitUsageError;
 			}
 
@@ -186,7 +107,8 @@ int32 FHeaderTool::Run(std::span<const std::string> Arguments, std::ostream& Err
 			{
 				for (const FParseError& Error : Errors)
 				{
-					ErrorStream << std::format("{}({}): error: {}\n", ToUtf8(HeaderPath), Error.Line, Error.Message);
+					ErrorStream << std::format(
+						"{}({}): error: {}\n", FToolFiles::ToUtf8(HeaderPath), Error.Line, Error.Message);
 				}
 				bHasHeaderErrors = true;
 				continue;
@@ -194,7 +116,7 @@ int32 FHeaderTool::Run(std::span<const std::string> Arguments, std::ostream& Err
 
 			for (const FReflectedClass& Class : Header.Classes)
 			{
-				const std::string Location = std::format("{}({})", ToUtf8(HeaderPath), Class.Line);
+				const std::string Location = std::format("{}({})", FToolFiles::ToUtf8(HeaderPath), Class.Line);
 				const auto [Existing, bIsNew] = ClassLocations.emplace(Class.Name, Location);
 				if (!bIsNew)
 				{
@@ -207,7 +129,7 @@ int32 FHeaderTool::Run(std::span<const std::string> Arguments, std::ostream& Err
 				}
 			}
 
-			Header.IncludePath = ToUtf8(HeaderPath.lexically_relative(Root));
+			Header.IncludePath = FToolFiles::ToUtf8(HeaderPath.lexically_relative(Root));
 			Headers.push_back(std::move(Header));
 		}
 	}
@@ -217,9 +139,9 @@ int32 FHeaderTool::Run(std::span<const std::string> Arguments, std::ostream& Err
 		return ExitHeaderError;
 	}
 
-	if (!WriteFileIfChanged(Options.OutputFile, FCodeGenerator::Generate(Headers)))
+	if (!FToolFiles::WriteTextFileIfChanged(Options.OutputFile, FCodeGenerator::Generate(Headers)))
 	{
-		ErrorStream << std::format("error: cannot write '{}'\n", ToUtf8(Options.OutputFile));
+		ErrorStream << std::format("error: cannot write '{}'\n", FToolFiles::ToUtf8(Options.OutputFile));
 		return ExitUsageError;
 	}
 
