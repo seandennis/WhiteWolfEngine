@@ -1,0 +1,75 @@
+---
+name: build-and-test
+description: Build White Wolf Engine and run its tests. Use when building, running the whole test suite or one test, checking a change on every supported preset, or diagnosing a build or test failure.
+---
+
+# Build and test White Wolf Engine
+
+All commands run from the repository root. On Windows use a **Developer PowerShell for VS 2022**.
+
+## 1. Pick the presets for this machine
+
+| Machine | Workflow presets to run |
+| --- | --- |
+| Windows with Visual Studio 2022 | `windows-debug`, `windows-release` |
+| Linux (development cross-check) | `linux-gcc-debug`, `linux-gcc-release`, `linux-clang-debug`, `linux-sanitize` |
+
+Windows with MSVC is the product toolchain and the result that counts. The Linux presets only cross-check the code; they never replace a Windows run.
+
+## 2. Build and test everything
+
+Each command configures, builds and runs every test, and stops at the first failing step:
+
+```
+cmake --workflow --preset windows-debug
+cmake --workflow --preset windows-release
+```
+
+On Linux, run all four:
+
+```
+cmake --workflow --preset linux-gcc-debug
+cmake --workflow --preset linux-gcc-release
+cmake --workflow --preset linux-clang-debug
+cmake --workflow --preset linux-sanitize
+```
+
+Success is `100% tests passed` from every preset with no compiler warnings (warnings are errors). A test reported as `Skipped` is not a pass: read why and fix the cause. `CodeStyle.ClangFormat` is skipped only when clang-format 18 is missing.
+
+## 3. Iterate faster
+
+```
+cmake --preset windows                    # configure once
+cmake --build --preset windows-debug      # rebuild after edits
+ctest --preset windows-debug              # run all tests
+ctest --preset windows-debug -R EngineTests --output-on-failure
+```
+
+Run part of a test executable directly (doctest options):
+
+```
+Build\windows\Binaries\Debug\EngineTests.exe --list-test-suites
+Build\windows\Binaries\Debug\EngineTests.exe --test-suite="FVersion"
+Build\windows\Binaries\Debug\EngineTests.exe --test-case="*Parse*"
+Build\windows\Binaries\Debug\EngineTests.exe --success          # also print passing assertions
+```
+
+On Linux the executables are at `Build/<configure preset>/Binaries/<Config>/EngineTests`.
+
+New source files are picked up automatically; no CMake edit or reconfigure is needed.
+
+## 4. Diagnose failures
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `unresolved external symbol` (MSVC) or `undefined reference` when linking a test or another module | The symbol is not exported. Add the module API macro (`ENGINE_API`) to its declaration. |
+| A warning stops the build | Fix the code. Do not disable the warning; see "Warnings" in `AGENTS.md`. |
+| `No such preset` | The preset is for the other operating system; see the table in step 1. |
+| Configure fails while fetching a dependency | The first configure needs internet access to GitHub. Retry when the network is available; never vendor a copy by hand. |
+| `CodeStyle.ClangFormat` fails | Run `cmake -P Tools/Format.cmake`, review the changes, rebuild. |
+| A sanitizer report under `linux-sanitize` | A real memory, leak or undefined-behaviour bug. Fix it; never suppress it. |
+| Stale or confusing build state | Delete `Build/<configure preset>/` and run the workflow preset again. |
+
+## 5. Report honestly
+
+State exactly which presets you ran and their results. If MSVC was not available, say that the change is unverified on the product toolchain until the Windows CI job passes.
