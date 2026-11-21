@@ -77,6 +77,7 @@ TEST_SUITE("TValueProperty")
 		CHECK(FindValueProperty("Location").GetTypeName() == "FVector");
 		CHECK(FindValueProperty("Direction").GetTypeName() == "FVector3f");
 		CHECK(FindValueProperty("Rotation").GetTypeName() == "FQuat");
+		CHECK(FindValueProperty("Color").GetTypeName() == "FLinearColor");
 		CHECK(FindValueProperty("Transform").GetTypeName() == "FTransform");
 	}
 
@@ -336,6 +337,35 @@ TEST_SUITE("TValueProperty")
 
 		CHECK(Object->Location == FVector(1.0, 2.0, 3.0));
 		CHECK(Object->Rotation == FQuat(0.0f, 1.0f, 0.0f, 0.0f));
+	}
+
+	TEST_CASE("A colour exports as red, green, blue and alpha, and imports what it exported")
+	{
+		const FScopedObjectTest ObjectTest;
+		WTestValueObject* const Object = NewObject<WTestValueObject>();
+		Object->Color = FLinearColor(0.25f, 0.5f, 4.0f, 0.75f);
+		std::string Error;
+
+		const FJsonValue Exported = Export(*Object, "Color");
+		CHECK(Exported == MakeNumberArray({0.25, 0.5, 4.0, 0.75}));
+
+		Object->Color = FLinearColor();
+		CHECK(Import(*Object, "Color", Exported, Error));
+		CHECK(Object->Color == FLinearColor(0.25f, 0.5f, 4.0f, 0.75f));
+	}
+
+	TEST_CASE("A colour rejects anything but four numbers, and keeps its old value")
+	{
+		const FScopedObjectTest ObjectTest;
+		WTestValueObject* const Object = NewObject<WTestValueObject>();
+		Object->Color = FLinearColor(1.0f, 0.5f, 0.0f, 1.0f);
+		std::string Error;
+
+		CHECK_FALSE(Import(*Object, "Color", MakeNumberArray({1.0, 1.0, 1.0}), Error));
+		CHECK(Error == "expected an array of 4 numbers for FLinearColor");
+		CHECK_FALSE(Import(*Object, "Color", FJsonValue("red"), Error));
+
+		CHECK(Object->Color == FLinearColor(1.0f, 0.5f, 0.0f, 1.0f));
 	}
 
 	TEST_CASE("A transform member that is missing keeps its identity value")

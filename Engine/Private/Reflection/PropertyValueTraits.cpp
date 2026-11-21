@@ -123,6 +123,24 @@ bool TPropertyValueTraits<FQuat>::FromJson(const FJsonValue& Json, FQuat& OutVal
 	return true;
 }
 
+FJsonValue TPropertyValueTraits<FLinearColor>::ToJson(const FLinearColor& Value)
+{
+	return FJsonValue(
+		FJsonValue::FArray{FJsonValue(Value.R), FJsonValue(Value.G), FJsonValue(Value.B), FJsonValue(Value.A)});
+}
+
+bool TPropertyValueTraits<FLinearColor>::FromJson(const FJsonValue& Json, FLinearColor& OutValue, std::string& OutError)
+{
+	std::array<float, 4> Components{};
+	if (!ReadComponents(Json, TypeName, Components, OutError))
+	{
+		return false;
+	}
+
+	OutValue = FLinearColor(Components[0], Components[1], Components[2], Components[3]);
+	return true;
+}
+
 FJsonValue TPropertyValueTraits<FTransform>::ToJson(const FTransform& Value)
 {
 	FJsonValue Json = FJsonValue::MakeObject();

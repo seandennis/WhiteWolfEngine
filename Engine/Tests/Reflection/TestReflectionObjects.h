@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 
 #include "Json/JsonValue.h"
+#include "Math/LinearColor.h"
 #include "Object/ObjectMacros.h"
 #include "Object/ObjectPtr.h"
 #include "Object/WeakObjectPtr.h"
@@ -66,6 +67,9 @@ public:
 
 	WPROPERTY()
 	FQuat Rotation = FQuat(1.0f, 0.0f, 0.0f, 0.0f);
+
+	WPROPERTY()
+	FLinearColor Color;
 
 	WPROPERTY()
 	FTransform Transform;

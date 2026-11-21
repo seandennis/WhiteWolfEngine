@@ -124,7 +124,8 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
                           registration)
     Platform/             The window system: Platform.h (FPlatform), Window.h (FWindow)
     Rendering/            The renderer: RenderDevice.h (FRenderDevice), RenderTarget.h (FRenderTarget), Image.h (FImage),
-                          CameraView.h (FCameraView)
+                          CameraView.h (FCameraView), StaticMesh.h (WStaticMesh), Material.h (WMaterial),
+                          StaticMeshComponent.h (WStaticMeshComponent)
     Reflection/           Reflected properties: Property.h (FProperty), ValueProperty.h and PropertyValueTraits.h
                           (bool, numbers, strings, math types), ObjectProperty.h, WeakObjectProperty.h,
                           ArrayProperty.h, PropertyFactory.h (MakeProperty), PropertyJsonContext.h.
@@ -277,7 +278,7 @@ That is all: nothing about reflection is written in `Door.cpp`. The build runs `
 - `WFUNCTION()` goes before a member function that is not static, not a template and not overloaded. Every parameter needs a name. Specifiers: `BlueprintCallable`, `BlueprintPure`, `Category = "Name"`.
 - Members may be private. Unknown specifiers are errors, so a typing mistake cannot pass silently.
 
-A member can be a property if it is a `bool`, a fixed-width integer, `float`, `double`, `std::string`, `FVector`, `FVector3f`, `FQuat`, `FTransform`, a `TObjectPtr`, a `TWeakObjectPtr` or a `std::vector` of any of these; any other type is a compile error in the generated file. A function's parameters and return value must be property types or pointers to `WObject` classes. Every property converts to and from JSON (`ExportJson`, `ImportJson`), which is what saving, loading and the agent interface use.
+A member can be a property if it is a `bool`, a fixed-width integer, `float`, `double`, `std::string`, `FVector`, `FVector3f`, `FQuat`, `FTransform`, `FLinearColor`, a `TObjectPtr`, a `TWeakObjectPtr` or a `std::vector` of any of these; any other type is a compile error in the generated file. A function's parameters and return value must be property types or pointers to `WObject` classes. Every property converts to and from JSON (`ExportJson`, `ImportJson`), which is what saving, loading and the agent interface use.
 
 The generated file includes every reflected header of its module, so a forward declaration is enough for a `TObjectPtr<WOther>` member when `WOther` is a reflected class of the same module. For a class from another module, include its header.
 A class is registered when its module loads. Class names are unique across all modules. A class with a pure virtual function is abstract and cannot be created with `NewObject`.
@@ -307,6 +308,7 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 ## Rendering
 
 - **Nothing reaches the graphics card in world coordinates.** An `FCameraView` is the point of view of a picture. Its `GetCameraRelativeMatrix` subtracts the camera's location from an object's in double precision, and only that offset is converted to float; the view matrix has no translation. Use it for everything that is drawn, so that rendering is the same at any distance from the world origin.
+- **What is drawn.** A `WStaticMesh` is a shape: vertices and triangle indices in its own space, set with `SetGeometry`, which refuses anything that is not a valid list of triangles. A `WMaterial` says what a surface looks like. A `WStaticMeshComponent` on an entity shows a mesh with a material at the entity's place in the world. Meshes and materials are objects like any other: a component's reference keeps them alive, and many components can share one.
 - **Depth is reversed and has no far plane:** 1 at the near plane, towards 0 at infinity. Clear depth to 0 and draw with a greater-or-equal depth test.
 - `FRenderDevice::Create` opens the graphics card through Vulkan and NVRHI. It needs no window. Only one render device can exist at a time.
 - An `FRenderTarget` is a surface to draw on; `ReadPixels` copies it into an `FImage`, which is how tests and screenshots see what was drawn. Colours given to the renderer are linear (`FLinearColor`); pixels read back are sRGB-encoded bytes (`FColor`).

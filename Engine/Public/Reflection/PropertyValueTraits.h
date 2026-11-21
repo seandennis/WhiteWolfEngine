@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 
 #include "Json/JsonValue.h"
+#include "Math/LinearColor.h"
 
 #include <cmath>
 #include <concepts>
@@ -17,7 +18,7 @@
  * Describes a value type that can be a reflected property: its name and how it converts to and from JSON.
  *
  * There is a specialization for each such type: bool, the fixed-width integers, float, double, std::string, FVector,
- * FVector3f, FQuat and FTransform. Each provides:
+ * FVector3f, FQuat, FTransform and FLinearColor. Each provides:
  *
  *     static constexpr std::string_view TypeName;
  *     static FJsonValue ToJson(const ValueType& Value);
@@ -206,6 +207,16 @@ struct TPropertyValueTraits<FQuat>
 
 	ENGINE_API static FJsonValue ToJson(const FQuat& Value);
 	ENGINE_API static bool FromJson(const FJsonValue& Json, FQuat& OutValue, std::string& OutError);
+};
+
+/** A colour is saved as [red, green, blue, alpha], in linear space. */
+template <>
+struct TPropertyValueTraits<FLinearColor>
+{
+	static constexpr std::string_view TypeName = "FLinearColor";
+
+	ENGINE_API static FJsonValue ToJson(const FLinearColor& Value);
+	ENGINE_API static bool FromJson(const FJsonValue& Json, FLinearColor& OutValue, std::string& OutError);
 };
 
 /**
