@@ -214,6 +214,14 @@ TEST_SUITE("FCameraView")
 			CHECK_FALSE(View.IsValid());
 		}
 
+		for (const float Exposure : {0.0f, -1.0f, Infinity, NotANumber})
+		{
+			View = FCameraView();
+			View.Exposure = Exposure;
+			CAPTURE(Exposure);
+			CHECK_FALSE(View.IsValid());
+		}
+
 		View = FCameraView();
 		View.Location.y = std::numeric_limits<double>::infinity();
 		CHECK_FALSE(View.IsValid());

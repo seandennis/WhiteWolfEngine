@@ -14,5 +14,11 @@ struct FSceneRenderStatistics
 	/** How many meshes have their geometry on the graphics card, whether or not they were drawn. */
 	int32 CachedMeshCount = 0;
 
+	/** How many directional lights lit the picture. Always zero in the unlit view mode. */
+	int32 DirectionalLightCount = 0;
+
+	/** How many point lights lit the picture. Always zero in the unlit view mode. */
+	int32 PointLightCount = 0;
+
 	bool operator==(const FSceneRenderStatistics& Other) const = default;
 };

@@ -11,6 +11,7 @@
 #include "Rendering/StaticMesh.h"
 #include "Rendering/StaticMeshComponent.h"
 #include "Rendering/TestRendering.h"
+#include "Rendering/TestSceneRendering.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
 #include "Scene/TestSceneObjects.h"
@@ -24,120 +25,6 @@
 #include <ostream>
 #include <string>
 #include <vector>
-
-namespace
-{
-	constexpr FLinearColor LinearRed(1.0f, 0.0f, 0.0f);
-	constexpr FLinearColor LinearGreen(0.0f, 1.0f, 0.0f);
-	constexpr FLinearColor LinearBlue(0.0f, 0.0f, 1.0f);
-	/** The background of the test pictures: a colour no square has, and one that encodes to exact byte values. */
-	constexpr FLinearColor LinearMagenta(1.0f, 0.0f, 1.0f);
-
-	constexpr FColor Red(255, 0, 0);
-	constexpr FColor Green(0, 255, 0);
-	constexpr FColor Blue(0, 0, 255);
-	constexpr FColor White(255, 255, 255);
-	constexpr FColor Magenta(255, 0, 255);
-
-	const FVector3f AxisY(0.0f, 1.0f, 0.0f);
-	const FVector3f AxisZ(0.0f, 0.0f, 1.0f);
-
-	/** A square of one metre in the XY plane, centred on its origin, whose front faces +Z. */
-	WStaticMesh* MakeSquareMesh()
-	{
-		const std::vector<FStaticMeshVertex> Vertices{
-			{FVector3f(-0.5f, -0.5f, 0.0f), AxisZ},
-			{FVector3f(0.5f, -0.5f, 0.0f), AxisZ},
-			{FVector3f(0.5f, 0.5f, 0.0f), AxisZ},
-			{FVector3f(-0.5f, 0.5f, 0.0f), AxisZ},
-		};
-
-		WStaticMesh* const Mesh = NewObject<WStaticMesh>();
-		std::string Error;
-		REQUIRE(Mesh->SetGeometry(Vertices, {0, 1, 2, 0, 2, 3}, Error));
-		return Mesh;
-	}
-
-	WMaterial* MakeMaterial(const FLinearColor& Color)
-	{
-		WMaterial* const Material = NewObject<WMaterial>();
-		Material->BaseColor = Color;
-		return Material;
-	}
-
-	/** Adds an entity that shows a square of the given colour, and returns its component. */
-	WStaticMeshComponent* AddSquare(
-		WScene& Scene, const FTransform& Transform, const FLinearColor& Color, WEntity* Parent = nullptr)
-	{
-		WEntity* const Entity = Scene.CreateEntity("Square", Parent);
-		REQUIRE(Entity != nullptr);
-		Entity->SetRelativeTransform(Transform);
-
-		WStaticMeshComponent* const Component = Entity->AddComponent<WStaticMeshComponent>();
-		REQUIRE(Component != nullptr);
-		Component->Mesh = MakeSquareMesh();
-		Component->Material = MakeMaterial(Color);
-		return Component;
-	}
-
-	FTransform MakeTransform(const FVector& Location,
-		const FQuat& Rotation = FQuat(1.0f, 0.0f, 0.0f, 0.0f),
-		const FVector3f& Scale = FVector3f(1.0f))
-	{
-		FTransform Transform;
-		Transform.Location = Location;
-		Transform.Rotation = Rotation;
-		Transform.Scale = Scale;
-		return Transform;
-	}
-
-	FQuat Turn(float Degrees, const FVector3f& Axis)
-	{
-		return glm::angleAxis(glm::radians(Degrees), Axis);
-	}
-
-	/**
-	 * A camera with a field of view of 90 degrees. With it, a square of one metre two metres ahead covers the
-	 * middle quarter of the picture in each direction: pixels 24 to 39 of 64.
-	 */
-	FCameraView MakeWideView(const FVector& Location = FVector(0.0))
-	{
-		FCameraView View;
-		View.Location = Location;
-		View.VerticalFieldOfView = 90.0f;
-		return View;
-	}
-
-	/** A render device, a scene renderer with a magenta background and an empty scene, torn down in a safe order. */
-	struct FSceneRenderTest
-	{
-		FSceneRenderTest()
-		{
-			std::string Error;
-			Renderer = FSceneRenderer::Create(*Device, Error);
-			INFO("Error: ", Error);
-			REQUIRE(Renderer != nullptr);
-			Renderer->BackgroundColor = LinearMagenta;
-		}
-
-		/** Draws the scene to a new render target of the given size and returns the picture. */
-		FImage Render(const FCameraView& View, int32 Width = 64, int32 Height = 64)
-		{
-			const std::unique_ptr<FRenderTarget> Target = CreateTestTarget(*Device, Width, Height);
-			std::string Error;
-			const bool bRendered = Renderer->Render(*Scene.Get(), View, *Target, Error);
-			INFO("Error: ", Error);
-			REQUIRE(bRendered);
-			return ReadTestTarget(*Target);
-		}
-
-		const FScopedLogCapture Capture;
-		const FScopedSceneTest SceneTest;
-		std::unique_ptr<FRenderDevice> Device = CreateValidatedDevice();
-		std::unique_ptr<FSceneRenderer> Renderer;
-		const FScopedTestScene Scene;
-	};
-}
 
 TEST_SUITE("FSceneRenderer")
 {
@@ -487,11 +374,19 @@ TEST_SUITE("FSceneRenderer")
 		CHECK(Image.GetPixel(16, 32) == Red);
 		CHECK(Image.GetPixel(48, 32) == Green);
 		CHECK(Test.Renderer->GetStatistics() ==
-			FSceneRenderStatistics{.DrawnMeshCount = 2, .UploadedMeshCount = 1, .CachedMeshCount = 1});
+			FSceneRenderStatistics{.DrawnMeshCount = 2,
+				.UploadedMeshCount = 1,
+				.CachedMeshCount = 1,
+				.DirectionalLightCount = 0,
+				.PointLightCount = 0});
 
 		Test.Render(MakeWideView());
 		CHECK(Test.Renderer->GetStatistics() ==
-			FSceneRenderStatistics{.DrawnMeshCount = 2, .UploadedMeshCount = 0, .CachedMeshCount = 1});
+			FSceneRenderStatistics{.DrawnMeshCount = 2,
+				.UploadedMeshCount = 0,
+				.CachedMeshCount = 1,
+				.DirectionalLightCount = 0,
+				.PointLightCount = 0});
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 
@@ -520,7 +415,11 @@ TEST_SUITE("FSceneRenderer")
 		CHECK(Image.GetPixel(46, 32) == Red);
 		CHECK(Image.GetPixel(15, 32) == Magenta);
 		CHECK(Test.Renderer->GetStatistics() ==
-			FSceneRenderStatistics{.DrawnMeshCount = 1, .UploadedMeshCount = 1, .CachedMeshCount = 1});
+			FSceneRenderStatistics{.DrawnMeshCount = 1,
+				.UploadedMeshCount = 1,
+				.CachedMeshCount = 1,
+				.DirectionalLightCount = 0,
+				.PointLightCount = 0});
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 

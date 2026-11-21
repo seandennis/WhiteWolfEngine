@@ -38,9 +38,16 @@ struct FCameraView
 	float NearPlane = 0.1f;
 
 	/**
+	 * How bright the picture is: the light of the scene is multiplied by this before it is fitted to the display.
+	 * Twice the exposure is one photographic stop brighter. Must be greater than zero. A scene lit with real-world
+	 * amounts of light, such as a hundred thousand lux of sunlight, needs a correspondingly small exposure.
+	 */
+	float Exposure = 1.0f;
+
+	/**
 	 * Returns true if a picture can be drawn from this view: the location and rotation are finite numbers, the
 	 * rotation has unit length, the field of view is between MinFieldOfView and MaxFieldOfView, and the near plane
-	 * is greater than zero.
+	 * and the exposure are finite and greater than zero.
 	 */
 	ENGINE_API bool IsValid() const;
 

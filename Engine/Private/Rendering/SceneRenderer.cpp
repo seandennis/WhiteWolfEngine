@@ -2,8 +2,10 @@
 
 #include "Object/ObjectGlobals.h"
 #include "Rendering/CameraView.h"
-#include "Rendering/DrawConstants.h"
+#include "Rendering/DirectionalLightComponent.h"
+#include "Rendering/DrawData.h"
 #include "Rendering/Material.h"
+#include "Rendering/PointLightComponent.h"
 #include "Rendering/RenderDevice.h"
 #include "Rendering/RenderTarget.h"
 #include "Rendering/RenderTargetImplementation.h"
@@ -12,12 +14,19 @@
 #include "Rendering/StaticMesh.h"
 #include "Rendering/StaticMeshComponent.h"
 #include "Rendering/StaticMeshVertex.h"
+#include "Rendering/ViewConstants.h"
 #include "Scene/Component.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
 
+#include <glm/geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/vec4.hpp>
 #include <nvrhi/nvrhi.h>
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <format>
 #include <span>
@@ -25,22 +34,44 @@
 #include <utility>
 #include <vector>
 
-// Vertices are copied to the graphics card as they are, and the pipeline reads them at these offsets.
+// Vertices are copied to the graphics card as they are, and the pipelines read them at these offsets.
 static_assert(sizeof(FStaticMeshVertex) == 24, "FStaticMeshVertex must be a position and a normal without padding");
 
 namespace
 {
-	/** What a component is drawn with when it has no material: plain white. */
-	constexpr FLinearColor DefaultBaseColor(1.0f, 1.0f, 1.0f, 1.0f);
-
 	/** With reversed depth the farthest possible value is zero, and a surface hides another if its depth is greater. */
 	constexpr float FarthestDepth = 0.0f;
 
-	/** One mesh to draw. Only valid during the call of Render that collected it. */
-	struct FMeshDraw
+	/**
+	 * The most light the buffer a scene is lit in can hold: just under the largest 16-bit floating-point number.
+	 * Anything brighter is this bright. The same as MaxSceneLight in Engine/Shaders/SceneData.glsl.
+	 */
+	constexpr float MaxSceneLight = 65000.0f;
+
+	/** The fewest meshes the buffer of per-mesh data has room for. It doubles whenever a scene needs more. */
+	constexpr int32 MinDrawBufferCapacity = 64;
+
+	/** How a component without a material is drawn: as a new WMaterial would look. A test holds the two together. */
+	constexpr FLinearColor DefaultBaseColor(1.0f, 1.0f, 1.0f, 1.0f);
+	constexpr FLinearColor DefaultEmissiveColor(0.0f, 0.0f, 0.0f, 1.0f);
+	constexpr float DefaultMetallic = 0.0f;
+	constexpr float DefaultRoughness = 0.5f;
+
+	/** The way every object faces in its own space: along -Z. A light shines this way. */
+	const FVector3f ForwardDirection(0.0f, 0.0f, -1.0f);
+
+	/** Everything of a scene that one picture needs, collected in one walk over its entities. */
+	struct FSceneContents
 	{
-		WStaticMesh* Mesh = nullptr;
-		FDrawConstants Constants;
+		/** The meshes to draw. DrawData holds the per-mesh data of each, at the same index. */
+		std::vector<WStaticMesh*> Meshes;
+		std::vector<FDrawData> DrawData;
+
+		/** The lights, as the shaders receive them. */
+		FViewConstants ViewConstants;
+
+		/** How many lights were left out because the scene has more than the renderer supports. */
+		int32 IgnoredLightCount = 0;
 	};
 
 	/** A mesh whose geometry has to be copied to the graphics card before it can be drawn. */
@@ -50,20 +81,126 @@ namespace
 		FStaticMeshBuffers Buffers;
 	};
 
-	nvrhi::ShaderHandle CreateShader(nvrhi::IDevice& Device, std::string_view Name, nvrhi::ShaderType Type)
+	glm::vec4 ToVector(const FLinearColor& Color, float Scale)
 	{
-		const std::span<const uint32> Code = FShaderLibrary::GetCode(Name);
-
-		nvrhi::ShaderDesc Description;
-		Description.shaderType = Type;
-		Description.debugName = std::string(Name);
-		return Device.createShader(Description, Code.data(), Code.size_bytes());
+		return glm::vec4(Color.R * Scale, Color.G * Scale, Color.B * Scale, 0.0f);
 	}
 
-	/** Collects every mesh of the scene that is to be drawn, with the matrix that places it on the screen. */
-	std::vector<FMeshDraw> CollectMeshDraws(const WScene& Scene, const FCameraView& View, float AspectRatio)
+	/**
+	 * Returns the matrix that takes a normal from an object's own space to world axes. Where positions are scaled,
+	 * normals are scaled by the inverse, which keeps them perpendicular to a surface that is stretched.
+	 */
+	FMatrix4f MakeNormalMatrix(const FTransform& WorldTransform)
 	{
-		const FMatrix4f ViewToClip = View.GetProjectionMatrix(AspectRatio) * View.GetViewMatrix();
+		const FVector3f& Scale = WorldTransform.Scale;
+		const FVector3f InverseScale(Scale.x != 0.0f ? 1.0f / Scale.x : 0.0f,
+			Scale.y != 0.0f ? 1.0f / Scale.y : 0.0f,
+			Scale.z != 0.0f ? 1.0f / Scale.z : 0.0f);
+
+		FMatrix4f Matrix = glm::mat4_cast(WorldTransform.Rotation);
+		Matrix[0] *= InverseScale.x;
+		Matrix[1] *= InverseScale.y;
+		Matrix[2] *= InverseScale.z;
+		return Matrix;
+	}
+
+	/** Adds the draw of a mesh component to Contents, if the component shows anything. */
+	void CollectMesh(const WStaticMeshComponent& Component,
+		const FTransform& WorldTransform,
+		const FCameraView& View,
+		const FMatrix4f& RelativeToClip,
+		FSceneContents& Contents)
+	{
+		WStaticMesh* const Mesh = Component.Mesh.Get();
+		const bool bIsShown = Component.bVisible && IsValid(Mesh) && Mesh->HasGeometry();
+		if (!bIsShown)
+		{
+			return;
+		}
+
+		FDrawData Data;
+		Data.LocalToRelative = View.GetCameraRelativeMatrix(WorldTransform);
+		Data.LocalToClip = RelativeToClip * Data.LocalToRelative;
+		Data.NormalToRelative = MakeNormalMatrix(WorldTransform);
+
+		const WMaterial* const Material = Component.Material.Get();
+		if (IsValid(Material))
+		{
+			Data.BaseColor = Material->BaseColor;
+			Data.EmissiveColor = Material->EmissiveColor;
+			Data.MetallicRoughness = glm::vec4(Material->Metallic, Material->Roughness, 0.0f, 0.0f);
+		}
+		else
+		{
+			Data.BaseColor = DefaultBaseColor;
+			Data.EmissiveColor = DefaultEmissiveColor;
+			Data.MetallicRoughness = glm::vec4(DefaultMetallic, DefaultRoughness, 0.0f, 0.0f);
+		}
+
+		Contents.Meshes.push_back(Mesh);
+		Contents.DrawData.push_back(Data);
+	}
+
+	/** Adds a directional light to Contents, if it shines and there is room for it. */
+	void CollectDirectionalLight(
+		const WDirectionalLightComponent& Light, const FTransform& WorldTransform, FSceneContents& Contents)
+	{
+		const bool bShines = Light.bVisible && std::isfinite(Light.Intensity) && Light.Intensity > 0.0f;
+		if (!bShines)
+		{
+			return;
+		}
+
+		const int32 Index = Contents.ViewConstants.LightCounts.x;
+		if (Index == FSceneRenderer::MaxDirectionalLights)
+		{
+			++Contents.IgnoredLightCount;
+			return;
+		}
+
+		const FVector3f Direction = glm::normalize(WorldTransform.Rotation * ForwardDirection);
+		FDirectionalLightData& Data = Contents.ViewConstants.DirectionalLights[static_cast<std::size_t>(Index)];
+		Data.DirectionToLight = glm::vec4(-Direction, 0.0f);
+		Data.Illuminance = ToVector(Light.Color, Light.Intensity);
+		Contents.ViewConstants.LightCounts.x = Index + 1;
+	}
+
+	/** Adds a point light to Contents, if it shines and there is room for it. */
+	void CollectPointLight(const WPointLightComponent& Light,
+		const FTransform& WorldTransform,
+		const FCameraView& View,
+		FSceneContents& Contents)
+	{
+		const bool bShines = Light.bVisible && std::isfinite(Light.Intensity) && Light.Intensity > 0.0f;
+		if (!bShines)
+		{
+			return;
+		}
+
+		const int32 Index = Contents.ViewConstants.LightCounts.y;
+		if (Index == FSceneRenderer::MaxPointLights)
+		{
+			++Contents.IgnoredLightCount;
+			return;
+		}
+
+		// Like every position, the light's is taken relative to the camera in double precision.
+		const FVector3f RelativeLocation = FVector3f(WorldTransform.Location - View.Location);
+		const float Range = std::isfinite(Light.Range) ? std::max(Light.Range, 0.0f) : 0.0f;
+		FPointLightData& Data = Contents.ViewConstants.PointLights[static_cast<std::size_t>(Index)];
+		Data.LocationAndRange = glm::vec4(RelativeLocation, Range);
+		Data.Intensity = ToVector(Light.Color, Light.Intensity);
+		Contents.ViewConstants.LightCounts.y = Index + 1;
+	}
+
+	/**
+	 * Walks the entities of a scene once and collects what a picture of it needs.
+	 *
+	 * @param bCollectLights False for a picture without lighting, which leaves the lights out.
+	 */
+	FSceneContents CollectScene(const WScene& Scene, const FCameraView& View, float AspectRatio, bool bCollectLights)
+	{
+		const FMatrix4f RelativeToClip = View.GetProjectionMatrix(AspectRatio) * View.GetViewMatrix();
 
 		/** An entity that is still to be visited, with the world transform of its parent. */
 		struct FPendingEntity
@@ -78,7 +215,7 @@ namespace
 			Pending.push_back({Root.Get(), FTransform()});
 		}
 
-		std::vector<FMeshDraw> Draws;
+		FSceneContents Contents;
 		while (!Pending.empty())
 		{
 			const FPendingEntity Current = Pending.back();
@@ -97,30 +234,42 @@ namespace
 
 			for (const TObjectPtr<WComponent>& Component : Current.Entity->GetComponents())
 			{
-				const WStaticMeshComponent* const MeshComponent = Cast<WStaticMeshComponent>(Component.Get());
-				const bool bIsShown = IsValid(MeshComponent) && MeshComponent->bVisible;
-				if (!bIsShown)
+				if (!IsValid(Component.Get()))
 				{
 					continue;
 				}
 
-				WStaticMesh* const Mesh = MeshComponent->Mesh.Get();
-				if (!IsValid(Mesh) || !Mesh->HasGeometry())
+				if (const WStaticMeshComponent* const Mesh = Cast<WStaticMeshComponent>(Component.Get()))
+				{
+					CollectMesh(*Mesh, WorldTransform, View, RelativeToClip, Contents);
+				}
+				else if (!bCollectLights)
 				{
 					continue;
 				}
-
-				const WMaterial* const Material = MeshComponent->Material.Get();
-
-				FMeshDraw Draw;
-				Draw.Mesh = Mesh;
-				Draw.Constants.LocalToClip = ViewToClip * View.GetCameraRelativeMatrix(WorldTransform);
-				Draw.Constants.BaseColor = IsValid(Material) ? Material->BaseColor : DefaultBaseColor;
-				Draws.push_back(Draw);
+				else if (const WDirectionalLightComponent* const Sun =
+							 Cast<WDirectionalLightComponent>(Component.Get()))
+				{
+					CollectDirectionalLight(*Sun, WorldTransform, Contents);
+				}
+				else if (const WPointLightComponent* const Lamp = Cast<WPointLightComponent>(Component.Get()))
+				{
+					CollectPointLight(*Lamp, WorldTransform, View, Contents);
+				}
 			}
 		}
 
-		return Draws;
+		return Contents;
+	}
+
+	nvrhi::ShaderHandle CreateShader(nvrhi::IDevice& Device, std::string_view Name, nvrhi::ShaderType Type)
+	{
+		const std::span<const uint32> Code = FShaderLibrary::GetCode(Name);
+
+		nvrhi::ShaderDesc Description;
+		Description.shaderType = Type;
+		Description.debugName = std::string(Name);
+		return Device.createShader(Description, Code.data(), Code.size_bytes());
 	}
 
 	/** Creates the buffers for a mesh's geometry on the graphics card. Their content is written separately. */
@@ -147,6 +296,70 @@ namespace
 		OutBuffers.IndexBuffer = Device.createBuffer(IndexDescription);
 		return OutBuffers.VertexBuffer != nullptr && OutBuffers.IndexBuffer != nullptr;
 	}
+
+	/**
+	 * Creates a pipeline that draws static meshes with the given fragment shader, with depth testing and without
+	 * the backs of triangles.
+	 *
+	 * @param ColorFormat The format of the surface the pipeline draws on.
+	 * @param DepthFormat The format of the depth buffer that goes with it.
+	 */
+	nvrhi::GraphicsPipelineHandle CreateMeshPipeline(nvrhi::IDevice& Device,
+		nvrhi::IInputLayout* InputLayout,
+		nvrhi::IShader* VertexShader,
+		nvrhi::IShader* FragmentShader,
+		nvrhi::IBindingLayout* BindingLayout,
+		nvrhi::Format ColorFormat,
+		nvrhi::Format DepthFormat)
+	{
+		nvrhi::GraphicsPipelineDesc Description;
+		Description.primType = nvrhi::PrimitiveType::TriangleList;
+		Description.inputLayout = InputLayout;
+		Description.VS = VertexShader;
+		Description.PS = FragmentShader;
+		Description.bindingLayouts.push_back(BindingLayout);
+		// Triangles face the viewer when their corners run counter-clockwise, and the backs are not drawn.
+		Description.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Back;
+		Description.renderState.rasterState.frontCounterClockwise = true;
+		Description.renderState.rasterState.depthClipEnable = true;
+		Description.renderState.depthStencilState.depthTestEnable = true;
+		Description.renderState.depthStencilState.depthWriteEnable = true;
+		Description.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::GreaterOrEqual;
+
+		nvrhi::FramebufferInfo TargetFormats;
+		TargetFormats.addColorFormat(ColorFormat);
+		TargetFormats.setDepthFormat(DepthFormat);
+		return Device.createGraphicsPipeline(Description, TargetFormats);
+	}
+
+	/**
+	 * Creates the pipeline that fits the lit scene to the display: one triangle over the whole surface.
+	 *
+	 * @param OutputFormat The format of the surface the pipeline draws on.
+	 */
+	nvrhi::GraphicsPipelineHandle CreateTonemapPipeline(
+		nvrhi::IDevice& Device, nvrhi::IBindingLayout* BindingLayout, nvrhi::Format OutputFormat)
+	{
+		const nvrhi::ShaderHandle VertexShader = CreateShader(Device, "FullScreen.vert", nvrhi::ShaderType::Vertex);
+		const nvrhi::ShaderHandle FragmentShader = CreateShader(Device, "Tonemap.frag", nvrhi::ShaderType::Pixel);
+		if (VertexShader == nullptr || FragmentShader == nullptr)
+		{
+			return nullptr;
+		}
+
+		nvrhi::GraphicsPipelineDesc Description;
+		Description.primType = nvrhi::PrimitiveType::TriangleList;
+		Description.VS = VertexShader;
+		Description.PS = FragmentShader;
+		Description.bindingLayouts.push_back(BindingLayout);
+		Description.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None;
+		Description.renderState.depthStencilState.depthTestEnable = false;
+		Description.renderState.depthStencilState.depthWriteEnable = false;
+
+		nvrhi::FramebufferInfo TargetFormats;
+		TargetFormats.addColorFormat(OutputFormat);
+		return Device.createGraphicsPipeline(Description, TargetFormats);
+	}
 }
 
 std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, std::string& OutError)
@@ -157,59 +370,81 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 
 	const nvrhi::ShaderHandle VertexShader =
 		CreateShader(RenderInterface, "StaticMesh.vert", nvrhi::ShaderType::Vertex);
+	const nvrhi::ShaderHandle LitShader = CreateShader(RenderInterface, "Lit.frag", nvrhi::ShaderType::Pixel);
 	const nvrhi::ShaderHandle UnlitShader = CreateShader(RenderInterface, "Unlit.frag", nvrhi::ShaderType::Pixel);
-	if (VertexShader == nullptr || UnlitShader == nullptr)
+	if (VertexShader == nullptr || LitShader == nullptr || UnlitShader == nullptr)
 	{
 		OutError = "the graphics card did not accept the engine's shaders";
 		return nullptr;
 	}
 
 	// The attributes are numbered in this order, which is the order of the inputs of StaticMesh.vert.
-	nvrhi::VertexAttributeDesc PositionAttribute;
-	PositionAttribute.name = "Position";
-	PositionAttribute.format = nvrhi::Format::RGB32_FLOAT;
-	PositionAttribute.offset = static_cast<uint32>(offsetof(FStaticMeshVertex, Position));
-	PositionAttribute.elementStride = static_cast<uint32>(sizeof(FStaticMeshVertex));
-	const nvrhi::InputLayoutHandle InputLayout = RenderInterface.createInputLayout(&PositionAttribute, 1, VertexShader);
+	std::array<nvrhi::VertexAttributeDesc, 2> Attributes;
+	Attributes[0].name = "Position";
+	Attributes[0].format = nvrhi::Format::RGB32_FLOAT;
+	Attributes[0].offset = static_cast<uint32>(offsetof(FStaticMeshVertex, Position));
+	Attributes[1].name = "Normal";
+	Attributes[1].format = nvrhi::Format::RGB32_FLOAT;
+	Attributes[1].offset = static_cast<uint32>(offsetof(FStaticMeshVertex, Normal));
+	for (nvrhi::VertexAttributeDesc& Attribute : Attributes)
+	{
+		Attribute.elementStride = static_cast<uint32>(sizeof(FStaticMeshVertex));
+	}
+	const nvrhi::InputLayoutHandle InputLayout =
+		RenderInterface.createInputLayout(Attributes.data(), static_cast<uint32>(Attributes.size()), VertexShader);
 
-	const uint32 ConstantsSize = static_cast<uint32>(sizeof(FDrawConstants));
-	NewImplementation->BindingLayout =
+	// Slot 0 of the buffers is the array of FDrawData and slot 0 of the constant buffers the FViewConstants;
+	// see SceneData.glsl for how the shaders name them.
+	NewImplementation->SceneBindingLayout =
 		RenderInterface.createBindingLayout(nvrhi::BindingLayoutDesc()
 												.setVisibility(nvrhi::ShaderType::Vertex | nvrhi::ShaderType::Pixel)
-												.addItem(nvrhi::BindingLayoutItem::PushConstants(0, ConstantsSize)));
-	if (InputLayout == nullptr || NewImplementation->BindingLayout == nullptr)
+												.addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(0))
+												.addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0)));
+	NewImplementation->TonemapBindingLayout =
+		RenderInterface.createBindingLayout(nvrhi::BindingLayoutDesc()
+												.setVisibility(nvrhi::ShaderType::Pixel)
+												.addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))
+												.addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(float))));
+	if (InputLayout == nullptr || NewImplementation->SceneBindingLayout == nullptr ||
+		NewImplementation->TonemapBindingLayout == nullptr)
 	{
-		OutError = "the graphics card could not create the layout of the renderer's vertices and constants";
+		OutError = "the graphics card could not create the layouts of the renderer's vertices and shader data";
 		return nullptr;
 	}
 
-	NewImplementation->BindingSet = RenderInterface.createBindingSet(
-		nvrhi::BindingSetDesc().addItem(nvrhi::BindingSetItem::PushConstants(0, ConstantsSize)),
-		NewImplementation->BindingLayout);
-
-	nvrhi::GraphicsPipelineDesc PipelineDescription;
-	PipelineDescription.primType = nvrhi::PrimitiveType::TriangleList;
-	PipelineDescription.inputLayout = InputLayout;
-	PipelineDescription.VS = VertexShader;
-	PipelineDescription.PS = UnlitShader;
-	PipelineDescription.bindingLayouts.push_back(NewImplementation->BindingLayout);
-	// Triangles face the viewer when their corners run counter-clockwise, and the backs are not drawn.
-	PipelineDescription.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Back;
-	PipelineDescription.renderState.rasterState.frontCounterClockwise = true;
-	PipelineDescription.renderState.rasterState.depthClipEnable = true;
-	PipelineDescription.renderState.depthStencilState.depthTestEnable = true;
-	PipelineDescription.renderState.depthStencilState.depthWriteEnable = true;
-	PipelineDescription.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::GreaterOrEqual;
-
-	// Every render target has these formats, so one pipeline serves them all.
-	nvrhi::FramebufferInfo TargetFormats;
-	TargetFormats.addColorFormat(FRenderTarget::FImplementation::ColorFormat);
-	TargetFormats.setDepthFormat(FRenderTarget::FImplementation::DepthFormat);
-
-	NewImplementation->UnlitPipeline = RenderInterface.createGraphicsPipeline(PipelineDescription, TargetFormats);
-	if (NewImplementation->BindingSet == nullptr || NewImplementation->UnlitPipeline == nullptr)
+	nvrhi::BufferDesc ViewBufferDescription;
+	ViewBufferDescription.byteSize = sizeof(FViewConstants);
+	ViewBufferDescription.isConstantBuffer = true;
+	ViewBufferDescription.debugName = "ViewConstants";
+	ViewBufferDescription.initialState = nvrhi::ResourceStates::ConstantBuffer;
+	ViewBufferDescription.keepInitialState = true;
+	NewImplementation->ViewBuffer = RenderInterface.createBuffer(ViewBufferDescription);
+	if (NewImplementation->ViewBuffer == nullptr)
 	{
-		OutError = "the graphics card could not create the pipeline that draws meshes";
+		OutError = "the graphics card could not create the buffer for the lights of a scene";
+		return nullptr;
+	}
+
+	NewImplementation->LitPipeline = CreateMeshPipeline(RenderInterface,
+		InputLayout,
+		VertexShader,
+		LitShader,
+		NewImplementation->SceneBindingLayout,
+		FRenderTarget::FImplementation::SceneColorFormat,
+		FRenderTarget::FImplementation::DepthFormat);
+	NewImplementation->UnlitPipeline = CreateMeshPipeline(RenderInterface,
+		InputLayout,
+		VertexShader,
+		UnlitShader,
+		NewImplementation->SceneBindingLayout,
+		FRenderTarget::FImplementation::ColorFormat,
+		FRenderTarget::FImplementation::DepthFormat);
+	NewImplementation->TonemapPipeline = CreateTonemapPipeline(
+		RenderInterface, NewImplementation->TonemapBindingLayout, FRenderTarget::FImplementation::ColorFormat);
+	if (NewImplementation->LitPipeline == nullptr || NewImplementation->UnlitPipeline == nullptr ||
+		NewImplementation->TonemapPipeline == nullptr)
+	{
+		OutError = "the graphics card could not create the pipelines that draw and light meshes";
 		return nullptr;
 	}
 
@@ -228,7 +463,8 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	if (!View.IsValid())
 	{
 		OutError = "the camera view is not valid: its location and rotation must be finite, its rotation a unit "
-				   "quaternion, its field of view between 1 and 179 degrees and its near plane greater than zero";
+				   "quaternion, its field of view between 1 and 179 degrees, and its near plane and exposure "
+				   "greater than zero";
 		return false;
 	}
 	if (!IsValid(&Scene))
@@ -246,37 +482,102 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		[](const std::pair<const WStaticMesh* const, FStaticMeshBuffers>& Entry)
 		{ return Entry.second.Mesh.Get() == nullptr; });
 
+	const bool bIsLit = ViewMode == ESceneViewMode::Lit;
 	const float AspectRatio = static_cast<float>(TargetData.Width) / static_cast<float>(TargetData.Height);
-	const std::vector<FMeshDraw> Draws = CollectMeshDraws(Scene, View, AspectRatio);
+	const FSceneContents Contents = CollectScene(Scene, View, AspectRatio, bIsLit);
+	const int32 DrawCount = static_cast<int32>(Contents.Meshes.size());
 
 	// Everything that can fail happens before the first command is recorded, so that a failure changes nothing.
 	nvrhi::IDevice& Device = *Implementation->Context->GetDevice();
 	std::vector<FMeshUpload> Uploads;
-	for (const FMeshDraw& Draw : Draws)
+	for (WStaticMesh* const Mesh : Contents.Meshes)
 	{
-		const auto Existing = Implementation->MeshBuffers.find(Draw.Mesh);
+		const auto Existing = Implementation->MeshBuffers.find(Mesh);
 		const bool bIsCurrent = Existing != Implementation->MeshBuffers.end() &&
-			Existing->second.GeometryVersion == Draw.Mesh->GetGeometryVersion();
-		bool bIsPending = false;
-		for (const FMeshUpload& Upload : Uploads)
-		{
-			bIsPending = bIsPending || Upload.Mesh == Draw.Mesh;
-		}
+			Existing->second.GeometryVersion == Mesh->GetGeometryVersion();
+		const bool bIsPending =
+			std::ranges::any_of(Uploads, [Mesh](const FMeshUpload& Upload) { return Upload.Mesh == Mesh; });
 		if (bIsCurrent || bIsPending)
 		{
 			continue;
 		}
 
 		FMeshUpload Upload;
-		Upload.Mesh = Draw.Mesh;
-		if (!CreateMeshBuffers(Device, *Draw.Mesh, Upload.Buffers))
+		Upload.Mesh = Mesh;
+		if (!CreateMeshBuffers(Device, *Mesh, Upload.Buffers))
 		{
 			OutError = std::format("the graphics card has no room for a mesh of {} vertices and {} triangles",
-				Draw.Mesh->GetVertices().size(),
-				Draw.Mesh->GetTriangleCount());
+				Mesh->GetVertices().size(),
+				Mesh->GetTriangleCount());
 			return false;
 		}
 		Uploads.push_back(std::move(Upload));
+	}
+
+	if (DrawCount > Implementation->DrawBufferCapacity)
+	{
+		int32 NewCapacity = std::max(Implementation->DrawBufferCapacity, MinDrawBufferCapacity);
+		while (NewCapacity < DrawCount)
+		{
+			NewCapacity *= 2;
+		}
+
+		nvrhi::BufferDesc DrawBufferDescription;
+		DrawBufferDescription.byteSize = static_cast<uint64>(NewCapacity) * sizeof(FDrawData);
+		DrawBufferDescription.structStride = static_cast<uint32>(sizeof(FDrawData));
+		DrawBufferDescription.debugName = "DrawData";
+		DrawBufferDescription.initialState = nvrhi::ResourceStates::ShaderResource;
+		DrawBufferDescription.keepInitialState = true;
+
+		nvrhi::BufferHandle NewDrawBuffer = Device.createBuffer(DrawBufferDescription);
+		nvrhi::BindingSetHandle NewBindingSet;
+		if (NewDrawBuffer != nullptr)
+		{
+			NewBindingSet = Device.createBindingSet(
+				nvrhi::BindingSetDesc()
+					.addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(0, NewDrawBuffer))
+					.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, Implementation->ViewBuffer)),
+				Implementation->SceneBindingLayout);
+		}
+		if (NewBindingSet == nullptr)
+		{
+			OutError = std::format("the graphics card has no room for the data of {} meshes", DrawCount);
+			return false;
+		}
+
+		Implementation->DrawBuffer = std::move(NewDrawBuffer);
+		Implementation->SceneBindingSet = std::move(NewBindingSet);
+		Implementation->DrawBufferCapacity = NewCapacity;
+	}
+
+	if (bIsLit && TargetData.TonemapBindingLayout != Implementation->TonemapBindingLayout)
+	{
+		nvrhi::BindingSetHandle NewBindingSet =
+			Device.createBindingSet(nvrhi::BindingSetDesc()
+										.addItem(nvrhi::BindingSetItem::Texture_SRV(0, TargetData.SceneColorTexture))
+										.addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(float))),
+				Implementation->TonemapBindingLayout);
+		if (NewBindingSet == nullptr)
+		{
+			OutError = "the graphics card could not bind the lit scene for tone mapping";
+			return false;
+		}
+
+		TargetData.TonemapBindingSet = std::move(NewBindingSet);
+		TargetData.TonemapBindingLayout = Implementation->TonemapBindingLayout;
+	}
+
+	if (Contents.IgnoredLightCount > 0 && !Implementation->bWarnedAboutLightLimit)
+	{
+		Implementation->bWarnedAboutLightLimit = true;
+		WW_LOG(LogRendering,
+			Warning,
+			"Scene '{}' has more lights than one picture can be lit by ({} directional and {} point lights); {} "
+			"are ignored. This is reported once per renderer",
+			Scene.GetName(),
+			MaxDirectionalLights,
+			MaxPointLights,
+			Contents.IgnoredLightCount);
 	}
 
 	nvrhi::ICommandList& CommandList = *Implementation->Context->GetImmediateCommandList();
@@ -292,41 +593,82 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		Implementation->MeshBuffers.insert_or_assign(Upload.Mesh, std::move(Upload.Buffers));
 	}
 
-	CommandList.clearTextureFloat(TargetData.Texture,
-		nvrhi::AllSubresources,
-		nvrhi::Color(BackgroundColor.R, BackgroundColor.G, BackgroundColor.B, BackgroundColor.A));
+	if (DrawCount > 0)
+	{
+		CommandList.writeBuffer(
+			Implementation->DrawBuffer, Contents.DrawData.data(), Contents.DrawData.size() * sizeof(FDrawData));
+	}
+	if (bIsLit)
+	{
+		CommandList.writeBuffer(Implementation->ViewBuffer, &Contents.ViewConstants, sizeof(FViewConstants));
+	}
+
+	// A lit scene is drawn into the high dynamic range buffer; an unlit one straight onto the surface.
+	const float MaxBackground = bIsLit ? MaxSceneLight : 1.0f;
+	const nvrhi::Color ClearColor(std::clamp(BackgroundColor.R, 0.0f, MaxBackground),
+		std::clamp(BackgroundColor.G, 0.0f, MaxBackground),
+		std::clamp(BackgroundColor.B, 0.0f, MaxBackground),
+		std::clamp(BackgroundColor.A, 0.0f, 1.0f));
+	CommandList.clearTextureFloat(
+		bIsLit ? TargetData.SceneColorTexture : TargetData.Texture, nvrhi::AllSubresources, ClearColor);
 	const bool bClearDepth = true;
 	const bool bClearStencil = false;
 	CommandList.clearDepthStencilTexture(
 		TargetData.DepthTexture, nvrhi::AllSubresources, bClearDepth, FarthestDepth, bClearStencil, 0);
 
-	nvrhi::GraphicsState State;
-	State.pipeline = Implementation->UnlitPipeline;
-	State.framebuffer = TargetData.Framebuffer;
-	State.viewport.addViewportAndScissorRect(
-		nvrhi::Viewport(static_cast<float>(TargetData.Width), static_cast<float>(TargetData.Height)));
-	State.bindings.push_back(Implementation->BindingSet);
-	State.vertexBuffers.resize(1);
+	const nvrhi::Viewport Viewport(static_cast<float>(TargetData.Width), static_cast<float>(TargetData.Height));
 
-	for (const FMeshDraw& Draw : Draws)
+	if (DrawCount > 0)
 	{
-		const FStaticMeshBuffers& Buffers = Implementation->MeshBuffers.at(Draw.Mesh);
-		State.vertexBuffers[0] = nvrhi::VertexBufferBinding().setBuffer(Buffers.VertexBuffer).setSlot(0).setOffset(0);
-		State.indexBuffer =
-			nvrhi::IndexBufferBinding().setBuffer(Buffers.IndexBuffer).setFormat(nvrhi::Format::R32_UINT).setOffset(0);
+		nvrhi::GraphicsState State;
+		State.pipeline = bIsLit ? Implementation->LitPipeline : Implementation->UnlitPipeline;
+		State.framebuffer = bIsLit ? TargetData.SceneFramebuffer : TargetData.Framebuffer;
+		State.viewport.addViewportAndScissorRect(Viewport);
+		State.bindings.push_back(Implementation->SceneBindingSet);
+		State.vertexBuffers.resize(1);
 
+		for (int32 DrawIndex = 0; DrawIndex < DrawCount; ++DrawIndex)
+		{
+			const FStaticMeshBuffers& Buffers =
+				Implementation->MeshBuffers.at(Contents.Meshes[static_cast<std::size_t>(DrawIndex)]);
+			State.vertexBuffers[0] =
+				nvrhi::VertexBufferBinding().setBuffer(Buffers.VertexBuffer).setSlot(0).setOffset(0);
+			State.indexBuffer = nvrhi::IndexBufferBinding()
+									.setBuffer(Buffers.IndexBuffer)
+									.setFormat(nvrhi::Format::R32_UINT)
+									.setOffset(0);
+			CommandList.setGraphicsState(State);
+
+			// The instance number is how the shaders find this mesh's FDrawData.
+			CommandList.drawIndexed(nvrhi::DrawArguments()
+										.setVertexCount(Buffers.IndexCount)
+										.setStartInstanceLocation(static_cast<uint32>(DrawIndex)));
+		}
+	}
+
+	if (bIsLit)
+	{
+		nvrhi::GraphicsState State;
+		State.pipeline = Implementation->TonemapPipeline;
+		State.framebuffer = TargetData.OutputFramebuffer;
+		State.viewport.addViewportAndScissorRect(Viewport);
+		State.bindings.push_back(TargetData.TonemapBindingSet);
 		CommandList.setGraphicsState(State);
-		CommandList.setPushConstants(&Draw.Constants, sizeof(FDrawConstants));
-		CommandList.drawIndexed(nvrhi::DrawArguments().setVertexCount(Buffers.IndexCount));
+		CommandList.setPushConstants(&View.Exposure, sizeof(float));
+
+		const uint32 FullScreenTriangleVertexCount = 3;
+		CommandList.draw(nvrhi::DrawArguments().setVertexCount(FullScreenTriangleVertexCount));
 	}
 
 	CommandList.close();
 	Device.executeCommandList(&CommandList);
 	Device.runGarbageCollection();
 
-	Implementation->Statistics.DrawnMeshCount = static_cast<int32>(Draws.size());
+	Implementation->Statistics.DrawnMeshCount = DrawCount;
 	Implementation->Statistics.UploadedMeshCount = static_cast<int32>(Uploads.size());
 	Implementation->Statistics.CachedMeshCount = static_cast<int32>(Implementation->MeshBuffers.size());
+	Implementation->Statistics.DirectionalLightCount = Contents.ViewConstants.LightCounts.x;
+	Implementation->Statistics.PointLightCount = Contents.ViewConstants.LightCounts.y;
 	return true;
 }
 

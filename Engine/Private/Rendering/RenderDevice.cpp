@@ -69,16 +69,27 @@ std::unique_ptr<FRenderTarget> FRenderDevice::CreateRenderTarget(int32 Width, in
 	DepthDescription.debugName = "RenderTargetDepth";
 	DepthDescription.enableAutomaticStateTracking(nvrhi::ResourceStates::DepthWrite);
 
+	// The lit scene is drawn to and then read by the pass that fits it to the display.
+	nvrhi::TextureDesc SceneColorDescription = TextureDescription;
+	SceneColorDescription.format = FRenderTarget::FImplementation::SceneColorFormat;
+	SceneColorDescription.debugName = "RenderTargetSceneColor";
+
 	nvrhi::IDevice* const Device = Context->GetDevice();
 	nvrhi::TextureHandle Texture = Device->createTexture(TextureDescription);
 	nvrhi::TextureHandle DepthTexture = Device->createTexture(DepthDescription);
+	nvrhi::TextureHandle SceneColorTexture = Device->createTexture(SceneColorDescription);
 	nvrhi::FramebufferHandle Framebuffer;
-	if (Texture != nullptr && DepthTexture != nullptr)
+	nvrhi::FramebufferHandle SceneFramebuffer;
+	nvrhi::FramebufferHandle OutputFramebuffer;
+	if (Texture != nullptr && DepthTexture != nullptr && SceneColorTexture != nullptr)
 	{
 		Framebuffer = Device->createFramebuffer(
 			nvrhi::FramebufferDesc().addColorAttachment(Texture).setDepthAttachment(DepthTexture));
+		SceneFramebuffer = Device->createFramebuffer(
+			nvrhi::FramebufferDesc().addColorAttachment(SceneColorTexture).setDepthAttachment(DepthTexture));
+		OutputFramebuffer = Device->createFramebuffer(nvrhi::FramebufferDesc().addColorAttachment(Texture));
 	}
-	if (Framebuffer == nullptr)
+	if (Framebuffer == nullptr || SceneFramebuffer == nullptr || OutputFramebuffer == nullptr)
 	{
 		OutError = std::format("the graphics card could not create a render target of {} by {} pixels", Width, Height);
 		return nullptr;
@@ -88,7 +99,10 @@ std::unique_ptr<FRenderTarget> FRenderDevice::CreateRenderTarget(int32 Width, in
 	Implementation->Context = Context;
 	Implementation->Texture = std::move(Texture);
 	Implementation->DepthTexture = std::move(DepthTexture);
+	Implementation->SceneColorTexture = std::move(SceneColorTexture);
 	Implementation->Framebuffer = std::move(Framebuffer);
+	Implementation->SceneFramebuffer = std::move(SceneFramebuffer);
+	Implementation->OutputFramebuffer = std::move(OutputFramebuffer);
 	Implementation->Width = Width;
 	Implementation->Height = Height;
 	return std::make_unique<FRenderTarget>(std::move(Implementation));

@@ -32,7 +32,8 @@ bool FCameraView::IsValid() const
 	const bool bIsUnitRotation = std::abs(glm::length(Rotation) - 1.0f) <= UnitLengthTolerance;
 	const bool bIsValidFieldOfView = VerticalFieldOfView >= MinFieldOfView && VerticalFieldOfView <= MaxFieldOfView;
 	const bool bIsValidNearPlane = std::isfinite(NearPlane) && NearPlane > 0.0f;
-	return bIsUnitRotation && bIsValidFieldOfView && bIsValidNearPlane;
+	const bool bIsValidExposure = std::isfinite(Exposure) && Exposure > 0.0f;
+	return bIsUnitRotation && bIsValidFieldOfView && bIsValidNearPlane && bIsValidExposure;
 }
 
 FMatrix4f FCameraView::GetCameraRelativeMatrix(const FTransform& WorldTransform) const

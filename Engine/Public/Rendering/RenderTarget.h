@@ -13,8 +13,9 @@ class FRenderContext;
 /**
  * A surface the renderer draws on, in memory on the graphics card: what a window shows, or what a screenshot is
  * taken of. Its pixels are 8 bits per channel and sRGB-encoded, ready to display or save; the graphics card does
- * the encoding, so colours are drawn to it in linear space. It has a depth buffer of the same size, which the
- * renderer uses to let nearer surfaces hide farther ones.
+ * the encoding, so colours are drawn to it in linear space. With it come a depth buffer, which lets nearer surfaces
+ * hide farther ones, and a high dynamic range buffer, in which the renderer lights the scene before it fits the
+ * result to the display.
  *
  * Render targets are created by FRenderDevice::CreateRenderTarget. A render target stays usable after the
  * FRenderDevice object that created it is gone; the graphics card is released with the last thing that uses it.

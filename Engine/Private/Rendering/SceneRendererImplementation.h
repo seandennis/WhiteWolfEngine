@@ -20,18 +20,37 @@ struct FSceneRenderer::FImplementation
 	/** Keeps the graphics card alive for as long as this renderer exists. */
 	std::shared_ptr<FRenderContext> Context;
 
-	/** How the per-draw constants reach the shaders, and the set that binds them. */
-	nvrhi::BindingLayoutHandle BindingLayout;
-	nvrhi::BindingSetHandle BindingSet;
+	/** How the data of a picture reaches the shaders that draw meshes: the array of draws and the lights. */
+	nvrhi::BindingLayoutHandle SceneBindingLayout;
 
-	/** Draws a static mesh without lighting. */
+	/** The lights of the picture being drawn; an FViewConstants. */
+	nvrhi::BufferHandle ViewBuffer;
+
+	/** The meshes of the picture being drawn; an array of FDrawData that grows with the largest scene drawn. */
+	nvrhi::BufferHandle DrawBuffer;
+	int32 DrawBufferCapacity = 0;
+
+	/** Binds ViewBuffer and DrawBuffer. Made again whenever DrawBuffer is replaced by a larger one. */
+	nvrhi::BindingSetHandle SceneBindingSet;
+
+	/** Draws meshes lit, into the high dynamic range buffer of a render target. */
+	nvrhi::GraphicsPipelineHandle LitPipeline;
+
+	/** Draws meshes in their base colour, straight onto the surface of a render target. */
 	nvrhi::GraphicsPipelineHandle UnlitPipeline;
+
+	/** Fits the lit scene to the display. Its binding layout gives it the lit scene and the exposure. */
+	nvrhi::BindingLayoutHandle TonemapBindingLayout;
+	nvrhi::GraphicsPipelineHandle TonemapPipeline;
 
 	/**
 	 * The geometry on the graphics card of every mesh that has been drawn. The key is only an address: an entry
-	 * is used only while its weak reference still gives that same mesh.
+	 * is used only while its geometry version is that of the mesh at that address.
 	 */
 	std::unordered_map<const WStaticMesh*, FStaticMeshBuffers> MeshBuffers;
+
+	/** True once a warning about a scene with too many lights has been logged, so that it is logged only once. */
+	bool bWarnedAboutLightLimit = false;
 
 	FSceneRenderStatistics Statistics;
 };

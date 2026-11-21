@@ -1,12 +1,21 @@
 #version 460
 
-// Places the vertices of a static mesh on the screen.
+// Places the vertices of a static mesh on the screen and hands the surface on to the fragment shader.
 
-#include "DrawConstants.glsl"
+#include "SceneData.glsl"
 
 layout(location = 0) in vec3 InPosition;
+layout(location = 1) in vec3 InNormal;
+
+layout(location = 0) out vec3 OutRelativePosition;
+layout(location = 1) out vec3 OutNormal;
+layout(location = 2) flat out int OutDrawIndex;
 
 void main()
 {
-	gl_Position = Draw.LocalToClip * vec4(InPosition, 1.0);
+	vec4 Position = vec4(InPosition, 1.0);
+	gl_Position = Draws[gl_InstanceIndex].LocalToClip * Position;
+	OutRelativePosition = (Draws[gl_InstanceIndex].LocalToRelative * Position).xyz;
+	OutNormal = mat3(Draws[gl_InstanceIndex].NormalToRelative) * InNormal;
+	OutDrawIndex = gl_InstanceIndex;
 }
