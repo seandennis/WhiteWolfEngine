@@ -54,6 +54,16 @@ public:
 	/** Returns true if this object is in the root set. */
 	bool IsRooted() const;
 
+	/**
+	 * Marks this object for destruction. From this call on IsValid returns false for it and weak references to it
+	 * are null. The object is removed from the root set, and the next collection destroys it even if other objects
+	 * still refer to it, setting those references to null. Calling Destroy again has no effect.
+	 *
+	 * The object stays allocated until that collection, so pointers already held remain safe to use until then.
+	 * Classes cannot be destroyed.
+	 */
+	void Destroy();
+
 protected:
 	/** Objects are constructed only by NewObject. Constructing one any other way is a fatal error. */
 	WObject();
@@ -76,6 +86,9 @@ private:
 
 		/** The object's constructors have all finished. */
 		ConstructionCompleted = 1 << 0,
+
+		/** Destroy has been called on the object. */
+		PendingDestruction = 1 << 5,
 
 		/** The object is in the root set. */
 		Rooted = 1 << 4,

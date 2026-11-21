@@ -15,6 +15,7 @@ void WTestObject::RegisterClassMembers(WClass& Class)
 {
 	Class.AddProperty(MakeProperty<&WTestObject::Other>("Other"));
 	Class.AddProperty(MakeProperty<&WTestObject::Children>("Children"));
+	Class.AddProperty(MakeProperty<&WTestObject::WeakOther>("WeakOther"));
 }
 
 WTestObject::WTestObject()
@@ -37,6 +38,10 @@ void WTestObject::BeginDestroy()
 {
 	FTestObjectStats& Stats = FTestObjectStats::Get();
 	++Stats.BeginDestroyCount;
+	if (WeakOther.IsValid())
+	{
+		++Stats.ValidWeakOtherInBeginDestroyCount;
+	}
 	if (!Name.empty())
 	{
 		Stats.Events.push_back("BeginDestroy " + Name);

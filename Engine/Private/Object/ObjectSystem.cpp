@@ -242,6 +242,10 @@ void FObjectSystem::AddToRoot(WObject* Object)
 		"AddToRoot: the {} is being destroyed and cannot be kept alive",
 		Object->ClassPrivate->GetName());
 
+	WW_CHECKF(!Object->HasInternalFlag(WObject::EInternalFlags::PendingDestruction),
+		"AddToRoot: the {} has been destroyed and cannot be kept alive",
+		Object->ClassPrivate->GetName());
+
 	if (Object->HasInternalFlag(WObject::EInternalFlags::Rooted))
 	{
 		return;
@@ -262,6 +266,46 @@ void FObjectSystem::RemoveFromRoot(WObject* Object)
 	std::erase(RootObjects, Object);
 }
 
+void FObjectSystem::DestroyObject(WObject* Object)
+{
+	WW_CHECKF(!Object->ClassPrivate->IsChildOf(ClassClass),
+		"Class {} cannot be destroyed",
+		static_cast<const WClass*>(Object)->GetName());
+
+	Object->SetInternalFlag(WObject::EInternalFlags::PendingDestruction);
+	RemoveFromRoot(Object);
+}
+
+bool FObjectSystem::IsObjectValid(const WObject* Object) const
+{
+	if (Object->HasInternalFlag(WObject::EInternalFlags::PendingDestruction))
+	{
+		return false;
+	}
+
+	// During a collection, everything that was not marked is about to be destroyed.
+	const bool bIsBeingDestroyed = bIsSweeping && !IsMarked(Object);
+	return !bIsBeingDestroyed;
+}
+
+void FObjectSystem::GetWeakReference(const WObject* Object, int32& OutObjectIndex, uint32& OutSerialNumber) const
+{
+	OutObjectIndex = Object->InternalIndex;
+	OutSerialNumber = Slots[static_cast<std::size_t>(Object->InternalIndex)].SerialNumber;
+}
+
+WObject* FObjectSystem::ResolveWeakReference(int32 ObjectIndex, uint32 SerialNumber) const
+{
+	if (ObjectIndex < 0 || static_cast<std::size_t>(ObjectIndex) >= Slots.size())
+	{
+		return nullptr;
+	}
+
+	const FObjectSlot& Slot = Slots[static_cast<std::size_t>(ObjectIndex)];
+	const bool bIsSameObject = Slot.Object != nullptr && Slot.SerialNumber == SerialNumber;
+	return bIsSameObject && IsObjectValid(Slot.Object) ? Slot.Object : nullptr;
+}
+
 void FObjectSystem::CollectGarbage()
 {
 	WW_CHECKF(!bIsCollecting, "CollectGarbage was called while a collection is running, for example from BeginDestroy");
@@ -270,6 +314,10 @@ void FObjectSystem::CollectGarbage()
 	++CurrentEpoch;
 
 	MarkReachableObjects();
+
+	// From here on the unmarked objects are known to be garbage: they are no longer valid, and weak references
+	// to them are null.
+	const FScopedFlag SweepingScope(bIsSweeping);
 	NotifyUnreachableObjects();
 	PurgeUnreachableObjects();
 }
@@ -394,7 +442,9 @@ void FObjectSystem::ReleaseSlot(WObject* Object)
 	const int32 Index = Object->InternalIndex;
 	WW_CHECK(Index >= 0 && Slots[static_cast<std::size_t>(Index)].Object == Object);
 
-	Slots[static_cast<std::size_t>(Index)].Object = nullptr;
+	FObjectSlot& Slot = Slots[static_cast<std::size_t>(Index)];
+	Slot.Object = nullptr;
+	++Slot.SerialNumber;
 	FreeSlotIndices.push_back(Index);
 	Object->InternalIndex = -1;
 }
@@ -482,8 +532,18 @@ void FObjectSystem::PurgeUnreachableObjects()
 void FObjectSystem::VisitObjectReference(FObjectPtr& Reference)
 {
 	WObject* const Object = Reference.Get();
-	if (Object != nullptr)
+	if (Object == nullptr)
 	{
-		MarkObject(Object);
+		return;
 	}
+
+	// A destroyed object is not kept alive by the references to it. They are cleared instead, so that nothing
+	// points at the object by the time it is freed.
+	if (Object->HasInternalFlag(WObject::EInternalFlags::PendingDestruction))
+	{
+		Reference.Reset();
+		return;
+	}
+
+	MarkObject(Object);
 }

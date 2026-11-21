@@ -186,3 +186,15 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - **Classes are registered when their module loads**, by a static object next to each class, so a class that is only ever created by name from a scene file exists without any code naming it. A property refers to the class of its target through a function, resolved on first use, so a class can refer to itself or to a class registered later.
 - **Registration is written by hand for now** (`WW_DECLARE_CLASS`, `WW_IMPLEMENT_CLASS`, `RegisterClassMembers`). The header tool that generates the same calls from `WCLASS()`, `WPROPERTY()` and `WFUNCTION()` comes later in milestone 2; it emits calls to this same registration API.
 - **The object system is single-threaded.** Objects are created, used and collected on the main thread.
+
+## D-016: Destroy, IsValid and weak references
+
+**Status:** Accepted.
+
+**Decision.**
+
+- `WObject::Destroy()` only sets a flag (and removes the object from the root set). `IsValid()` is false from that moment, as the specification requires, but the object stays allocated until the next collection, so pointers that code already holds stay safe to use for the rest of the frame.
+- The collector never marks a destroyed object. When marking meets a reference to one it sets that reference to null, so by the time the object is freed nothing reachable points at it. A destroyed object is not traversed either, so it does not keep the objects it refers to alive.
+- A weak reference stores the object's slot in the object table and the slot's serial number, which changes whenever the slot is released. Resolving it is two comparisons, needs no list of weak references per object, and can never return a different object that later reuses the slot.
+- A weak reference resolves to null as soon as its object is marked for destruction, and during a collection as soon as marking has shown the object to be unreachable. `BeginDestroy()` therefore cannot obtain a pointer to another object that is about to be freed and hand it to something that survives.
+- Destroying a class, or adding a destroyed object to the root set, is a fatal error.

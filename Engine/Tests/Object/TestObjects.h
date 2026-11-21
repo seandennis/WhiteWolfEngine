@@ -4,6 +4,7 @@
 
 #include "Object/ObjectMacros.h"
 #include "Object/ObjectPtr.h"
+#include "Object/WeakObjectPtr.h"
 
 #include <string>
 #include <vector>
@@ -19,6 +20,9 @@ struct FTestObjectStats
 
 	/** Total destructor calls. */
 	int32 DestructorCount = 0;
+
+	/** BeginDestroy calls that found the object's WeakOther reference still valid. */
+	int32 ValidWeakOtherInBeginDestroyCount = 0;
 
 	/** One entry per lifetime event of a named object, in order: "BeginDestroy <Name>" or "Destructor <Name>". */
 	std::vector<std::string> Events;
@@ -41,6 +45,9 @@ public:
 
 	/** Reflected: keeps every element alive. */
 	std::vector<TObjectPtr<WTestObject>> Children;
+
+	/** Reflected, but weak: does not keep its target alive. */
+	TWeakObjectPtr<WTestObject> WeakOther;
 
 	/** Not reflected: does not keep its target alive. */
 	TObjectPtr<WTestObject> Unreflected;

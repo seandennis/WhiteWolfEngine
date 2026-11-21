@@ -60,6 +60,18 @@ public:
 	void AddToRoot(WObject* Object);
 	void RemoveFromRoot(WObject* Object);
 
+	/** Marks Object for destruction; see WObject::Destroy. */
+	void DestroyObject(WObject* Object);
+
+	/** Returns false if Object is marked for destruction or is being destroyed by the running collection. */
+	bool IsObjectValid(const WObject* Object) const;
+
+	/** Returns the slot and serial number that identify Object for a weak reference. */
+	void GetWeakReference(const WObject* Object, int32& OutObjectIndex, uint32& OutSerialNumber) const;
+
+	/** Returns the object a weak reference identifies, or null if it is gone or no longer valid. */
+	WObject* ResolveWeakReference(int32 ObjectIndex, uint32 SerialNumber) const;
+
 	/** Runs one complete collection: marks from the roots, then destroys every object that was not reached. */
 	void CollectGarbage();
 
@@ -69,6 +81,9 @@ private:
 	{
 		/** The object in this slot, or null if the slot is free. */
 		WObject* Object = nullptr;
+
+		/** Changes every time the slot is released, so a weak reference can tell that its object is gone. */
+		uint32 SerialNumber = 1;
 	};
 
 	/** Allocates memory for an object, runs ConstructFunction in it and returns the finished object. */
@@ -126,5 +141,9 @@ private:
 	/** Objects that are marked but whose references have not been followed yet. */
 	std::vector<WObject*> PendingObjects;
 
+	/** True for the whole of a collection. */
 	bool bIsCollecting = false;
+
+	/** True once marking has finished, while the unmarked objects are being notified and destroyed. */
+	bool bIsSweeping = false;
 };

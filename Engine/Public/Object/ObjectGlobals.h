@@ -44,6 +44,12 @@ const TargetType* Cast(const WObject* Object)
 }
 
 /**
+ * Returns true if Object is not null, has not been marked for destruction with Destroy, and is not being destroyed
+ * by a collection that is in progress. The pointer itself must be null or point to an object that is still allocated.
+ */
+ENGINE_API bool IsValid(const WObject* Object);
+
+/**
  * Destroys every object that is not reachable from the root set, before returning.
  *
  * Collection normally runs by itself; this function exists for tests and tools. Call it only from a point where no

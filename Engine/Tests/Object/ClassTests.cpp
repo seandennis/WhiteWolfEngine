@@ -5,6 +5,7 @@
 #include "Reflection/ArrayProperty.h"
 #include "Reflection/ObjectProperty.h"
 #include "Reflection/PropertyFactory.h"
+#include "Reflection/WeakObjectProperty.h"
 #include "TestSupport/FatalErrorException.h"
 #include "TestSupport/ScopedLogCapture.h"
 
@@ -93,9 +94,10 @@ TEST_SUITE("WClass")
 	{
 		const std::vector<std::unique_ptr<FProperty>>& Properties = WTestObject::StaticClass()->GetOwnProperties();
 
-		REQUIRE(Properties.size() == 2);
+		REQUIRE(Properties.size() == 3);
 		CHECK(Properties[0]->GetName() == "Other");
 		CHECK(Properties[1]->GetName() == "Children");
+		CHECK(Properties[2]->GetName() == "WeakOther");
 	}
 
 	TEST_CASE("Own properties do not include inherited ones")
@@ -142,6 +144,17 @@ TEST_SUITE("WClass")
 		REQUIRE(ObjectProperty != nullptr);
 		CHECK(ObjectProperty->GetPropertyClass() == WTestObject::StaticClass());
 		CHECK(ObjectProperty->ContainsObjectReferences());
+	}
+
+	TEST_CASE("A TWeakObjectPtr member is a weak object property, which holds no strong reference")
+	{
+		const FProperty* const Property = WTestObject::StaticClass()->FindProperty("WeakOther");
+		REQUIRE(Property != nullptr);
+
+		const FWeakObjectProperty* const WeakProperty = dynamic_cast<const FWeakObjectProperty*>(Property);
+		REQUIRE(WeakProperty != nullptr);
+		CHECK(WeakProperty->GetPropertyClass() == WTestObject::StaticClass());
+		CHECK_FALSE(WeakProperty->ContainsObjectReferences());
 	}
 
 	TEST_CASE("A std::vector member is an array property with an element property")

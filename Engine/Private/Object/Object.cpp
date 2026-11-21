@@ -38,6 +38,11 @@ bool WObject::IsRooted() const
 	return HasInternalFlag(EInternalFlags::Rooted);
 }
 
+void WObject::Destroy()
+{
+	FObjectSystem::Get().DestroyObject(this);
+}
+
 void WObject::BeginDestroy()
 {
 	WW_CHECKF(HasInternalFlag(EInternalFlags::BeginDestroyCalled),

@@ -4,9 +4,11 @@
 
 #include "Object/Object.h"
 #include "Object/ObjectPtr.h"
+#include "Object/WeakObjectPtr.h"
 #include "Reflection/ArrayProperty.h"
 #include "Reflection/ObjectProperty.h"
 #include "Reflection/Property.h"
+#include "Reflection/WeakObjectProperty.h"
 
 #include <memory>
 #include <string>
@@ -31,6 +33,18 @@ struct TPropertyFactory<TObjectPtr<ObjectType>>
 	{
 		static_assert(std::is_base_of_v<WObject, ObjectType>, "TObjectPtr properties must refer to WObject classes");
 		return std::make_unique<FObjectProperty>(std::move(Name), Accessor, &ObjectType::StaticClass);
+	}
+};
+
+/** TWeakObjectPtr<ObjectType>: a reference to an object that does not keep it alive. */
+template <typename ObjectType>
+struct TPropertyFactory<TWeakObjectPtr<ObjectType>>
+{
+	static std::unique_ptr<FProperty> Create(std::string Name, FProperty::FValueAccessor Accessor)
+	{
+		static_assert(
+			std::is_base_of_v<WObject, ObjectType>, "TWeakObjectPtr properties must refer to WObject classes");
+		return std::make_unique<FWeakObjectProperty>(std::move(Name), Accessor, &ObjectType::StaticClass);
 	}
 };
 

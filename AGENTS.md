@@ -107,9 +107,10 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
     Math/                 Math types: Vector.h (FVector, FVector3f), Quat.h (FQuat), Transform.h (FTransform)
     Object/               The object system: Object.h (WObject), Class.h (WClass), ObjectPtr.h (TObjectPtr),
-                          ObjectGlobals.h (NewObject, Cast, CollectGarbage), ObjectMacros.h (class registration)
-    Reflection/           Reflected properties: Property.h (FProperty), ObjectProperty.h, ArrayProperty.h,
-                          PropertyFactory.h (MakeProperty)
+                          WeakObjectPtr.h (TWeakObjectPtr), ObjectGlobals.h (NewObject, Cast, IsValid,
+                          CollectGarbage), ObjectMacros.h (class registration)
+    Reflection/           Reflected properties: Property.h (FProperty), ObjectProperty.h, WeakObjectProperty.h,
+                          ArrayProperty.h, PropertyFactory.h (MakeProperty)
   Private/                Sources and module-internal headers, mirroring Public/
   Tests/                  Unit tests, mirroring Public/ (EngineTests executable)
     TestSupport/          Helpers shared by tests: FScopedLogCapture, FScopedTempDirectory
@@ -199,6 +200,8 @@ First-party code compiles with `/W4 /WX` on MSVC and an equivalent strict set on
 
 - **Create objects with `NewObject<T>()` only.** Never `new`, `delete`, a stack variable or a by-value member of a `WObject` class. Constructing one any other way is a fatal error.
 - **A reference keeps its target alive only if the collector can see it**: it must be a `TObjectPtr<T>` (or a `std::vector` of them) that is registered as a property of its class. A raw pointer or an unregistered `TObjectPtr` does not keep anything alive. Raw `T*` is fine for parameters and locals that do not outlive the current call.
+- **`TWeakObjectPtr<T>`** refers to an object without keeping it alive. `Get()` returns null once the object is destroyed or marked for destruction, so it never dangles. Use it for back-pointers, caches and observers.
+- **`Destroy()`** marks an object for destruction: `IsValid(Object)` is false and weak references are null from that call on, and the next collection destroys it and sets every remaining `TObjectPtr` to it to null. Check `IsValid()` before using a reference that something else may have destroyed.
 - **Roots.** An object survives if it is rooted with `AddToRoot()` or reachable from a rooted object through registered properties. Classes are rooted automatically. Pair every `AddToRoot()` with a `RemoveFromRoot()`.
 - **`BeginDestroy()`** is where an object releases GPU, audio, physics and other non-memory resources. Always call `Super::BeginDestroy()`. All other objects are still allocated while it runs. **Destructors** run later and must not touch any other object.
 - **Collection points.** `CollectGarbage()` destroys everything unreachable before it returns. Never call it while a function further up the stack holds a raw pointer to an object that nothing else keeps alive, and never from `BeginDestroy()`.
