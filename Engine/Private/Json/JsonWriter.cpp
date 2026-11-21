@@ -179,6 +179,10 @@ namespace
 		{
 			Output.append(std::format("{}", Value.GetInteger()));
 		}
+		else if (Value.IsUnsignedInteger())
+		{
+			Output.append(std::format("{}", Value.GetUnsignedInteger()));
+		}
 		else if (Value.IsNumber())
 		{
 			AppendDouble(Output, Value.GetNumber());

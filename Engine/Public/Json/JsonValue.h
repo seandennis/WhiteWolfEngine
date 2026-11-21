@@ -14,8 +14,9 @@
  * A JSON value: null, a boolean, a number, a string, an array of values or an object.
  *
  * Numbers are kept as a 64-bit integer when they are written without a fraction or exponent and fit, and as a
- * double otherwise, so that large integers survive a round trip exactly. An object keeps its members in the order
- * they were added, which is the order they are written in; that keeps saved files stable and easy to compare.
+ * double otherwise, so that integers of the whole signed and unsigned 64-bit range survive a round trip exactly. An
+ * object keeps its members in the order they were added, which is the order they are written in; that keeps saved files
+ * stable and easy to compare.
  *
  * Strings are UTF-8. A default-constructed value is null.
  */
@@ -39,7 +40,7 @@ public:
 	{
 	}
 
-	/** An integer. A value too large for a signed 64-bit integer is stored as the nearest double. */
+	/** An integer. A value above the range of a signed 64-bit integer is stored as an unsigned one. */
 	template <std::integral IntegerType>
 		requires(!std::same_as<IntegerType, bool>)
 	FJsonValue(IntegerType Value)
@@ -50,7 +51,7 @@ public:
 		}
 		else
 		{
-			Data = static_cast<double>(Value);
+			Data = static_cast<uint64>(Value);
 		}
 	}
 
@@ -112,16 +113,22 @@ public:
 		return std::holds_alternative<bool>(Data);
 	}
 
-	/** Returns true for a number that is stored as an integer. */
+	/** Returns true for a whole number in the range of a signed 64-bit integer. */
 	bool IsInteger() const
 	{
 		return std::holds_alternative<int64>(Data);
 	}
 
+	/** Returns true for a whole number above the range of a signed 64-bit integer, up to that of an unsigned one. */
+	bool IsUnsignedInteger() const
+	{
+		return std::holds_alternative<uint64>(Data);
+	}
+
 	/** Returns true for any number, whether it is stored as an integer or as a double. */
 	bool IsNumber() const
 	{
-		return IsInteger() || std::holds_alternative<double>(Data);
+		return IsInteger() || IsUnsignedInteger() || std::holds_alternative<double>(Data);
 	}
 
 	bool IsString() const
@@ -139,18 +146,23 @@ public:
 		return std::holds_alternative<FObject>(Data);
 	}
 
-	/** Returns the kind of value in words, for error messages: "null", "boolean", "number", "string", "array",
-	 * "object". */
-	ENGINE_API std::string_view GetTypeName() const;
+	/**
+	 * Returns the kind of value in words that fit into a sentence, for error messages: "null", "a boolean",
+	 * "a number", "a string", "an array" or "an object".
+	 */
+	ENGINE_API std::string_view GetTypeDescription() const;
 
 	// The accessors below are fatal errors when the value is of another type; test with the Is functions first.
 
 	ENGINE_API bool GetBoolean() const;
 
-	/** Returns the value of a number that is stored as an integer. */
+	/** Returns the value of a number for which IsInteger is true. */
 	ENGINE_API int64 GetInteger() const;
 
-	/** Returns the value of any number as a double. */
+	/** Returns the value of a number for which IsUnsignedInteger is true. */
+	ENGINE_API uint64 GetUnsignedInteger() const;
+
+	/** Returns the value of any number as a double, rounded to the nearest one if it is a very large integer. */
 	ENGINE_API double GetNumber() const;
 
 	ENGINE_API const std::string& GetString() const;
@@ -177,5 +189,6 @@ public:
 	bool operator==(const FJsonValue& Other) const = default;
 
 private:
-	std::variant<std::monostate, bool, int64, double, std::string, FArray, FObject> Data;
+	// A uint64 is held only for a value that does not fit in an int64, so equal numbers always compare equal.
+	std::variant<std::monostate, bool, int64, uint64, double, std::string, FArray, FObject> Data;
 };

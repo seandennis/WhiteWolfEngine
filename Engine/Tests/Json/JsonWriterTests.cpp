@@ -52,6 +52,7 @@ TEST_SUITE("FJsonWriter")
 	{
 		CHECK(FJsonWriter::Write(FJsonValue(std::numeric_limits<int64>::max())) == "9223372036854775807");
 		CHECK(FJsonWriter::Write(FJsonValue(std::numeric_limits<int64>::min())) == "-9223372036854775808");
+		CHECK(FJsonWriter::Write(FJsonValue(std::numeric_limits<uint64>::max())) == "18446744073709551615");
 	}
 
 	TEST_CASE("Doubles are written with the fewest digits and always look like doubles")

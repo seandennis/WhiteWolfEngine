@@ -25,7 +25,7 @@ FJsonValue::FJsonValue(float Value)
 	Data = DoubleValue;
 }
 
-std::string_view FJsonValue::GetTypeName() const
+std::string_view FJsonValue::GetTypeDescription() const
 {
 	if (IsNull())
 	{
@@ -33,63 +33,79 @@ std::string_view FJsonValue::GetTypeName() const
 	}
 	if (IsBoolean())
 	{
-		return "boolean";
+		return "a boolean";
 	}
 	if (IsNumber())
 	{
-		return "number";
+		return "a number";
 	}
 	if (IsString())
 	{
-		return "string";
+		return "a string";
 	}
 	if (IsArray())
 	{
-		return "array";
+		return "an array";
 	}
 
-	return "object";
+	return "an object";
 }
 
 bool FJsonValue::GetBoolean() const
 {
-	WW_CHECKF(IsBoolean(), "The JSON value is a {}, not a boolean", GetTypeName());
+	WW_CHECKF(IsBoolean(), "The JSON value is {}, not a boolean", GetTypeDescription());
 	return std::get<bool>(Data);
 }
 
 int64 FJsonValue::GetInteger() const
 {
-	WW_CHECKF(IsInteger(), "The JSON value is a {}, not an integer", GetTypeName());
+	WW_CHECKF(IsInteger(), "The JSON value is {}, not an integer", GetTypeDescription());
 	return std::get<int64>(Data);
+}
+
+uint64 FJsonValue::GetUnsignedInteger() const
+{
+	WW_CHECKF(IsUnsignedInteger(), "The JSON value is {}, not an unsigned integer", GetTypeDescription());
+	return std::get<uint64>(Data);
 }
 
 double FJsonValue::GetNumber() const
 {
-	WW_CHECKF(IsNumber(), "The JSON value is a {}, not a number", GetTypeName());
-	return IsInteger() ? static_cast<double>(std::get<int64>(Data)) : std::get<double>(Data);
+	WW_CHECKF(IsNumber(), "The JSON value is {}, not a number", GetTypeDescription());
+
+	if (IsInteger())
+	{
+		return static_cast<double>(std::get<int64>(Data));
+	}
+	if (IsUnsignedInteger())
+	{
+		return static_cast<double>(std::get<uint64>(Data));
+	}
+
+	return std::get<double>(Data);
 }
 
 const std::string& FJsonValue::GetString() const
 {
-	WW_CHECKF(IsString(), "The JSON value is a {}, not a string", GetTypeName());
+	WW_CHECKF(IsString(), "The JSON value is {}, not a string", GetTypeDescription());
 	return std::get<std::string>(Data);
 }
 
 const FJsonValue::FArray& FJsonValue::GetElements() const
 {
-	WW_CHECKF(IsArray(), "The JSON value is a {}, not an array", GetTypeName());
+	WW_CHECKF(IsArray(), "The JSON value is {}, not an array", GetTypeDescription());
 	return std::get<FArray>(Data);
 }
 
 void FJsonValue::AddElement(FJsonValue Element)
 {
-	WW_CHECKF(IsArray(), "The JSON value is a {}, not an array", GetTypeName());
+	WW_CHECKF(IsArray(), "The JSON value is {}, not an array", GetTypeDescription());
 	std::get<FArray>(Data).push_back(std::move(Element));
 }
 
 const FJsonValue::FObject& FJsonValue::GetMembers() const
 {
-	WW_CHECKF(IsObject(), "The JSON value is a {}, not an object", GetTypeName());
+	WW_CHECKF(IsObject(), "The JSON value is {}, not an object", GetTypeDescription());
 	return std::get<FObject>(Data);
 }
 
@@ -108,7 +124,7 @@ const FJsonValue* FJsonValue::FindMember(std::string_view Key) const
 
 void FJsonValue::SetMember(std::string Key, FJsonValue Value)
 {
-	WW_CHECKF(IsObject(), "The JSON value is a {}, not an object", GetTypeName());
+	WW_CHECKF(IsObject(), "The JSON value is {}, not an object", GetTypeDescription());
 
 	FObject& Members = std::get<FObject>(Data);
 	for (FMember& Member : Members)

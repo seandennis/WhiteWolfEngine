@@ -67,12 +67,22 @@ TEST_SUITE("FJsonReader")
 		CHECK(ParseValid("1.7976931348623157e308") == FJsonValue(std::numeric_limits<double>::max()));
 	}
 
+	TEST_CASE("An integer above the signed 64-bit range parses as an unsigned integer")
+	{
+		CHECK(ParseValid("9223372036854775808") == FJsonValue(uint64{9223372036854775808ull}));
+		CHECK(ParseValid("18446744073709551615") == FJsonValue(std::numeric_limits<uint64>::max()));
+	}
+
 	TEST_CASE("An integer too large for 64 bits parses as the nearest double")
 	{
-		const FJsonValue Value = ParseValid("9223372036854775808");
+		const FJsonValue TooLarge = ParseValid("18446744073709551616");
+		const FJsonValue TooSmall = ParseValid("-9223372036854775809");
 
-		CHECK_FALSE(Value.IsInteger());
-		CHECK(Value.GetNumber() == 9223372036854775808.0);
+		CHECK_FALSE(TooLarge.IsInteger());
+		CHECK_FALSE(TooLarge.IsUnsignedInteger());
+		CHECK(TooLarge.GetNumber() == 18446744073709551616.0);
+		CHECK_FALSE(TooSmall.IsInteger());
+		CHECK(TooSmall.GetNumber() == -9223372036854775808.0);
 	}
 
 	TEST_CASE("A double keeps every digit needed to tell it apart")

@@ -17,7 +17,7 @@ TEST_SUITE("FJsonValue")
 		const FJsonValue Value;
 
 		CHECK(Value.IsNull());
-		CHECK(Value.GetTypeName() == "null");
+		CHECK(Value.GetTypeDescription() == "null");
 		CHECK(Value == FJsonValue(nullptr));
 	}
 
@@ -32,27 +32,27 @@ TEST_SUITE("FJsonValue")
 
 		CHECK(Boolean.IsBoolean());
 		CHECK_FALSE(Boolean.IsNumber());
-		CHECK(Boolean.GetTypeName() == "boolean");
+		CHECK(Boolean.GetTypeDescription() == "a boolean");
 
 		CHECK(Integer.IsInteger());
 		CHECK(Integer.IsNumber());
 		CHECK_FALSE(Integer.IsBoolean());
-		CHECK(Integer.GetTypeName() == "number");
+		CHECK(Integer.GetTypeDescription() == "a number");
 
 		CHECK(Double.IsNumber());
 		CHECK_FALSE(Double.IsInteger());
-		CHECK(Double.GetTypeName() == "number");
+		CHECK(Double.GetTypeDescription() == "a number");
 
 		CHECK(String.IsString());
-		CHECK(String.GetTypeName() == "string");
+		CHECK(String.GetTypeDescription() == "a string");
 
 		CHECK(Array.IsArray());
 		CHECK_FALSE(Array.IsObject());
-		CHECK(Array.GetTypeName() == "array");
+		CHECK(Array.GetTypeDescription() == "an array");
 
 		CHECK(Object.IsObject());
 		CHECK_FALSE(Object.IsArray());
-		CHECK(Object.GetTypeName() == "object");
+		CHECK(Object.GetTypeDescription() == "an object");
 	}
 
 	TEST_CASE("Values return what they were constructed from")
@@ -76,12 +76,24 @@ TEST_SUITE("FJsonValue")
 		CHECK(Value.IsString());
 	}
 
-	TEST_CASE("An unsigned integer beyond the signed 64-bit range is stored as a double")
+	TEST_CASE("An unsigned integer beyond the signed 64-bit range is stored exactly")
 	{
 		const FJsonValue Value(std::numeric_limits<uint64>::max());
 
+		CHECK(Value.IsUnsignedInteger());
+		CHECK(Value.IsNumber());
 		CHECK_FALSE(Value.IsInteger());
+		CHECK(Value.GetUnsignedInteger() == std::numeric_limits<uint64>::max());
 		CHECK(Value.GetNumber() == static_cast<double>(std::numeric_limits<uint64>::max()));
+	}
+
+	TEST_CASE("An unsigned integer that fits the signed range equals the same signed integer")
+	{
+		const FJsonValue Unsigned(uint64{42});
+
+		CHECK(Unsigned.IsInteger());
+		CHECK_FALSE(Unsigned.IsUnsignedInteger());
+		CHECK(Unsigned == FJsonValue(42));
 	}
 
 	TEST_CASE("A float is stored as the double with the same shortest decimal form")
@@ -195,6 +207,9 @@ TEST_SUITE("FJsonValue")
 		CHECK_THROWS_AS(String.AddElement(1), FFatalErrorException);
 		CHECK_THROWS_AS(String.SetMember("Key", 1), FFatalErrorException);
 		CHECK_THROWS_AS(Double.GetInteger(), FFatalErrorException);
+		CHECK_THROWS_AS(Double.GetUnsignedInteger(), FFatalErrorException);
+		CHECK_THROWS_AS(FJsonValue(1).GetUnsignedInteger(), FFatalErrorException);
+		CHECK_THROWS_AS(FJsonValue(std::numeric_limits<uint64>::max()).GetInteger(), FFatalErrorException);
 		CHECK_THROWS_AS(Double.GetString(), FFatalErrorException);
 	}
 }

@@ -497,6 +497,14 @@ namespace
 					OutValue = FJsonValue(IntegerValue);
 					return true;
 				}
+
+				uint64 UnsignedValue = 0;
+				const std::from_chars_result UnsignedResult = std::from_chars(First, Last, UnsignedValue);
+				if (UnsignedResult.ec == std::errc())
+				{
+					OutValue = FJsonValue(UnsignedValue);
+					return true;
+				}
 				// An integer too large for 64 bits is kept as the nearest double below.
 			}
 
