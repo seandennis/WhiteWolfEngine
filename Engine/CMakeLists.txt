@@ -5,7 +5,7 @@ find_package(Threads REQUIRED)
 ww_add_module(Engine
     OUTPUT_NAME WhiteWolfEngine
     PUBLIC_DEPENDENCIES Threads::Threads glm::glm-header-only
-    PRIVATE_DEPENDENCIES glfw nvrhi nvrhi_vk Vulkan::Headers stb ${CMAKE_DL_LIBS})
+    PRIVATE_DEPENDENCIES glfw nvrhi nvrhi_vk Vulkan::Headers stb cgltf ${CMAKE_DL_LIBS})
 
 # The engine's shaders are compiled while it is built and become part of the DLL.
 ww_add_shaders(Engine ROOT "${CMAKE_CURRENT_SOURCE_DIR}/Shaders")

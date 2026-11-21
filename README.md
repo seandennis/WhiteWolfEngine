@@ -12,7 +12,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | --- | --- | --- |
 | 1 | Repository, CMake build, test framework, `AGENTS.md`, code style tooling, first push to GitHub | Complete |
 | 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | Complete |
-| 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | In progress. Done: a headless Vulkan render device through NVRHI; render targets that can be read back as images; shaders compiled and embedded at build time; static meshes, materials and a scene renderer that draws camera-relative with reversed-Z and no far plane, tested to give the same picture at the origin and ten billion kilometres from it; directional and point lights with physically based shading (glTF's metallic-roughness model), lit in HDR with exposure and tone mapping; textures with mipmaps for base colour, metallic-roughness, normals and emission; PNG and JPEG image files. Still to do: glTF import, screenshot tests against reference images |
+| 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | In progress. Done: a headless Vulkan render device through NVRHI; render targets that can be read back as images; shaders compiled and embedded at build time; static meshes, materials and a scene renderer that draws camera-relative with reversed-Z and no far plane, tested to give the same picture at the origin and ten billion kilometres from it; directional and point lights with physically based shading (glTF's metallic-roughness model), lit in HDR with exposure and tone mapping; textures with mipmaps for base colour, metallic-roughness, normals and emission; PNG and JPEG image files; import of glTF 2.0 files (.gltf and .glb) with meshes, materials, textures and lights. Still to do: screenshot tests of a test scene against reference images |
 | 4 | Renderer: image-based lighting, soft shadows, SSAO | Not started |
 | 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | Not started |
 | 6 | Plugin system, ChronoPhysics plugin, audio components | Not started |
@@ -64,6 +64,7 @@ To work in Visual Studio, open the solution in `Build/windows/` after the first 
 | [NVRHI](https://github.com/NVIDIA-RTX/NVRHI) | main, 2026-11-21 | MIT | Rendering hardware interface, with its Vulkan backend |
 | [Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers) | 1.4.352 | Apache-2.0 OR MIT | The declarations of the Vulkan API |
 | [stb](https://github.com/nothings/stb) | master, 2026-11-21 | Public domain or MIT | Reading PNG and JPEG images, writing PNG images |
+| [cgltf](https://github.com/jkuhlmann/cgltf) | 1.15 | MIT | Reading glTF 2.0 files |
 | [glslang](https://github.com/KhronosGroup/glslang) | 16.6.0 | BSD-3-Clause, Apache-2.0, MIT | Compiles shaders to SPIR-V during the build (not shipped) |
 | [doctest](https://github.com/doctest/doctest) | 2.5.3 | MIT | Unit tests (not shipped) |
 

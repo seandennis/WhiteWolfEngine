@@ -515,3 +515,23 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - **A wrap mode and a texture's picture are not reflected properties yet**, so textures are not saved with a scene; they come from files, through the importer of the next step.
 
 **Testing.** A 16 by 16 pixel texture on a surface that covers exactly 16 by 16 pixels must come out pixel for pixel. That checks orientation, wrap modes and colour space exactly. Mipmapping is checked with a one-pixel checkerboard that must come out as its average, and the lit textures against the reference model, with the normal texture on four layouts: upright, turned, mirrored and repeated.
+
+## D-033: glTF files are imported with cgltf
+
+**Status:** Accepted.
+
+**Dependency.** **cgltf** v1.15 (commit `360db1a95480fe102ae9c69b27c5d101167ff5ba`; MIT), a single-header C library that parses glTF 2.0 files, .gltf and .glb, and gives access to their buffers. It is compiled as a library of its own, like stb (D-031), and only `GltfImporter.cpp` includes it.
+
+**Decision.**
+
+- **`FGltfImporter::Import` puts a file into a scene:** one entity named after the file, and below it one entity per node of the file's scene, with name and transform. A mesh becomes one `WStaticMesh` per part (glTF "primitive") and one `WStaticMeshComponent` per part on the node's entity; materials, textures and lights become `WMaterial`, `WTexture` and light components. What the file uses several times is created once.
+- **Nothing is converted.** Axes, units, the material model and the light units are glTF's in the engine (D-028, D-030), so the importer copies numbers. A node's matrix is split into location, rotation and scale; shear, which `FTransform` cannot hold, is dropped.
+- **A picture is a colour or data depending on its use.** The same image used as a base colour and as a normal map becomes two textures, one sRGB and one linear.
+- **Missing normals are calculated flat,** as the glTF specification asks: every triangle gets its own vertices. Tangents in the file are not read (D-032).
+- **Unsupported content is a warning, not an error.** Animations, skins, cameras, spot lights, points and lines, transparency, double-sided and unlit materials, further texture coordinate sets, texture transforms and morph targets are each left out with one warning that names them, returned to the caller and logged. A part of a mesh or a texture that cannot be read is left out the same way. An import fails only when the file as a whole cannot be used: it cannot be read, is not valid glTF 2.0, lacks a buffer, or lists an extension as required that the engine does not support; the scene is then untouched.
+- **The engine does the file access.** cgltf is given a read function that goes through `FFileHelper`, so paths that are not ASCII work, and that refuses a data file shorter than the glTF file says it is, so no accessor can read beyond a buffer's end. cgltf's own validation runs before anything is created.
+- **Imported assets live only in memory for now.** Entities refer to them, which keeps them alive, but a saved scene does not yet record where its meshes and textures came from; that needs the asset references that come with the editor's content browser.
+
+**Alternatives considered.** tinygltf is as widely used but brings a JSON library and image loading of its own, both of which the engine already has. Assimp reads many more formats at many times the size, and converts everything to its own conventions; the specification asks for glTF.
+
+**Testing.** The tests build their glTF files in code, as text with embedded base64 data, with a .bin file beside it, and as .glb, so no binary fixtures are stored and each test shows what its file contains. They cover the three ways of storing data, hierarchies and transforms, sharing, flat normals, every index size, materials and textures in all three storage forms, lights, each warning, each way a file can be unusable, and drawing an imported file.

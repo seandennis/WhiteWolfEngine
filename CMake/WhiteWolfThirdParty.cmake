@@ -116,3 +116,21 @@ add_library(stb STATIC "${stb_implementation}")
 target_include_directories(stb SYSTEM PUBLIC "${stb_SOURCE_DIR}")
 target_compile_definitions(stb PUBLIC STBI_NO_STDIO STBI_WRITE_NO_STDIO STBI_ONLY_PNG STBI_ONLY_JPEG)
 set_target_properties(stb PROPERTIES POSITION_INDEPENDENT_CODE ON FOLDER "ThirdParty")
+
+# cgltf: reads glTF 2.0 files, both .gltf and .glb (MIT). Release v1.15.
+# A single-header library, built as a library of its own like stb above.
+FetchContent_Declare(cgltf
+    GIT_REPOSITORY https://github.com/jkuhlmann/cgltf.git
+    GIT_TAG 360db1a95480fe102ae9c69b27c5d101167ff5ba
+    SYSTEM)
+FetchContent_MakeAvailable(cgltf)
+
+set(cgltf_implementation "${CMAKE_BINARY_DIR}/ThirdParty/CgltfImplementation.cpp")
+file(CONFIGURE OUTPUT "${cgltf_implementation}" CONTENT
+"// Written by CMake/WhiteWolfThirdParty.cmake.
+#define CGLTF_IMPLEMENTATION
+#include <cgltf.h>
+" @ONLY)
+add_library(cgltf STATIC "${cgltf_implementation}")
+target_include_directories(cgltf SYSTEM PUBLIC "${cgltf_SOURCE_DIR}")
+set_target_properties(cgltf PROPERTIES POSITION_INDEPENDENT_CODE ON FOLDER "ThirdParty")

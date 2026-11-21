@@ -104,7 +104,7 @@ CMakePresets.json         Configure, build, test and workflow presets
 CMake/                    Build helpers
   WhiteWolfCompilerSettings.cmake   Warning levels, conformance flags, sanitizers
   WhiteWolfModule.cmake             ww_add_module(), ww_add_module_tests(), ww_generate_reflection(), ww_add_shaders()
-  WhiteWolfThirdParty.cmake         Pinned engine dependencies (glm, GLFW, Vulkan-Headers, NVRHI, glslang, stb)
+  WhiteWolfThirdParty.cmake         Pinned engine dependencies (glm, GLFW, Vulkan-Headers, NVRHI, glslang, stb, cgltf)
   WhiteWolfThirdPartyTesting.cmake  Pinned test-only dependencies (doctest)
 Engine/                   The core engine module (WhiteWolfEngine.dll)
   CMakeLists.txt
@@ -127,7 +127,8 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
                           ImageFile.h (FImageFile: PNG and JPEG files), Texture.h (WTexture), MipChain.h (FMipChain),
                           CameraView.h (FCameraView), StaticMesh.h (WStaticMesh), Material.h (WMaterial),
                           StaticMeshComponent.h (WStaticMeshComponent), DirectionalLightComponent.h,
-                          PointLightComponent.h, SceneRenderer.h (FSceneRenderer), SceneViewMode.h
+                          PointLightComponent.h, SceneRenderer.h (FSceneRenderer), SceneViewMode.h,
+                          GltfImporter.h (FGltfImporter: .gltf and .glb files)
     Reflection/           Reflected properties: Property.h (FProperty), ValueProperty.h and PropertyValueTraits.h
                           (bool, numbers, strings, math types), ObjectProperty.h, WeakObjectProperty.h,
                           ArrayProperty.h, PropertyFactory.h (MakeProperty), PropertyJsonContext.h.
@@ -142,6 +143,7 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Rendering/TestRendering.h  Helpers for tests that draw: a validated device, reading a target back, checking the log
     Rendering/TestSceneRendering.h  Helpers for tests that draw scenes: FSceneRenderTest, squares, colours
     Rendering/TestSceneLighting.h   The lighting model written out again in C++, and a lit test scene
+    Rendering/TestGltfFiles.h       Builds small .gltf and .glb files for the importer's tests
 Tools/
   Format.cmake            Formats or checks all C++ sources
   GitHooks/pre-commit     Optional hook that runs the format check
@@ -324,6 +326,7 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 - **Depth is reversed and has no far plane:** 1 at the near plane, towards 0 at infinity. Clear depth to 0 and draw with a greater-or-equal depth test.
 - `FRenderDevice::Create` opens the graphics card through Vulkan and NVRHI. It needs no window. Only one render device can exist at a time.
 - An `FRenderTarget` is a surface to draw on; `ReadPixels` copies it into an `FImage`, which is how tests and screenshots see what was drawn. Colours given to the renderer are linear (`FLinearColor`); pixels read back are sRGB-encoded bytes (`FColor`).
+- **`FGltfImporter::Import(Path, Scene, Error, &Warnings)`** brings a glTF 2.0 file (.gltf or .glb) into a scene: one entity named after the file, its nodes below it, with meshes, materials, textures and lights. Nothing is converted, because the engine uses glTF's axes, units, material model and light units. What the engine does not support (animations, skins, cameras, transparency and more) is left out with a warning each; only a file that cannot be read at all is an error. No cgltf type or header appears outside `Engine/Private/Rendering/GltfImporter.cpp`.
 - `FImageFile` reads PNG and JPEG files into an `FImage` and writes an `FImage` as a PNG file, from and to disk or memory. No stb type or header appears outside `Engine/Private/Rendering/ImageFile.cpp`.
 - Everything created from a render device keeps the graphics card alive, so the order in which the device and its resources are destroyed does not matter.
 - No NVRHI or Vulkan type or header appears outside `Engine/Private/Rendering/`. Include `Rendering/VulkanApi.h` there, never `<vulkan/vulkan.hpp>`, so that the engine and NVRHI configure Vulkan identically; call Vulkan through the function table it sets up, with the plain C functions.
