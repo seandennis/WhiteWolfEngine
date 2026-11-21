@@ -66,6 +66,7 @@ New source files are picked up automatically; no CMake edit or reconfigure is ne
 | A warning stops the build | Fix the code. Do not disable the warning; see "Warnings" in `AGENTS.md`. |
 | `No such preset` | The preset is for the other operating system; see the table in step 1. |
 | Configure fails while fetching a dependency | The first configure needs internet access to GitHub. Retry when the network is available; never vendor a copy by hand. |
+| doctest fails to compile with `use of undefined type 'std::basic_ostream'` (MSVC) | A `CHECK` compares a type that doctest prints with `operator<<`, such as `std::string_view`, and the test file does not include `<ostream>`. Include it. |
 | `CodeStyle.ClangFormat` fails | Run `cmake -P Tools/Format.cmake`, review the changes, rebuild. |
 | A sanitizer report under `linux-sanitize` | A real memory, leak or undefined-behaviour bug. Fix it; never suppress it. |
 | Stale or confusing build state | Delete `Build/<configure preset>/` and run the workflow preset again. |

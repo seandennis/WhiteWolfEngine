@@ -2,6 +2,9 @@
 
 #include <doctest/doctest.h>
 
+// doctest prints the std::string_view operands of a comparison with operator<<, which needs std::ostream.
+#include <ostream>
+
 TEST_SUITE("ELogVerbosity")
 {
 	TEST_CASE("ToString names every verbosity")

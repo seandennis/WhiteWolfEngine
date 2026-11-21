@@ -2,6 +2,9 @@
 
 #include <doctest/doctest.h>
 
+// doctest prints the std::string_view operands of a comparison with operator<<, which needs std::ostream.
+#include <ostream>
+
 namespace
 {
 	// Proves that a category can be constant-initialized, which is what makes it safe to use during static
