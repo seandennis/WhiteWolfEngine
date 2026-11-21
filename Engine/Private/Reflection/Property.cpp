@@ -15,18 +15,20 @@ void FProperty::SetSpecifiers(FPropertySpecifiers InSpecifiers)
 	Specifiers = std::move(InSpecifiers);
 }
 
-void* FProperty::GetValuePtr(void* Container) const
+void* FProperty::GetValuePtr(WObject* Container) const
 {
 	WW_CHECKF(Accessor != nullptr, "Only a property that describes a member variable has a location");
 	WW_CHECK(Container != nullptr);
 
+	// The accessor expects exactly a WObject*, which is why this function does not take a void*: the conversion
+	// from a derived class pointer has already happened, with the right adjustment, at the call.
 	return Accessor(Container);
 }
 
-const void* FProperty::GetValuePtr(const void* Container) const
+const void* FProperty::GetValuePtr(const WObject* Container) const
 {
 	// The accessor only computes an address; it never writes through the pointer.
-	return GetValuePtr(const_cast<void*>(Container));
+	return GetValuePtr(const_cast<WObject*>(Container));
 }
 
 bool FProperty::ContainsObjectReferences() const

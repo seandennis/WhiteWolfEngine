@@ -11,14 +11,15 @@
 class FJsonValue;
 class IObjectReferenceVisitor;
 class IPropertyJsonContext;
+class WObject;
 
 /**
  * Describes one reflected value: a member variable of a class, an element of an array, or a parameter of a reflected
  * function. It knows the value's name and type, where the value lives inside an object, and how to convert a value
  * to and from JSON. Each kind of type has its own FProperty subclass.
  *
- * Two kinds of pointer appear in this interface. A container pointer is the object that owns the member: a WObject*
- * for a class member. A value pointer is the address of the value itself, as returned by GetValuePtr.
+ * Two kinds of pointer appear in this interface. A container is the object that owns a member variable. A value
+ * pointer is the address of the value itself, as returned by GetValuePtr.
  */
 class ENGINE_API FProperty
 {
@@ -61,13 +62,14 @@ public:
 
 	/**
 	 * Returns the address of this property's value inside Container, which must be an instance of the class that
-	 * declares the property (or of a class derived from it), passed as a WObject*.
+	 * declares the property or of a class derived from it. Giving it an object of another class is undefined
+	 * behaviour; look the property up in the object's own class to be safe.
 	 *
 	 * Only properties that describe a member variable have a location; calling this on the element property of an
 	 * array or on a function parameter is a fatal error.
 	 */
-	void* GetValuePtr(void* Container) const;
-	const void* GetValuePtr(const void* Container) const;
+	void* GetValuePtr(WObject* Container) const;
+	const void* GetValuePtr(const WObject* Container) const;
 
 	/** Returns true if a value of this property can hold strong references to objects. */
 	virtual bool ContainsObjectReferences() const;
