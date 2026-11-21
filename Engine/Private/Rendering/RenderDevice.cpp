@@ -74,36 +74,56 @@ std::unique_ptr<FRenderTarget> FRenderDevice::CreateRenderTarget(int32 Width, in
 	SceneColorDescription.format = FRenderTarget::FImplementation::SceneColorFormat;
 	SceneColorDescription.debugName = "RenderTargetSceneColor";
 
+	// What ambient occlusion is worked out from and into: drawn to, then read by the next pass.
+	nvrhi::TextureDesc NormalDescription = TextureDescription;
+	NormalDescription.format = FRenderTarget::FImplementation::NormalFormat;
+	NormalDescription.debugName = "RenderTargetNormals";
+
+	nvrhi::TextureDesc OcclusionDescription = TextureDescription;
+	OcclusionDescription.format = FRenderTarget::FImplementation::OcclusionFormat;
+	OcclusionDescription.debugName = "RenderTargetOcclusion";
+
 	nvrhi::IDevice* const Device = Context->GetDevice();
-	nvrhi::TextureHandle Texture = Device->createTexture(TextureDescription);
-	nvrhi::TextureHandle DepthTexture = Device->createTexture(DepthDescription);
-	nvrhi::TextureHandle SceneColorTexture = Device->createTexture(SceneColorDescription);
-	nvrhi::FramebufferHandle Framebuffer;
-	nvrhi::FramebufferHandle SceneFramebuffer;
-	nvrhi::FramebufferHandle OutputFramebuffer;
-	if (Texture != nullptr && DepthTexture != nullptr && SceneColorTexture != nullptr)
+	std::unique_ptr<FRenderTarget::FImplementation> Implementation = std::make_unique<FRenderTarget::FImplementation>();
+	Implementation->Context = Context;
+	Implementation->Width = Width;
+	Implementation->Height = Height;
+	Implementation->Texture = Device->createTexture(TextureDescription);
+	Implementation->DepthTexture = Device->createTexture(DepthDescription);
+	Implementation->SceneColorTexture = Device->createTexture(SceneColorDescription);
+	Implementation->NormalTexture = Device->createTexture(NormalDescription);
+	Implementation->OcclusionTextures[0] = Device->createTexture(OcclusionDescription);
+	Implementation->OcclusionTextures[1] = Device->createTexture(OcclusionDescription);
+
+	const bool bHasTextures = Implementation->Texture != nullptr && Implementation->DepthTexture != nullptr &&
+		Implementation->SceneColorTexture != nullptr && Implementation->NormalTexture != nullptr &&
+		Implementation->OcclusionTextures[0] != nullptr && Implementation->OcclusionTextures[1] != nullptr;
+	if (bHasTextures)
 	{
-		Framebuffer = Device->createFramebuffer(
-			nvrhi::FramebufferDesc().addColorAttachment(Texture).setDepthAttachment(DepthTexture));
-		SceneFramebuffer = Device->createFramebuffer(
-			nvrhi::FramebufferDesc().addColorAttachment(SceneColorTexture).setDepthAttachment(DepthTexture));
-		OutputFramebuffer = Device->createFramebuffer(nvrhi::FramebufferDesc().addColorAttachment(Texture));
+		nvrhi::ITexture* const Depth = Implementation->DepthTexture;
+		Implementation->Framebuffer = Device->createFramebuffer(
+			nvrhi::FramebufferDesc().addColorAttachment(Implementation->Texture).setDepthAttachment(Depth));
+		Implementation->SceneFramebuffer = Device->createFramebuffer(
+			nvrhi::FramebufferDesc().addColorAttachment(Implementation->SceneColorTexture).setDepthAttachment(Depth));
+		Implementation->OutputFramebuffer =
+			Device->createFramebuffer(nvrhi::FramebufferDesc().addColorAttachment(Implementation->Texture));
+		Implementation->PrepassFramebuffer = Device->createFramebuffer(
+			nvrhi::FramebufferDesc().addColorAttachment(Implementation->NormalTexture).setDepthAttachment(Depth));
+		Implementation->OcclusionFramebuffers[0] = Device->createFramebuffer(
+			nvrhi::FramebufferDesc().addColorAttachment(Implementation->OcclusionTextures[0]));
+		Implementation->OcclusionFramebuffers[1] = Device->createFramebuffer(
+			nvrhi::FramebufferDesc().addColorAttachment(Implementation->OcclusionTextures[1]));
 	}
-	if (Framebuffer == nullptr || SceneFramebuffer == nullptr || OutputFramebuffer == nullptr)
+
+	const bool bHasFramebuffers = Implementation->Framebuffer != nullptr &&
+		Implementation->SceneFramebuffer != nullptr && Implementation->OutputFramebuffer != nullptr &&
+		Implementation->PrepassFramebuffer != nullptr && Implementation->OcclusionFramebuffers[0] != nullptr &&
+		Implementation->OcclusionFramebuffers[1] != nullptr;
+	if (!bHasFramebuffers)
 	{
 		OutError = std::format("the graphics card could not create a render target of {} by {} pixels", Width, Height);
 		return nullptr;
 	}
 
-	std::unique_ptr<FRenderTarget::FImplementation> Implementation = std::make_unique<FRenderTarget::FImplementation>();
-	Implementation->Context = Context;
-	Implementation->Texture = std::move(Texture);
-	Implementation->DepthTexture = std::move(DepthTexture);
-	Implementation->SceneColorTexture = std::move(SceneColorTexture);
-	Implementation->Framebuffer = std::move(Framebuffer);
-	Implementation->SceneFramebuffer = std::move(SceneFramebuffer);
-	Implementation->OutputFramebuffer = std::move(OutputFramebuffer);
-	Implementation->Width = Width;
-	Implementation->Height = Height;
 	return std::make_unique<FRenderTarget>(std::move(Implementation));
 }

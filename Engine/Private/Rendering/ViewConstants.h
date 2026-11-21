@@ -59,7 +59,11 @@ struct FViewConstants
 
 	/** Takes a camera-relative position into each shadow map. A light's maps follow each other, one per cascade. */
 	std::array<FMatrix4f, FSceneRenderer::MaxDirectionalLights * FShadowCascades::CascadeCount> ShadowMatrices{};
+
+	/** x: one divided by the width of the picture in pixels, y: one divided by its height. */
+	glm::vec4 ScreenParameters = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
 };
 
-static_assert(sizeof(FViewConstants) == 16 + 4 * 32 + 32 * 32 + 9 * 16 + 64 + 64 + 16 + 16 + 16 + 4 * 16 + 16 + 16 * 64,
+static_assert(
+	sizeof(FViewConstants) == 16 + 4 * 32 + 32 * 32 + 9 * 16 + 64 + 64 + 16 + 16 + 16 + 4 * 16 + 16 + 16 * 64 + 16,
 	"FViewConstants must be laid out as the shaders declare it");

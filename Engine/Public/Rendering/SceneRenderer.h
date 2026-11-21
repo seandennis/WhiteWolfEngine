@@ -83,6 +83,16 @@ public:
 	int32 ShadowMapSize = 2048;
 
 	/**
+	 * The distance, in metres, within which surfaces dim the sky light that reaches each other: the reach of
+	 * ambient occlusion. Half a metre darkens the creases and contact lines of things the size of furniture. Zero
+	 * or less switches ambient occlusion off.
+	 */
+	float AmbientOcclusionRadius = 0.5f;
+
+	/** How strongly ambient occlusion dims the sky light. One is the natural amount; zero or less switches it off. */
+	float AmbientOcclusionIntensity = 1.0f;
+
+	/**
 	 * Draws a scene onto a render target, replacing what the target showed.
 	 *
 	 * A mesh component is drawn if it is visible, its mesh has geometry and it and its entity have not been

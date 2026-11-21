@@ -360,6 +360,8 @@ namespace
 	 * Creates a pipeline that draws static meshes with the given fragment shader, with depth testing and without
 	 * the backs of triangles.
 	 *
+	 * @param BindingLayouts The layouts of what the shaders read, in the order of their descriptor sets: the
+	 * scene's data, then the material's textures, then what belongs to the render target.
 	 * @param ColorFormat The format of the surface the pipeline draws on.
 	 * @param DepthFormat The format of the depth buffer that goes with it.
 	 */
@@ -367,8 +369,7 @@ namespace
 		nvrhi::IInputLayout* InputLayout,
 		nvrhi::IShader* VertexShader,
 		nvrhi::IShader* FragmentShader,
-		nvrhi::IBindingLayout* SceneBindingLayout,
-		nvrhi::IBindingLayout* MaterialBindingLayout,
+		std::span<nvrhi::IBindingLayout* const> BindingLayouts,
 		nvrhi::Format ColorFormat,
 		nvrhi::Format DepthFormat)
 	{
@@ -377,9 +378,10 @@ namespace
 		Description.inputLayout = InputLayout;
 		Description.VS = VertexShader;
 		Description.PS = FragmentShader;
-		// The order of the layouts is the number of the descriptor set each is in the shaders.
-		Description.bindingLayouts.push_back(SceneBindingLayout);
-		Description.bindingLayouts.push_back(MaterialBindingLayout);
+		for (nvrhi::IBindingLayout* const BindingLayout : BindingLayouts)
+		{
+			Description.bindingLayouts.push_back(BindingLayout);
+		}
 		// Triangles face the viewer when their corners run counter-clockwise, and the backs are not drawn.
 		Description.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Back;
 		Description.renderState.rasterState.frontCounterClockwise = true;
@@ -561,21 +563,51 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 		return nullptr;
 	}
 
+	// What belongs to the render target, as the lit pass reads it: descriptor set 2, see TargetData.glsl.
+	NewImplementation->TargetBindingLayout =
+		RenderInterface.createBindingLayout(nvrhi::BindingLayoutDesc()
+												.setVisibility(nvrhi::ShaderType::Pixel)
+												.setRegisterSpaceAndDescriptorSet(2)
+												.addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))
+												.addItem(nvrhi::BindingLayoutItem::Sampler(0)));
+	const nvrhi::ShaderHandle PrepassShader = CreateShader(RenderInterface, "Prepass.frag", nvrhi::ShaderType::Pixel);
+	const bool bHasOcclusionPasses = NewImplementation->Occlusion.Initialize(NewImplementation->Context,
+		FRenderTarget::FImplementation::OcclusionFormat,
+		FRenderTarget::FImplementation::ColorFormat);
+	if (NewImplementation->TargetBindingLayout == nullptr || PrepassShader == nullptr || !bHasOcclusionPasses)
+	{
+		OutError = "the graphics card could not create what ambient occlusion needs";
+		return nullptr;
+	}
+
+	// The layouts of what each pipeline reads, in the order of the descriptor sets.
+	nvrhi::IBindingLayout* const SceneLayout = NewImplementation->SceneBindingLayout;
+	nvrhi::IBindingLayout* const MaterialLayout = NewImplementation->MaterialBindingLayout;
+	nvrhi::IBindingLayout* const TargetLayout = NewImplementation->TargetBindingLayout;
+	const std::array<nvrhi::IBindingLayout*, 3> LitLayouts{SceneLayout, MaterialLayout, TargetLayout};
+	const std::array<nvrhi::IBindingLayout*, 2> UnlitLayouts{SceneLayout, MaterialLayout};
+	const std::array<nvrhi::IBindingLayout*, 1> PrepassLayouts{SceneLayout};
+
 	NewImplementation->LitPipeline = CreateMeshPipeline(RenderInterface,
 		InputLayout,
 		VertexShader,
 		LitShader,
-		NewImplementation->SceneBindingLayout,
-		NewImplementation->MaterialBindingLayout,
+		LitLayouts,
 		FRenderTarget::FImplementation::SceneColorFormat,
 		FRenderTarget::FImplementation::DepthFormat);
 	NewImplementation->UnlitPipeline = CreateMeshPipeline(RenderInterface,
 		InputLayout,
 		VertexShader,
 		UnlitShader,
-		NewImplementation->SceneBindingLayout,
-		NewImplementation->MaterialBindingLayout,
+		UnlitLayouts,
 		FRenderTarget::FImplementation::ColorFormat,
+		FRenderTarget::FImplementation::DepthFormat);
+	NewImplementation->PrepassPipeline = CreateMeshPipeline(RenderInterface,
+		InputLayout,
+		VertexShader,
+		PrepassShader,
+		PrepassLayouts,
+		FRenderTarget::FImplementation::NormalFormat,
 		FRenderTarget::FImplementation::DepthFormat);
 	NewImplementation->TonemapPipeline = CreateTonemapPipeline(
 		RenderInterface, NewImplementation->TonemapBindingLayout, FRenderTarget::FImplementation::ColorFormat);
@@ -584,7 +616,8 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 		FRenderTarget::FImplementation::SceneColorFormat,
 		FRenderTarget::FImplementation::DepthFormat);
 	if (NewImplementation->LitPipeline == nullptr || NewImplementation->UnlitPipeline == nullptr ||
-		NewImplementation->TonemapPipeline == nullptr || NewImplementation->SkyPipeline == nullptr)
+		NewImplementation->PrepassPipeline == nullptr || NewImplementation->TonemapPipeline == nullptr ||
+		NewImplementation->SkyPipeline == nullptr)
 	{
 		OutError = "the graphics card could not create the pipelines that draw and light meshes";
 		return nullptr;
@@ -633,6 +666,10 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		{ return Entry.first != nullptr && Entry.second.Material.Get() == nullptr; });
 
 	const bool bIsLit = ViewMode == ESceneViewMode::Lit;
+	const bool bShowsOcclusion = ViewMode == ESceneViewMode::AmbientOcclusion;
+	const bool bOcclusionIsSwitchedOn = std::isfinite(AmbientOcclusionRadius) && AmbientOcclusionRadius > 0.0f &&
+		std::isfinite(AmbientOcclusionIntensity) && AmbientOcclusionIntensity > 0.0f;
+	const bool bHasOcclusion = (bIsLit || bShowsOcclusion) && bOcclusionIsSwitchedOn;
 	const float AspectRatio = static_cast<float>(TargetData.Width) / static_cast<float>(TargetData.Height);
 	const FSceneContents Contents = CollectScene(Scene, View, AspectRatio, bIsLit);
 	const int32 DrawCount = static_cast<int32>(Contents.Meshes.size());
@@ -780,6 +817,8 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 
 	// The lights of the picture, with what the sky light and the shadows add to them.
 	FViewConstants ViewConstants = Contents.ViewConstants;
+	ViewConstants.ScreenParameters = glm::vec4(
+		1.0f / static_cast<float>(TargetData.Width), 1.0f / static_cast<float>(TargetData.Height), 0.0f, 0.0f);
 	for (std::size_t ShadowIndex = 0; ShadowIndex < ShadowLights.size(); ++ShadowIndex)
 	{
 		const std::size_t LightIndex = static_cast<std::size_t>(ShadowLights[ShadowIndex]);
@@ -846,6 +885,54 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 
 		TargetData.TonemapBindingSet = std::move(NewBindingSet);
 		TargetData.TonemapBindingLayout = Implementation->TonemapBindingLayout;
+	}
+
+	// Ambient occlusion reads this target's depth and normals and writes its occlusion textures; the lit pass
+	// then reads the first of those, or a white texture if there is no ambient occlusion.
+	const bool bOcclusionIsPrepared = !bHasOcclusion ||
+		Implementation->Occlusion.PrepareTarget(TargetData.OcclusionBindings,
+			TargetData.DepthTexture,
+			TargetData.NormalTexture,
+			TargetData.OcclusionTextures[0],
+			TargetData.OcclusionTextures[1]);
+	nvrhi::ITexture* const OcclusionSource =
+		bHasOcclusion ? TargetData.OcclusionTextures[0].Get() : Implementation->WhiteTexture.Get();
+	const bool bLitBindingsAreCurrent = TargetData.LitBindingLayout == Implementation->TargetBindingLayout &&
+		TargetData.LitBoundOcclusion == OcclusionSource;
+	if (bOcclusionIsPrepared && bIsLit && !bLitBindingsAreCurrent)
+	{
+		nvrhi::BindingSetHandle NewBindingSet = Device.createBindingSet(
+			nvrhi::BindingSetDesc()
+				.addItem(nvrhi::BindingSetItem::Texture_SRV(0, OcclusionSource))
+				.addItem(nvrhi::BindingSetItem::Sampler(
+					0, Implementation->GetSampler(ETextureWrap::ClampToEdge, ETextureWrap::ClampToEdge))),
+			Implementation->TargetBindingLayout);
+		if (NewBindingSet != nullptr)
+		{
+			TargetData.LitBindingSet = std::move(NewBindingSet);
+			TargetData.LitBindingLayout = Implementation->TargetBindingLayout;
+			TargetData.LitBoundOcclusion = OcclusionSource;
+		}
+	}
+	const bool bLitBindingsExist = !bIsLit ||
+		(TargetData.LitBindingLayout == Implementation->TargetBindingLayout &&
+			TargetData.LitBoundOcclusion == OcclusionSource);
+	if (!bOcclusionIsPrepared || !bLitBindingsExist)
+	{
+		OutError = "the graphics card could not bind the render target's ambient occlusion";
+		return false;
+	}
+
+	FAmbientOcclusion::FConstants OcclusionConstants;
+	{
+		const float HalfHeight = std::tan(glm::radians(View.VerticalFieldOfView) * 0.5f);
+		const float PixelsPerMetre = static_cast<float>(TargetData.Height) / (2.0f * HalfHeight);
+		OcclusionConstants.RelativeToView = View.GetViewMatrix();
+		OcclusionConstants.Projection = glm::vec4(HalfHeight * AspectRatio, HalfHeight, View.NearPlane, PixelsPerMetre);
+		OcclusionConstants.Settings = glm::vec4(AmbientOcclusionRadius,
+			AmbientOcclusionIntensity,
+			static_cast<float>(TargetData.Width),
+			static_cast<float>(TargetData.Height));
 	}
 
 	if (Contents.IgnoredLightCount > 0 && !Implementation->bWarnedAboutLightLimit)
@@ -934,29 +1021,32 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		}
 	}
 
-	// A lit scene is drawn into the high dynamic range buffer; an unlit one straight onto the surface.
-	const float MaxBackground = bIsLit ? MaxSceneLight : 1.0f;
-	const nvrhi::Color ClearColor(std::clamp(BackgroundColor.R, 0.0f, MaxBackground),
-		std::clamp(BackgroundColor.G, 0.0f, MaxBackground),
-		std::clamp(BackgroundColor.B, 0.0f, MaxBackground),
-		std::clamp(BackgroundColor.A, 0.0f, 1.0f));
-	CommandList.clearTextureFloat(
-		bIsLit ? TargetData.SceneColorTexture : TargetData.Texture, nvrhi::AllSubresources, ClearColor);
+	const nvrhi::Viewport Viewport(static_cast<float>(TargetData.Width), static_cast<float>(TargetData.Height));
 	const bool bClearDepth = true;
 	const bool bClearStencil = false;
 	CommandList.clearDepthStencilTexture(
 		TargetData.DepthTexture, nvrhi::AllSubresources, bClearDepth, FarthestDepth, bClearStencil, 0);
 
-	const nvrhi::Viewport Viewport(static_cast<float>(TargetData.Width), static_cast<float>(TargetData.Height));
-
-	if (DrawCount > 0)
+	// Draws every mesh of the picture with one pipeline. MaterialBindings is false for a pipeline that does not
+	// read materials, and TargetBindings null for one that reads nothing of the render target.
+	const auto DrawMeshes = [&](nvrhi::IGraphicsPipeline* Pipeline,
+								nvrhi::IFramebuffer* Framebuffer,
+								bool bMaterialBindings,
+								nvrhi::IBindingSet* TargetBindings)
 	{
 		nvrhi::GraphicsState State;
-		State.pipeline = bIsLit ? Implementation->LitPipeline : Implementation->UnlitPipeline;
-		State.framebuffer = bIsLit ? TargetData.SceneFramebuffer : TargetData.Framebuffer;
+		State.pipeline = Pipeline;
+		State.framebuffer = Framebuffer;
 		State.viewport.addViewportAndScissorRect(Viewport);
 		State.bindings.push_back(Implementation->SceneBindingSet);
-		State.bindings.push_back(nullptr);
+		if (bMaterialBindings)
+		{
+			State.bindings.push_back(nullptr);
+		}
+		if (TargetBindings != nullptr)
+		{
+			State.bindings.push_back(TargetBindings);
+		}
 		State.vertexBuffers.resize(1);
 
 		for (int32 DrawIndex = 0; DrawIndex < DrawCount; ++DrawIndex)
@@ -969,13 +1059,68 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 									.setBuffer(Buffers.IndexBuffer)
 									.setFormat(nvrhi::Format::R32_UINT)
 									.setOffset(0);
-			State.bindings[1] = MaterialBindingSets[static_cast<std::size_t>(DrawIndex)];
+			if (bMaterialBindings)
+			{
+				State.bindings[1] = MaterialBindingSets[static_cast<std::size_t>(DrawIndex)];
+			}
 			CommandList.setGraphicsState(State);
 
 			// The instance number is how the shaders find this mesh's FDrawData.
 			CommandList.drawIndexed(nvrhi::DrawArguments()
 										.setVertexCount(Buffers.IndexCount)
 										.setStartInstanceLocation(static_cast<uint32>(DrawIndex)));
+		}
+	};
+
+	if (bHasOcclusion)
+	{
+		// Ambient occlusion is worked out from the depth of the picture and the way its surfaces face, so those
+		// are drawn first, by themselves. The lit pass afterwards draws the same surfaces at the same depths.
+		const nvrhi::Color NoSurface(0.5f, 0.5f, 1.0f, 1.0f);
+		CommandList.clearTextureFloat(TargetData.NormalTexture, nvrhi::AllSubresources, NoSurface);
+		const bool bPrepassReadsMaterials = false;
+		DrawMeshes(Implementation->PrepassPipeline, TargetData.PrepassFramebuffer, bPrepassReadsMaterials, nullptr);
+		Implementation->Occlusion.Draw(CommandList,
+			TargetData.OcclusionBindings,
+			TargetData.OcclusionFramebuffers[0],
+			TargetData.OcclusionFramebuffers[1],
+			OcclusionConstants);
+	}
+
+	if (bShowsOcclusion)
+	{
+		if (bHasOcclusion)
+		{
+			Implementation->Occlusion.Show(
+				CommandList, TargetData.OcclusionBindings, TargetData.OutputFramebuffer, OcclusionConstants);
+		}
+		else
+		{
+			// Switched off, ambient occlusion hides nothing anywhere.
+			const nvrhi::Color Unoccluded(1.0f, 1.0f, 1.0f, 1.0f);
+			CommandList.clearTextureFloat(TargetData.Texture, nvrhi::AllSubresources, Unoccluded);
+		}
+	}
+	else
+	{
+		// A lit scene is drawn into the high dynamic range buffer; an unlit one straight onto the surface.
+		const float MaxBackground = bIsLit ? MaxSceneLight : 1.0f;
+		const nvrhi::Color ClearColor(std::clamp(BackgroundColor.R, 0.0f, MaxBackground),
+			std::clamp(BackgroundColor.G, 0.0f, MaxBackground),
+			std::clamp(BackgroundColor.B, 0.0f, MaxBackground),
+			std::clamp(BackgroundColor.A, 0.0f, 1.0f));
+		CommandList.clearTextureFloat(
+			bIsLit ? TargetData.SceneColorTexture : TargetData.Texture, nvrhi::AllSubresources, ClearColor);
+
+		const bool bReadsMaterials = true;
+		if (bIsLit)
+		{
+			DrawMeshes(
+				Implementation->LitPipeline, TargetData.SceneFramebuffer, bReadsMaterials, TargetData.LitBindingSet);
+		}
+		else
+		{
+			DrawMeshes(Implementation->UnlitPipeline, TargetData.Framebuffer, bReadsMaterials, nullptr);
 		}
 	}
 
@@ -1020,6 +1165,7 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	Implementation->Statistics.CachedEnvironmentCount = Implementation->Environments.GetCount();
 	Implementation->Statistics.SkyLightCount = bHasSky ? 1 : 0;
 	Implementation->Statistics.ShadowMapCount = ShadowMapCount;
+	Implementation->Statistics.AmbientOcclusionPassCount = bHasOcclusion ? 1 : 0;
 	Implementation->Statistics.DirectionalLightCount = Contents.ViewConstants.LightCounts.x;
 	Implementation->Statistics.PointLightCount = Contents.ViewConstants.LightCounts.y;
 	return true;

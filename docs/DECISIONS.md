@@ -587,3 +587,18 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - **The shadow pass has its own bindings.** NVRHI counts push constants as a constant buffer and requires them to be set for every pipeline whose layout has them, so the constant that says which map is being drawn lives in a small layout of the shadow pass alone, beside the two scene buffers it reads.
 
 **Testing.** One arrangement, a wall, an occluder floating in front of it and a sun at 45 degrees, is drawn at six sizes that put the wall into each cascade in turn: the middle of the shadow must be black and the same place on the other side must be lit exactly as the lighting model says. Further tests move the sun, check that the edge is soft and monotonic, that nothing self-shadows, that shadows end at the shadow distance, that lights and meshes can opt out, that two suns have separate shadows, that sky light and lamps shine into a sun's shadow, and that shadows fall the same ten billion kilometres from the origin.
+
+## D-037: Screen-space ambient occlusion
+
+**Status:** Accepted.
+
+**Decision.**
+
+- **A prepass draws depth and normals.** Before the lit pass, the meshes are drawn once into the render target's depth buffer and a normal texture. The lit pass then draws the same meshes at the same depths; `StaticMesh.vert` declares its position invariant so that both passes arrive at exactly the same depth.
+- **The estimator is "scalable ambient obscurance"** (McGuire, Mara, Luebke, 2012): 16 samples on a spiral within a radius that is fixed in the world, `AmbientOcclusionRadius` (0.5 m by default), each counting how far the surface it finds rises above the plane of the pixel's own surface. It needs only depth and normals, works with a far plane at infinity, and gives a flat surface exactly no occlusion at any viewing angle, which a test demands of every pixel.
+- **The result is smoothed in two passes,** across and down, over every second pixel up to eight away, without spreading across differences in depth of more than three percent.
+- **Ambient occlusion dims the sky light only,** like a material's occlusion texture (D-035). Light from lamps and suns is not ambient and is left alone.
+- **It belongs to the render target.** The normal texture and two occlusion textures are created with each render target, and reach the lit pass as descriptor set 2. When ambient occlusion is off, the prepass is skipped and the lit pass reads a white pixel instead.
+- **`ESceneViewMode::AmbientOcclusion`** shows the result by itself, for inspecting it and for testing it exactly.
+
+**Testing.** In the occlusion view mode: an empty scene, a wall seen head-on and a floor seen at flat angles must be white in every pixel; a corner must be dark at its crease, lighter away from it and white beyond the radius; the radius and intensity must do what they say; something near the camera must not darken a wall five metres behind it; the band of occlusion must be as dark in a picture twice the size; and the picture must be pixel for pixel the same ten billion kilometres from the origin. Lit, ambient occlusion must darken a crease under a sky light and change nothing under a sun alone.

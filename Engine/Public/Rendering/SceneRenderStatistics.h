@@ -32,6 +32,9 @@ struct FSceneRenderStatistics
 	/** How many shadow maps were drawn: four for each directional light that cast shadows. */
 	int32 ShadowMapCount = 0;
 
+	/** One if ambient occlusion was worked out for the picture, zero if not. */
+	int32 AmbientOcclusionPassCount = 0;
+
 	/** How many directional lights lit the picture. Always zero in the unlit view mode. */
 	int32 DirectionalLightCount = 0;
 

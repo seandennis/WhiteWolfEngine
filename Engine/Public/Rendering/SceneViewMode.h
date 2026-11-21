@@ -13,4 +13,10 @@ enum class ESceneViewMode : uint8
 	 * tone mapping involved. For inspecting a scene, and for tests that check where things are drawn.
 	 */
 	Unlit,
+
+	/**
+	 * Shows the ambient occlusion by itself, as shades of grey: white where a surface is in the open, darker where
+	 * it is hidden from its surroundings in a crease, a corner or under something. For inspecting that effect.
+	 */
+	AmbientOcclusion,
 };

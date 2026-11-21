@@ -13,7 +13,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | 1 | Repository, CMake build, test framework, `AGENTS.md`, code style tooling, first push to GitHub | Complete |
 | 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | Complete |
 | 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Complete |
-| 4 | Renderer: image-based lighting, soft shadows, SSAO | In progress. Done: Radiance HDR image files; environment maps and sky lights, which light a scene from an HDRI, mirror it in metals and show it as the sky; cascaded shadow maps with soft edges for directional lights. Still to do: SSAO, the test scene with all three |
+| 4 | Renderer: image-based lighting, soft shadows, SSAO | In progress. Done: Radiance HDR image files; environment maps and sky lights, which light a scene from an HDRI, mirror it in metals and show it as the sky; cascaded shadow maps with soft edges for directional lights; screen-space ambient occlusion. Still to do: a test scene and reference image that show all three (the current test scene has no sky light, so its picture shows neither image-based lighting nor ambient occlusion), then a green CI run |
 | 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | Not started |
 | 6 | Plugin system, ChronoPhysics plugin, audio components | Not started |
 | 7 | C++ scripting module with hot reload, prefabs, full test scene | Not started |

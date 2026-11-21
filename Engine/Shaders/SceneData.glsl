@@ -107,6 +107,9 @@ layout(set = 0, binding = 256, std140) uniform FViewConstants
 	// Takes a camera-relative position into each shadow map: x and y from -1 to 1 across it, depth from 0 at the
 	// light's side to 1. A light's maps follow each other, one per cascade.
 	mat4 ShadowMatrices[MaxDirectionalLights * ShadowCascadeCount];
+
+	// x: one divided by the width of the picture in pixels, y: one divided by its height.
+	vec4 ScreenParameters;
 } View;
 
 // The environment of the sky light: blurred by roughness for reflections, and as it is for the sky. Textures are

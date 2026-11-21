@@ -8,6 +8,10 @@ layout(location = 0) in vec3 InPosition;
 layout(location = 1) in vec3 InNormal;
 layout(location = 2) in vec2 InTextureCoordinate;
 
+// The prepass and the lit pass draw the same meshes and compare their depths, so both must arrive at exactly the
+// same position.
+invariant gl_Position;
+
 layout(location = 0) out vec3 OutRelativePosition;
 layout(location = 1) out vec3 OutNormal;
 layout(location = 2) out vec2 OutTextureCoordinate;

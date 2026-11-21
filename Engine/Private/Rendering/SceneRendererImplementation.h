@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Rendering/AmbientOcclusion.h"
 #include "Rendering/EnvironmentCache.h"
 #include "Rendering/MaterialBindings.h"
 #include "Rendering/RenderContext.h"
@@ -57,6 +58,15 @@ struct FSceneRenderer::FImplementation
 
 	/** Draws the sky light's environment behind the scene. */
 	nvrhi::GraphicsPipelineHandle SkyPipeline;
+
+	/** Draws the depth of the scene and the way its surfaces face, ahead of the lit pass, for ambient occlusion. */
+	nvrhi::GraphicsPipelineHandle PrepassPipeline;
+
+	/** The ambient occlusion passes. */
+	FAmbientOcclusion Occlusion;
+
+	/** How what belongs to a render target reaches the lit pass: its ambient occlusion, and a sampler. */
+	nvrhi::BindingLayoutHandle TargetBindingLayout;
 
 	/** Draws meshes lit, into the high dynamic range buffer of a render target. */
 	nvrhi::GraphicsPipelineHandle LitPipeline;
