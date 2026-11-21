@@ -30,6 +30,10 @@ jobs:
         configuration: [debug, release]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Compiler, linker and failed-test messages become annotations on the run, so the cause of a
+      # failure can be read on the summary page without opening the log.
+      - name: Report errors as annotations
+        run: echo "::add-matcher::.github/problem-matchers/compilers.json"
       - name: Configure, build and test
         run: cmake --workflow --preset windows-${{ matrix.configuration }}
 
@@ -45,6 +49,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install --yes ninja-build
+      # Compiler, linker and failed-test messages become annotations on the run, so the cause of a
+      # failure can be read on the summary page without opening the log.
+      - name: Report errors as annotations
+        run: echo "::add-matcher::.github/problem-matchers/compilers.json"
       - name: Configure, build and test
         run: cmake --workflow --preset ${{ matrix.preset }}
 

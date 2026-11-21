@@ -1,0 +1,52 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "white-wolf-gcc-clang",
+      "pattern": [
+        {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+(?:fatal\\s+)?(warning|error):\\s+(.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      ]
+    },
+    {
+      "owner": "white-wolf-msvc",
+      "pattern": [
+        {
+          "regexp": "^\\s*(.+?)\\((\\d+)(?:,(\\d+))?\\):\\s+(?:fatal\\s+)?(warning|error)(?:\\s+[A-Z]+\\d+)?\\s*:\\s+(.+?)(?:\\s+\\[.+\\])?$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      ]
+    },
+    {
+      "owner": "white-wolf-linker",
+      "severity": "error",
+      "pattern": [
+        {
+          "regexp": "^(.*(?:undefined reference to|unresolved external symbol|multiple definition of|collect2: error|ninja: error|CMake Error).*)$",
+          "message": 1
+        }
+      ]
+    },
+    {
+      "owner": "white-wolf-doctest",
+      "severity": "error",
+      "pattern": [
+        {
+          "regexp": "^(.+?)[:(](\\d+)\\)?:\\s+(?:FATAL )?ERROR:\\s+(.+)$",
+          "file": 1,
+          "line": 2,
+          "message": 3
+        }
+      ]
+    }
+  ]
+}
