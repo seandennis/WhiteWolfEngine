@@ -1,0 +1,10 @@
+#!/bin/sh
+# Rejects a commit while any first-party C++ file in the working tree is not clang-formatted.
+#
+# Enable once per clone:
+#   git config core.hooksPath Tools/GitHooks
+#
+# This is only the fast part of the pre-commit checklist in AGENTS.md; the build and the full
+# test suite must still be run before committing.
+
+exec cmake -DCHECK=ON -P "$(git rev-parse --show-toplevel)/Tools/Format.cmake"

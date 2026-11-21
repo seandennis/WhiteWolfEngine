@@ -54,3 +54,22 @@ if(WW_BUILD_TESTS)
 endif()
 
 add_subdirectory(Engine)
+
+# Code style. `format` rewrites the sources with clang-format and `format-check` verifies them;
+# CTest runs the same check, so a passing test run also means the code is formatted.
+set(format_script "${CMAKE_CURRENT_SOURCE_DIR}/Tools/Format.cmake")
+add_custom_target(format
+    COMMAND "${CMAKE_COMMAND}" -P "${format_script}"
+    COMMENT "Formatting C++ sources with clang-format"
+    VERBATIM)
+add_custom_target(format-check
+    COMMAND "${CMAKE_COMMAND}" -DCHECK=ON -P "${format_script}"
+    COMMENT "Checking C++ source formatting with clang-format"
+    VERBATIM)
+set_target_properties(format format-check PROPERTIES FOLDER "Tools")
+
+if(WW_BUILD_TESTS)
+    add_test(NAME CodeStyle.ClangFormat
+        COMMAND "${CMAKE_COMMAND}" -DCHECK=ON -DALLOW_SKIP=ON -P "${format_script}")
+    set_tests_properties(CodeStyle.ClangFormat PROPERTIES SKIP_REGULAR_EXPRESSION "FORMAT CHECK SKIPPED")
+endif()
