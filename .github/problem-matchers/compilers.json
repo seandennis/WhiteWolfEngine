@@ -37,6 +37,51 @@
       ]
     },
     {
+      "owner": "white-wolf-sanitizer-undefined",
+      "severity": "error",
+      "pattern": [
+        {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+runtime error:\\s+(.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
+        }
+      ]
+    },
+    {
+      "owner": "white-wolf-sanitizer-report",
+      "severity": "error",
+      "pattern": [
+        {
+          "regexp": "^(?:==\\d+==)?\\s*((?:ERROR|SUMMARY): \\w+Sanitizer: .+)$",
+          "message": 1
+        }
+      ]
+    },
+    {
+      "owner": "white-wolf-sanitizer-frame",
+      "severity": "error",
+      "pattern": [
+        {
+          "regexp": "^\\s+(#[0-3] 0x[0-9a-f]+ in .+?) (\\/.+?):(\\d+)(?::\\d+)?$",
+          "message": 1,
+          "file": 2,
+          "line": 3
+        }
+      ]
+    },
+    {
+      "owner": "white-wolf-ctest",
+      "severity": "error",
+      "pattern": [
+        {
+          "regexp": "^\\s*(\\d+ - \\S+ \\((?:Failed|Subprocess aborted|SEGFAULT|Timeout|Not Run|.*Exception.*)\\))\\s*$",
+          "message": 1
+        }
+      ]
+    },
+    {
       "owner": "white-wolf-doctest-context",
       "severity": "error",
       "pattern": [
