@@ -408,7 +408,7 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - CI has no graphics card, so it installs **Lavapipe**, Mesa's implementation of Vulkan on the processor: from the `mesa-vulkan-drivers` package on Linux, and on Windows with the action `jakoch/install-vulkan-sdk-action` (v1.8.1, pinned to its commit), which also installs the Vulkan loader and registers Lavapipe with it.
 - **doctest runs single-threaded** (`DOCTEST_CONFIG_NO_MULTITHREADING`). doctest keeps per-thread state in `thread_local` containers. A `thread_local` is constructed in every thread that starts in the process, including the worker threads of a graphics driver, which are still running when the process exits; their copies are never destroyed, and the debug heap reported them as leaks as soon as a test opened the graphics card. The tests assert on the main thread only, so nothing is lost. The same reasoning applies to engine code: a `thread_local` with a destructor will be reported as a leak by the same mechanism.
 
-**Not yet.** Shaders and pipelines, a swap chain for windows, and Vulkan's own validation layers (which need the Vulkan SDK) come with the next steps of milestone 3.
+**Not yet.** Shaders and pipelines come with the next steps of milestone 3 (D-027 onwards). A swap chain for windows comes with the first executable that has a window (D-034), and Vulkan's own validation layers would need the Vulkan SDK.
 
 ## D-027: Shaders are GLSL, compiled while the engine is built
 
@@ -535,3 +535,18 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 **Alternatives considered.** tinygltf is as widely used but brings a JSON library and image loading of its own, both of which the engine already has. Assimp reads many more formats at many times the size, and converts everything to its own conventions; the specification asks for glTF.
 
 **Testing.** The tests build their glTF files in code, as text with embedded base64 data, with a .bin file beside it, and as .glb, so no binary fixtures are stored and each test shows what its file contains. They cover the three ways of storing data, hierarchies and transforms, sharing, flat normals, every index size, materials and textures in all three storage forms, lights, each warning, each way a file can be unusable, and drawing an imported file.
+
+## D-034: The renderer's test scene and its reference image
+
+**Status:** Accepted.
+
+**Decision.**
+
+- **The renderer has one test scene,** built in code by `Tests/Rendering/RendererTestScene.h`: a textured floor, spheres of plastic, metal and chalk, a box with a colour texture, a box with a normal texture, an emissive sphere, a point light and a directional light. It is built in code, not loaded from a file, so that it needs no assets, exercises `FMeshShapes`, and can be placed anywhere in the world by passing an origin.
+- **A test draws the scene without a window, 320 by 180 pixels, and compares the picture with a PNG in the repository,** `Engine/Tests/Rendering/ReferenceImages/RendererTestScene.png`, as the specification asks.
+- **The comparison has a tolerance.** A pixel counts as different if a channel is off by more than 12 of 255, and at most 2% of the pixels may be different. The reference was drawn on one graphics card and the tests run on several, including software rendering in CI: lighting arithmetic differs in the last bits, and a triangle's edge may fall on the other side of a pixel centre. The tolerance is wide enough for that and far too narrow to pass a missing object, a wrong material or a light that is off, each of which changes thousands of pixels by much more.
+- **The same reference serves the scene at the origin, 1,000 km and ten billion kilometres from it,** as the specification asks. The test also requires the three pictures to be equal to each other pixel for pixel on the machine that draws them, which no tolerance could hide a precision problem from.
+- **A mismatch never changes the repository.** The test saves what it drew under `Build/<preset>/TestOutput/` and fails with the path of both pictures and a description of the difference. Replacing a reference image is a deliberate act: a person or agent looks at the new picture, copies it over the old one, and commits it with the change that caused it.
+- **Exact tests stay the main defence.** The reference image catches what nobody thought to test; placement, depth, culling, lighting values, textures and the importer are each tested exactly or against the lighting model, by the tests of D-029 to D-033.
+
+**Not in this milestone.** Showing the picture in a window. The specification's milestone 3 asks for headless rendering; presenting a render target on screen needs a swap chain and belongs to the first executable that has a window.

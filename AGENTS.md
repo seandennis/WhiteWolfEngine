@@ -87,6 +87,7 @@ Build\windows\Binaries\Debug\EngineTests.exe --test-case="*Parse*"
 - Test the contract, including every failure path: malformed input, boundaries, overflow, empty input.
 - To test logging or a fatal error, create an `FScopedLogCapture` (`TestSupport/ScopedLogCapture.h`). While it is alive, log messages are recorded and a Fatal message or failed `WW_CHECK` throws `FFatalErrorException` instead of terminating: `CHECK_THROWS_AS(DoBadThing(), FFatalErrorException);`.
 - Tests that write files use an `FScopedTempDirectory` (`TestSupport/ScopedTempDirectory.h`) and never write into the repository.
+- **Reference images.** `Tests/Rendering/RendererTestSceneTests.cpp` draws the renderer's test scene (`Tests/Rendering/RendererTestScene.h`) and compares it with `Engine/Tests/Rendering/ReferenceImages/RendererTestScene.png`, allowing the small differences between graphics cards (D-034). When the picture does not match, the test fails and saves what it drew as `Build/<preset>/TestOutput/RendererTestScene.png`. Look at that picture. If the renderer is wrong, fix the renderer. If the picture is right, because a change was meant to alter how the scene looks, copy it over the reference image and commit it with the change, and say in the commit message why the picture changed.
 
 ## Directory layout
 
@@ -145,6 +146,8 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Rendering/TestSceneRendering.h  Helpers for tests that draw scenes: FSceneRenderTest, squares, colours
     Rendering/TestSceneLighting.h   The lighting model written out again in C++, and a lit test scene
     Rendering/TestGltfFiles.h       Builds small .gltf and .glb files for the importer's tests
+    Rendering/RendererTestScene.h   The renderer's test scene, which is compared with a reference image
+    Rendering/ReferenceImages/      The reference images
 Tools/
   Format.cmake            Formats or checks all C++ sources
   GitHooks/pre-commit     Optional hook that runs the format check

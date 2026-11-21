@@ -21,6 +21,12 @@ if(TARGET EngineTests)
         COMPILE_DEFINITIONS
             "WW_EXPECTED_VERSION_MAJOR=${PROJECT_VERSION_MAJOR};WW_EXPECTED_VERSION_MINOR=${PROJECT_VERSION_MINOR};WW_EXPECTED_VERSION_PATCH=${PROJECT_VERSION_PATCH}")
 
+    # The renderer's test scene is compared with reference images kept beside the tests. A picture
+    # that does not match is written to the build directory, never into the repository.
+    set_source_files_properties(Tests/Rendering/RendererTestSceneTests.cpp PROPERTIES
+        COMPILE_DEFINITIONS
+            "WW_REFERENCE_IMAGE_DIRECTORY=\"${CMAKE_CURRENT_SOURCE_DIR}/Tests/Rendering/ReferenceImages\";WW_TEST_OUTPUT_DIRECTORY=\"${CMAKE_BINARY_DIR}/TestOutput\"")
+
     # Proves that leak detection is switched on, by leaking on purpose and requiring the report.
     # Registered only where a leak can be detected: MSVC Debug builds (the debug heap of the C
     # runtime) and GCC or Clang builds with AddressSanitizer (LeakSanitizer).
