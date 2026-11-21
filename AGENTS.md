@@ -75,7 +75,7 @@ Build\windows\Binaries\Debug\EngineTests.exe --test-suite="FVersion"
 Build\windows\Binaries\Debug\EngineTests.exe --test-case="*Parse*"
 ```
 
-- Tests use [doctest](https://github.com/doctest/doctest). Each module has one test executable, `<Module>Tests`, built from every file under `<Module>/Tests/`, and one CTest entry of the same name.
+- Tests use [doctest](https://github.com/doctest/doctest). Each module has one test executable, `<Module>Tests`, built from every file under `<Module>/Tests/`, and one CTest entry of the same name. The header tool has its own, `HeaderToolTests`.
 - Tests are headless: they never open a window, wait for input or need a GPU-attached display.
 - `EngineTests.DetectsMemoryLeaks` is a CTest entry that leaks memory on purpose and passes only if the leak is reported. It exists in MSVC Debug builds and under `linux-sanitize`, the builds that can detect leaked allocations.
 - A test executable's `main` starts with `FProcessDiagnostics::DisableErrorDialogs()` and `FProcessDiagnostics::EnableMemoryLeakReport()`, so a crash cannot hang the run in a dialog and leaks are reported at exit.
@@ -101,7 +101,7 @@ CMakePresets.json         Configure, build, test and workflow presets
 .claude/skills/           Step-by-step procedures for common development tasks
 CMake/                    Build helpers
   WhiteWolfCompilerSettings.cmake   Warning levels, conformance flags, sanitizers
-  WhiteWolfModule.cmake             ww_add_module() and ww_add_module_tests()
+  WhiteWolfModule.cmake             ww_add_module(), ww_add_module_tests(), ww_generate_reflection()
   WhiteWolfThirdParty.cmake         Pinned engine dependencies (glm)
   WhiteWolfThirdPartyTesting.cmake  Pinned test-only dependencies (doctest)
 Engine/                   The core engine module (WhiteWolfEngine.dll)
@@ -129,6 +129,10 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
 Tools/
   Format.cmake            Formats or checks all C++ sources
   GitHooks/pre-commit     Optional hook that runs the format check
+  HeaderTool/             WhiteWolfHeaderTool: generates reflection code from WCLASS(), WPROPERTY(), WFUNCTION()
+    Main.cpp              Entry point
+    Private/              Tokenizer, header parser, code generator
+    Tests/                Unit tests (HeaderToolTests executable)
 docs/
   DECISIONS.md            Decision log
 ```
@@ -143,7 +147,7 @@ Reserved by the specification and created by later milestones: `Editor/` (editor
 - **Include order**: a `.cpp` includes its own header first. Every engine header starts with `#include "CoreMinimal.h"` (the headers that `CoreMinimal.h` itself includes start with `Core/CoreTypes.h` instead). Then project headers, then a blank line, then third-party and standard headers. Include exactly what the file uses; do not rely on indirect includes. Prefer forward declarations in headers.
 - **Tests**: add `<Module>/Tests/<Area>/<Subject>Tests.cpp` in the same commit as the code it tests.
 - **Test helper types** that exist only to exercise one feature may share a single `Test<Feature>.h`/`.cpp` pair, as `Tests/Object/TestObjects.h` does. This is the only exception to one type per file.
-- **A new module**: call `ww_add_module(<Name>)` and `ww_add_module_tests(<Name>)` from the module's `CMakeLists.txt`; see `Engine/CMakeLists.txt`.
+- **A new module**: call `ww_add_module(<Name>)` and `ww_add_module_tests(<Name>)` from the module's `CMakeLists.txt`; see `Engine/CMakeLists.txt`. Both run the header tool for the module, so its `WCLASS()` classes are registered without further CMake.
 
 ## Code style
 
@@ -221,32 +225,45 @@ First-party code compiles with `/W4 /WX` on MSVC and an equivalent strict set on
 - **Leaks fail the test run.** The test executable ends with `FGarbageCollector::ReportLeakedObjects()`; a test that leaves an object in the root set makes the whole run fail. MSVC Debug builds and the `linux-sanitize` preset additionally fail on any leaked memory allocation (D-018).
 - **Main thread only.** Objects are created, used and collected on the main thread.
 
-Declaring a class, until the header tool generates this from `WCLASS()` and `WPROPERTY()`:
+Declaring a class:
 
 ```cpp
 // Door.h
+#include "CoreMinimal.h"
+
+#include "Object/ObjectMacros.h"
+#include "Object/ObjectPtr.h"
+
+WCLASS()
 class ENGINE_API WDoor : public WObject
 {
 	WW_DECLARE_CLASS(WDoor, WObject)
 
 public:
+	WPROPERTY(Category = "Door")
+	float OpenAngle = 90.0f;
+
+	WPROPERTY()
 	TObjectPtr<WHinge> Hinge;
+
+	WPROPERTY(Transient)
 	std::vector<TObjectPtr<WPanel>> Panels;
+
+	WFUNCTION(BlueprintCallable)
+	void Open(float Speed);
 };
-
-// Door.cpp
-WW_IMPLEMENT_CLASS(WDoor)
-
-void WDoor::RegisterClassMembers(WClass& Class)
-{
-	Class.AddProperty(MakeProperty<&WDoor::Hinge>("Hinge"));
-	Class.AddProperty(MakeProperty<&WDoor::Panels>("Panels"));
-	Class.AddFunction(MakeFunction<&WDoor::Open>("Open", {"Speed"}));
-}
 ```
 
-A member can be a property if it is a `bool`, a fixed-width integer, `float`, `double`, `std::string`, `FVector`, `FVector3f`, `FQuat`, `FTransform`, a `TObjectPtr`, a `TWeakObjectPtr` or a `std::vector` of any of these. Every property converts to and from JSON (`ExportJson`, `ImportJson`), which is what saving, loading and the agent interface use. A reflected function (`MakeFunction`, from `Reflection/FunctionFactory.h`) must not be static or overloaded; its parameters and return value must be property types or pointers to `WObject` classes.
+That is all: nothing about reflection is written in `Door.cpp`. The build runs `WhiteWolfHeaderTool` over the headers of every module, and the tool writes `Build/<preset>/<Module>/Generated/<Module>.generated.cpp`, which registers each `WCLASS()` class with its properties and functions. The rules the tool enforces, each with an error message that names the file and line:
 
+- `WCLASS()` goes on the line before a class at global scope that derives publicly from `WObject` or another reflected class. The class name starts with `W`, and the first line of the body is `WW_DECLARE_CLASS(<Class>, <BaseClass>)`.
+- `WPROPERTY()` goes before a non-static member variable. Specifiers: `Transient` (not saved), `BlueprintReadOnly`, `BlueprintReadWrite`, `Category = "Name"`.
+- `WFUNCTION()` goes before a member function that is not static, not a template and not overloaded. Every parameter needs a name. Specifiers: `BlueprintCallable`, `BlueprintPure`, `Category = "Name"`.
+- Members may be private. Unknown specifiers are errors, so a typing mistake cannot pass silently.
+
+A member can be a property if it is a `bool`, a fixed-width integer, `float`, `double`, `std::string`, `FVector`, `FVector3f`, `FQuat`, `FTransform`, a `TObjectPtr`, a `TWeakObjectPtr` or a `std::vector` of any of these; any other type is a compile error in the generated file. A function's parameters and return value must be property types or pointers to `WObject` classes. Every property converts to and from JSON (`ExportJson`, `ImportJson`), which is what saving, loading and the agent interface use.
+
+The generated file includes every reflected header of its module, so a forward declaration is enough for a `TObjectPtr<WOther>` member when `WOther` is a reflected class of the same module. For a class from another module, include its header.
 A class is registered when its module loads. Class names are unique across all modules. A class with a pure virtual function is abstract and cannot be created with `NewObject`.
 
 Tests that create objects start with `const FScopedObjectTest ObjectTest;` (`Tests/Object/TestObjects.h`), which collects garbage before and after the test so that tests cannot affect each other.

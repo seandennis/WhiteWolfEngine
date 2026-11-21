@@ -54,6 +54,8 @@ if(WW_BUILD_TESTS)
     include(WhiteWolfThirdPartyTesting)
 endif()
 
+# The header tool comes first: every module runs it to generate its reflection code.
+add_subdirectory(Tools/HeaderTool)
 add_subdirectory(Engine)
 
 # Code style. `format` rewrites the sources with clang-format and `format-check` verifies them;

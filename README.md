@@ -11,7 +11,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | # | Milestone | Status |
 | --- | --- | --- |
 | 1 | Repository, CMake build, test framework, `AGENTS.md`, code style tooling, first push to GitHub | Complete |
-| 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | In progress. Done: logging, assertions, math types, `WObject`/`WClass` with incremental mark-and-sweep garbage collection, `Destroy`/`IsValid`, weak references, leak reporting for objects and for memory allocations. Still to do: reflection of value types and functions with the `WCLASS`/`WPROPERTY`/`WFUNCTION` header tool, ECS, scene serialization, window, input |
+| 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | In progress. Done: logging, assertions, math types, `WObject`/`WClass` with incremental mark-and-sweep garbage collection, `Destroy`/`IsValid`, weak references, leak reporting for objects and for memory allocations, JSON, reflection of properties and functions with the `WCLASS`/`WPROPERTY`/`WFUNCTION` header tool. Still to do: ECS, scene serialization, window, input |
 | 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Not started |
 | 4 | Renderer: image-based lighting, soft shadows, SSAO | Not started |
 | 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | Not started |
@@ -21,7 +21,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | 9 | Blueprint visual scripting, and Tetris rebuilt with Blueprints only | Not started |
 | 10 | ChronoVehicle plugin | Not started |
 
-What exists today: the build system, the `Engine` module (`WhiteWolfEngine.dll`) with versioning (`FVersion`, `FEngineVersion`), logging (`WW_LOG`, categories, console, file and in-memory sinks) assertions (`WW_CHECK`), math types (`FVector`, `FQuat`, `FTransform`) and the object system (`WObject`, `WClass`, `NewObject`, `TObjectPtr`, `TWeakObjectPtr`, garbage collection), the unit test harness, formatting tooling and continuous integration.
+What exists today: the build system, the `Engine` module (`WhiteWolfEngine.dll`) with versioning (`FVersion`, `FEngineVersion`), logging (`WW_LOG`, categories, console, file and in-memory sinks) assertions (`WW_CHECK`), math types (`FVector`, `FQuat`, `FTransform`) the object system (`WObject`, `WClass`, `NewObject`, `TObjectPtr`, `TWeakObjectPtr`, garbage collection), JSON reading and writing (`FJsonValue`) and reflection (`WCLASS()`, `WPROPERTY()`, `WFUNCTION()`, with `WhiteWolfHeaderTool` generating the registration code), the unit test harness, formatting tooling and continuous integration.
 
 ## Requirements
 
@@ -48,7 +48,7 @@ To work in Visual Studio, open the solution in `Build/windows/` after the first 
 | --- | --- |
 | `Engine/` | The core engine module, `WhiteWolfEngine.dll`: `Public/` headers, `Private/` sources, `Tests/` unit tests |
 | `CMake/` | Build helpers: compiler settings, module declaration, pinned dependencies |
-| `Tools/` | Development tools: source formatting, git hooks |
+| `Tools/` | Development tools: the reflection header tool, source formatting, git hooks |
 | `docs/DECISIONS.md` | Every design and tooling decision, with its reasons |
 | `AGENTS.md` | Build and test commands, code style, directory layout and the pre-commit review checklist |
 | `.claude/skills/` | Step-by-step procedures for agents working on the engine |

@@ -1,21 +1,11 @@
 #include "Object/TestObjects.h"
 
 #include "Object/ObjectGlobals.h"
-#include "Reflection/PropertyFactory.h"
 
 FTestObjectStats& FTestObjectStats::Get()
 {
 	static FTestObjectStats Stats;
 	return Stats;
-}
-
-WW_IMPLEMENT_CLASS(WTestObject)
-
-void WTestObject::RegisterClassMembers(WClass& Class)
-{
-	Class.AddProperty(MakeProperty<&WTestObject::Other>("Other"));
-	Class.AddProperty(MakeProperty<&WTestObject::Children>("Children"));
-	Class.AddProperty(MakeProperty<&WTestObject::WeakOther>("WeakOther"));
 }
 
 WTestObject::WTestObject()
@@ -50,24 +40,10 @@ void WTestObject::BeginDestroy()
 	Super::BeginDestroy();
 }
 
-WW_IMPLEMENT_CLASS(WTestDerivedObject)
-
-void WTestDerivedObject::RegisterClassMembers(WClass& Class)
-{
-	Class.AddProperty(MakeProperty<&WTestDerivedObject::Extra>("Extra"));
-}
-
 WW_IMPLEMENT_CLASS(WTestAbstractObject)
 
 void WTestAbstractObject::RegisterClassMembers(WClass& /*Class*/)
 {
-}
-
-WW_IMPLEMENT_CLASS(WTestOwnerObject)
-
-void WTestOwnerObject::RegisterClassMembers(WClass& Class)
-{
-	Class.AddProperty(MakeProperty<&WTestOwnerObject::Subobject>("Subobject"));
 }
 
 WTestOwnerObject::WTestOwnerObject()

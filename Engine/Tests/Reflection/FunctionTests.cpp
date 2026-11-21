@@ -36,10 +36,11 @@ TEST_SUITE("FFunction")
 	{
 		const std::vector<std::unique_ptr<FFunction>>& Functions = WTestValueObject::StaticClass()->GetOwnFunctions();
 
-		REQUIRE(Functions.size() == 11);
+		REQUIRE(Functions.size() == 12);
 		CHECK(Functions[0]->GetName() == "Add");
 		CHECK(Functions[1]->GetName() == "SetText");
 		CHECK(Functions[10]->GetName() == "Describe");
+		CHECK(Functions[11]->GetName() == "GetPrivateValue");
 		CHECK(WTestDerivedValueObject::StaticClass()->GetOwnFunctions().empty());
 	}
 

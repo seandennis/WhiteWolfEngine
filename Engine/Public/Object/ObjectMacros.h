@@ -43,19 +43,49 @@ public:
 };
 
 /**
- * Declares the reflection members of a WObject class. Put it first in the class body:
+ * Marks the class that follows as reflected:
  *
+ *     WCLASS()
  *     class ENGINE_API WDoor : public WObject
  *     {
  *         WW_DECLARE_CLASS(WDoor, WObject)
  *
  *     public:
+ *         WPROPERTY(Category = "Door")
  *         TObjectPtr<WHinge> Hinge;
+ *
+ *         WFUNCTION(BlueprintCallable)
+ *         void Open(float Speed);
  *     };
  *
+ * The build runs WhiteWolfHeaderTool over the module's headers, and the tool writes the code that registers the
+ * class with its properties and functions; nothing has to be written in the source file. The macros themselves
+ * expand to nothing.
+ */
+#define WCLASS(...)
+
+/**
+ * Marks the member variable that follows as a reflected property: it is saved and loaded with the object, shown in
+ * the editor, and followed by the garbage collector if it holds object references.
+ *
+ * Specifiers: Transient (not saved), BlueprintReadOnly, BlueprintReadWrite, Category = "Name".
+ */
+#define WPROPERTY(...)
+
+/**
+ * Marks the member function that follows as a reflected function, which can be called by name. The function must
+ * not be static or overloaded, and every parameter needs a name.
+ *
+ * Specifiers: BlueprintCallable, BlueprintPure, Category = "Name".
+ */
+#define WFUNCTION(...)
+
+/**
+ * Declares the reflection members of a WObject class. Put it first in the class body, as shown for WCLASS.
+ *
  * It declares StaticClass(), the Super and ThisClass aliases and RegisterClassMembers(), and leaves the access
- * level private. The class needs a matching WW_IMPLEMENT_CLASS and a definition of RegisterClassMembers in its
- * source file.
+ * level private. For a class marked with WCLASS() the header tool defines these functions. A class without
+ * WCLASS() needs a WW_IMPLEMENT_CLASS and a definition of RegisterClassMembers in its source file.
  */
 #define WW_DECLARE_CLASS(ClassName, SuperClassName) \
 public: \
@@ -68,7 +98,8 @@ private: \
 
 /**
  * Defines StaticClass() for a class declared with WW_DECLARE_CLASS and registers the class when its module loads.
- * Put it in the class's source file, together with the definition of RegisterClassMembers:
+ * The header tool writes this for every class marked with WCLASS(). To register a class by hand instead, put it in
+ * the class's source file, together with the definition of RegisterClassMembers:
  *
  *     WW_IMPLEMENT_CLASS(WDoor)
  *

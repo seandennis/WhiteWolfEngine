@@ -68,6 +68,8 @@ New source files are picked up automatically; no CMake edit or reconfigure is ne
 | Configure fails with `could not find git` | `git` is not on the `PATH`. Install Git for Windows or add the copy bundled with Visual Studio; see "Toolchain" in `AGENTS.md`. |
 | Configure fails while fetching a dependency | The first configure needs internet access to GitHub. Retry when the network is available; never vendor a copy by hand. |
 | doctest fails to compile with `use of undefined type 'std::basic_ostream'` (MSVC) | A `CHECK` compares a type that doctest prints with `operator<<`, such as `std::string_view`, and the test file does not include `<ostream>`. Include it. |
+| An error of the form `Header.h(12): error: ...` from the step "Generating reflection code" | `WhiteWolfHeaderTool` rejected a `WCLASS()`, `WPROPERTY()` or `WFUNCTION()` declaration. The message says what to change; the rules are in "Objects and garbage collection" in `AGENTS.md`. |
+| A compile error inside `<Module>.generated.cpp` | A reflected member has a type that cannot be reflected, or the header of a class from another module is not included. Fix the declaration in the header; never edit the generated file. |
 | `CodeStyle.ClangFormat` fails | Run `cmake -P Tools/Format.cmake`, review the changes, rebuild. |
 | A sanitizer report under `linux-sanitize` | A real memory, leak or undefined-behaviour bug. Fix it; never suppress it. |
 | Stale or confusing build state | Delete `Build/<configure preset>/` and run the workflow preset again. |

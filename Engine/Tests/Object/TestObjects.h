@@ -32,6 +32,7 @@ struct FTestObjectStats
 };
 
 /** An object with every kind of reference the collector must follow, and one it must not. */
+WCLASS()
 class WTestObject : public WObject
 {
 	WW_DECLARE_CLASS(WTestObject, WObject)
@@ -41,12 +42,15 @@ public:
 	~WTestObject() override;
 
 	/** Reflected: keeps its target alive. */
+	WPROPERTY()
 	TObjectPtr<WTestObject> Other;
 
 	/** Reflected: keeps every element alive. */
+	WPROPERTY()
 	std::vector<TObjectPtr<WTestObject>> Children;
 
 	/** Reflected, but weak: does not keep its target alive. */
+	WPROPERTY()
 	TWeakObjectPtr<WTestObject> WeakOther;
 
 	/** Not reflected: does not keep its target alive. */
@@ -60,16 +64,18 @@ protected:
 };
 
 /** A derived class, to test inheritance of classes and of reference properties. */
+WCLASS()
 class WTestDerivedObject : public WTestObject
 {
 	WW_DECLARE_CLASS(WTestDerivedObject, WTestObject)
 
 public:
 	/** Reflected, and typed as the base of all objects. */
+	WPROPERTY()
 	TObjectPtr<WObject> Extra;
 };
 
-/** A class that cannot be instantiated. */
+/** A class that cannot be instantiated. It is registered by hand, without WCLASS(), which must keep working. */
 class WTestAbstractObject : public WObject
 {
 	WW_DECLARE_CLASS(WTestAbstractObject, WObject)
@@ -79,6 +85,7 @@ public:
 };
 
 /** Creates another object in its constructor and keeps it in a reflected property. */
+WCLASS()
 class WTestOwnerObject : public WObject
 {
 	WW_DECLARE_CLASS(WTestOwnerObject, WObject)
@@ -86,10 +93,11 @@ class WTestOwnerObject : public WObject
 public:
 	WTestOwnerObject();
 
+	WPROPERTY()
 	TObjectPtr<WTestObject> Subobject;
 };
 
-/** Misbehaves in BeginDestroy in a way chosen by the test. */
+/** Misbehaves in BeginDestroy in a way chosen by the test. Registered by hand, like WTestAbstractObject. */
 class WTestMisbehavingObject : public WObject
 {
 	WW_DECLARE_CLASS(WTestMisbehavingObject, WObject)

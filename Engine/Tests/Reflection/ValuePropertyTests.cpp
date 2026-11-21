@@ -105,6 +105,17 @@ TEST_SUITE("TValueProperty")
 		CHECK(Property.GetCategory() == "Debug");
 	}
 
+	TEST_CASE("A private member is reflected like a public one")
+	{
+		const FScopedObjectTest ObjectTest;
+		WTestValueObject* const Object = NewObject<WTestValueObject>();
+		Object->SetPrivateValue(41);
+
+		CHECK(Export(*Object, "PrivateValue") == FJsonValue(41));
+		CHECK(Import(*Object, "PrivateValue", FJsonValue(42)));
+		CHECK(Object->GetPrivateValue() == 42);
+	}
+
 	TEST_CASE("GetValuePtr works on a const object too")
 	{
 		const FScopedObjectTest ObjectTest;

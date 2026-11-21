@@ -84,7 +84,9 @@ MaxEmptyLinesToKeep: 1
 KeepEmptyLinesAtTheStartOfBlocks: false
 EmptyLineAfterAccessModifier: Never
 EmptyLineBeforeAccessModifier: LogicalBlock
-SeparateDefinitionBlocks: Always
+# Blank lines between definitions are left as written. Inserting them automatically would also put one between
+# a reflection macro and the declaration it marks: WCLASS() and the class, WFUNCTION() and an inline function.
+SeparateDefinitionBlocks: Leave
 FixNamespaceComments: false
 
 # Includes are sorted inside each blank-line-separated block. A file's own header comes
