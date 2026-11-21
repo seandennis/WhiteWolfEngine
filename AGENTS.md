@@ -124,7 +124,8 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
                           registration)
     Platform/             The window system: Platform.h (FPlatform), Window.h (FWindow)
     Rendering/            The renderer: RenderDevice.h (FRenderDevice), RenderTarget.h (FRenderTarget), Image.h (FImage),
-                          ImageFile.h (FImageFile: PNG and JPEG files), Texture.h (WTexture), MipChain.h (FMipChain),
+                          ImageFile.h (FImageFile: PNG and JPEG files), ImageDifference.h (FImageDifference),
+                          Texture.h (WTexture), MipChain.h (FMipChain), MeshShapes.h (FMeshShapes: box, sphere, plane),
                           CameraView.h (FCameraView), StaticMesh.h (WStaticMesh), Material.h (WMaterial),
                           StaticMeshComponent.h (WStaticMeshComponent), DirectionalLightComponent.h,
                           PointLightComponent.h, SceneRenderer.h (FSceneRenderer), SceneViewMode.h,
@@ -327,6 +328,7 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 - `FRenderDevice::Create` opens the graphics card through Vulkan and NVRHI. It needs no window. Only one render device can exist at a time.
 - An `FRenderTarget` is a surface to draw on; `ReadPixels` copies it into an `FImage`, which is how tests and screenshots see what was drawn. Colours given to the renderer are linear (`FLinearColor`); pixels read back are sRGB-encoded bytes (`FColor`).
 - **`FGltfImporter::Import(Path, Scene, Error, &Warnings)`** brings a glTF 2.0 file (.gltf or .glb) into a scene: one entity named after the file, its nodes below it, with meshes, materials, textures and lights. Nothing is converted, because the engine uses glTF's axes, units, material model and light units. What the engine does not support (animations, skins, cameras, transparency and more) is left out with a warning each; only a file that cannot be read at all is an error. No cgltf type or header appears outside `Engine/Private/Rendering/GltfImporter.cpp`.
+- `FMeshShapes` makes meshes of a box, a sphere and a plane, with normals and texture coordinates. `FImageDifference::Measure` says how much two pictures differ, which is how a screenshot is compared with a reference image.
 - `FImageFile` reads PNG and JPEG files into an `FImage` and writes an `FImage` as a PNG file, from and to disk or memory. No stb type or header appears outside `Engine/Private/Rendering/ImageFile.cpp`.
 - Everything created from a render device keeps the graphics card alive, so the order in which the device and its resources are destroyed does not matter.
 - No NVRHI or Vulkan type or header appears outside `Engine/Private/Rendering/`. Include `Rendering/VulkanApi.h` there, never `<vulkan/vulkan.hpp>`, so that the engine and NVRHI configure Vulkan identically; call Vulkan through the function table it sets up, with the plain C functions.
