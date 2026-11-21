@@ -3,7 +3,7 @@
 #include "Object/ObjectPtr.h"
 
 #include <algorithm>
-#include <initializer_list>
+#include <chrono>
 #include <limits>
 #include <new>
 #include <ranges>
@@ -150,7 +150,7 @@ FObjectSystem::~FObjectSystem()
 	for (std::size_t Index = 0; Index < Slots.size(); ++Index)
 	{
 		WObject* const Object = Slots[Index].Object;
-		const bool bIsInstance = Object != nullptr && !Object->ClassPrivate->IsChildOf(ClassClass);
+		const bool bIsInstance = Object != nullptr && !IsClassObject(Object);
 		if (bIsInstance)
 		{
 			DestroyObjectNow(Object);
@@ -180,8 +180,9 @@ void FObjectSystem::HandleObjectConstruction(WObject* Object)
 
 	System.AllocateSlot(Object);
 
-	// An object created while a collection is running is not garbage in that collection.
-	Object->InternalMarkEpoch = System.bIsCollecting ? System.CurrentEpoch : 0;
+	// An object created while a collection is in progress is not garbage in that collection. It needs no scanning
+	// either: every reference it comes to hold is reported to the collector as it is stored.
+	Object->InternalMarkEpoch = System.Phase != ECollectionPhase::Idle ? System.CurrentEpoch : 0;
 }
 
 void FObjectSystem::HandleObjectDestruction(WObject* Object)
@@ -238,10 +239,9 @@ WObject* FObjectSystem::CreateObject(WClass* Class)
 
 void FObjectSystem::AddToRoot(WObject* Object)
 {
-	WW_CHECKF(!bIsCollecting || IsMarked(Object),
+	WW_CHECKF(!IsUnreachable(Object),
 		"AddToRoot: the {} is being destroyed and cannot be kept alive",
 		Object->ClassPrivate->GetName());
-
 	WW_CHECKF(!Object->HasInternalFlag(WObject::EInternalFlags::PendingDestruction),
 		"AddToRoot: the {} has been destroyed and cannot be kept alive",
 		Object->ClassPrivate->GetName());
@@ -253,6 +253,12 @@ void FObjectSystem::AddToRoot(WObject* Object)
 
 	Object->SetInternalFlag(WObject::EInternalFlags::Rooted);
 	RootObjects.push_back(Object);
+
+	// A collection that has already marked its roots must learn about the new one.
+	if (Phase == ECollectionPhase::Marking)
+	{
+		MarkObject(Object);
+	}
 }
 
 void FObjectSystem::RemoveFromRoot(WObject* Object)
@@ -268,9 +274,7 @@ void FObjectSystem::RemoveFromRoot(WObject* Object)
 
 void FObjectSystem::DestroyObject(WObject* Object)
 {
-	WW_CHECKF(!Object->ClassPrivate->IsChildOf(ClassClass),
-		"Class {} cannot be destroyed",
-		static_cast<const WClass*>(Object)->GetName());
+	WW_CHECKF(!IsClassObject(Object), "Class {} cannot be destroyed", static_cast<const WClass*>(Object)->GetName());
 
 	Object->SetInternalFlag(WObject::EInternalFlags::PendingDestruction);
 	RemoveFromRoot(Object);
@@ -278,14 +282,7 @@ void FObjectSystem::DestroyObject(WObject* Object)
 
 bool FObjectSystem::IsObjectValid(const WObject* Object) const
 {
-	if (Object->HasInternalFlag(WObject::EInternalFlags::PendingDestruction))
-	{
-		return false;
-	}
-
-	// During a collection, everything that was not marked is about to be destroyed.
-	const bool bIsBeingDestroyed = bIsSweeping && !IsMarked(Object);
-	return !bIsBeingDestroyed;
+	return !Object->HasInternalFlag(WObject::EInternalFlags::PendingDestruction) && !IsUnreachable(Object);
 }
 
 void FObjectSystem::GetWeakReference(const WObject* Object, int32& OutObjectIndex, uint32& OutSerialNumber) const
@@ -306,20 +303,159 @@ WObject* FObjectSystem::ResolveWeakReference(int32 ObjectIndex, uint32 SerialNum
 	return bIsSameObject && IsObjectValid(Slot.Object) ? Slot.Object : nullptr;
 }
 
+WObject* FObjectSystem::HandleReferenceStored(WObject* Object)
+{
+	// Nothing may start referring to an object that is on its way out.
+	if (!IsObjectValid(Object))
+	{
+		return nullptr;
+	}
+
+	// While marking, an object that has already been scanned may be given a reference to one that has not been
+	// reached yet. Marking the target here is what keeps it from being missed.
+	if (Phase == ECollectionPhase::Marking)
+	{
+		MarkObject(Object);
+	}
+
+	return Object;
+}
+
+void FObjectSystem::TickCollection(double DeltaSeconds)
+{
+	WW_CHECKF(DeltaSeconds >= 0.0, "Tick was given a negative time step: {}", DeltaSeconds);
+
+	if (Phase == ECollectionPhase::Idle)
+	{
+		SecondsSinceLastCollection += DeltaSeconds;
+		const bool bIsDue = bIsCollectionRequested || SecondsSinceLastCollection >= CollectorSettings.IntervalSeconds;
+		if (!bIsDue)
+		{
+			return;
+		}
+
+		StartCollection();
+	}
+
+	// Reading the clock costs more than examining an object, so it is read once per batch of work.
+	constexpr int32 WorkUnitsPerClockRead = 64;
+	const std::chrono::duration<double> TimeBudget(CollectorSettings.TimeBudgetSeconds);
+	const std::chrono::steady_clock::time_point Start = std::chrono::steady_clock::now();
+
+	bool bIsFinished = false;
+	bool bHasTimeLeft = true;
+	while (!bIsFinished && bHasTimeLeft)
+	{
+		bIsFinished = AdvanceCollection(WorkUnitsPerClockRead);
+		bHasTimeLeft = std::chrono::steady_clock::now() - Start < TimeBudget;
+	}
+}
+
+void FObjectSystem::RequestCollection()
+{
+	bIsCollectionRequested = true;
+}
+
+FGarbageCollectorSettings FObjectSystem::GetCollectorSettings() const
+{
+	return CollectorSettings;
+}
+
+void FObjectSystem::SetCollectorSettings(const FGarbageCollectorSettings& Settings)
+{
+	WW_CHECKF(
+		Settings.IntervalSeconds >= 0.0, "The collection interval must not be negative: {}", Settings.IntervalSeconds);
+	WW_CHECKF(Settings.TimeBudgetSeconds > 0.0,
+		"The collection time budget must be greater than zero: {}",
+		Settings.TimeBudgetSeconds);
+
+	CollectorSettings = Settings;
+}
+
 void FObjectSystem::CollectGarbage()
 {
-	WW_CHECKF(!bIsCollecting, "CollectGarbage was called while a collection is running, for example from BeginDestroy");
+	// A collection in progress has already let through objects that have become garbage since it started, so it
+	// is finished first, and a fresh collection then finds everything that is unreachable now.
+	FinishCollection();
+	StartCollection();
+	FinishCollection();
+}
 
-	const FScopedFlag CollectingScope(bIsCollecting);
+bool FObjectSystem::IsCollectionInProgress() const
+{
+	return Phase != ECollectionPhase::Idle;
+}
+
+void FObjectSystem::StartCollection()
+{
+	WW_CHECKF(Phase == ECollectionPhase::Idle, "StartCollection was called while a collection is in progress");
+
 	++CurrentEpoch;
+	bIsCollectionRequested = false;
+	Phase = ECollectionPhase::Marking;
 
-	MarkReachableObjects();
+	for (WObject* const Root : RootObjects)
+	{
+		MarkObject(Root);
+	}
+}
 
-	// From here on the unmarked objects are known to be garbage: they are no longer valid, and weak references
-	// to them are null.
-	const FScopedFlag SweepingScope(bIsSweeping);
-	NotifyUnreachableObjects();
-	PurgeUnreachableObjects();
+bool FObjectSystem::AdvanceCollection(int32 MaxWorkUnits)
+{
+	WW_CHECKF(!bIsAdvancing,
+		"The garbage collector was called while a collection step is running, for example from BeginDestroy");
+	const FScopedFlag AdvancingScope(bIsAdvancing);
+
+	for (int32 WorkUnits = 0; WorkUnits < MaxWorkUnits && Phase != ECollectionPhase::Idle; ++WorkUnits)
+	{
+		switch (Phase)
+		{
+			case ECollectionPhase::Marking:
+				StepMarking();
+				break;
+			case ECollectionPhase::Notifying:
+				StepNotifying();
+				break;
+			case ECollectionPhase::Purging:
+				StepPurging();
+				break;
+			case ECollectionPhase::Idle:
+			default:
+				break;
+		}
+	}
+
+	return Phase == ECollectionPhase::Idle;
+}
+
+int32 FObjectSystem::GetObjectCount() const
+{
+	return LiveObjectCount;
+}
+
+int32 FObjectSystem::ReportLeakedObjects()
+{
+	CollectGarbage();
+
+	int32 LeakedObjectCount = 0;
+	for (const FObjectSlot& Slot : Slots)
+	{
+		const WObject* const Object = Slot.Object;
+		if (Object == nullptr || IsClassObject(Object))
+		{
+			continue;
+		}
+
+		++LeakedObjectCount;
+		const bool bIsRooted = Object->HasInternalFlag(WObject::EInternalFlags::Rooted);
+		WW_LOG(LogObject,
+			Error,
+			"Leaked object: a {} still exists at shutdown because {}",
+			Object->ClassPrivate->GetName(),
+			bIsRooted ? "it was never removed from the root set" : "a leaked object refers to it");
+	}
+
+	return LeakedObjectCount;
 }
 
 WObject* FObjectSystem::ConstructObject(
@@ -398,7 +534,7 @@ void FObjectSystem::DestroyObjectNow(WObject* Object)
 	const std::size_t Alignment = Object->ClassPrivate->Alignment;
 	void* const Memory = dynamic_cast<void*>(Object);
 
-	if (Object->ClassPrivate->IsChildOf(ClassClass))
+	if (IsClassObject(Object))
 	{
 		// A class object whose registration failed part-way is not in the registry, and must not remove a
 		// registered class that happens to share its name.
@@ -435,6 +571,7 @@ void FObjectSystem::AllocateSlot(WObject* Object)
 
 	Slots[static_cast<std::size_t>(Index)].Object = Object;
 	Object->InternalIndex = Index;
+	++LiveObjectCount;
 }
 
 void FObjectSystem::ReleaseSlot(WObject* Object)
@@ -447,6 +584,18 @@ void FObjectSystem::ReleaseSlot(WObject* Object)
 	++Slot.SerialNumber;
 	FreeSlotIndices.push_back(Index);
 	Object->InternalIndex = -1;
+	--LiveObjectCount;
+}
+
+void FObjectSystem::FinishCollection()
+{
+	constexpr int32 Unlimited = std::numeric_limits<int32>::max();
+
+	bool bIsFinished = false;
+	while (!bIsFinished)
+	{
+		bIsFinished = AdvanceCollection(Unlimited);
+	}
 }
 
 void FObjectSystem::MarkObject(WObject* Object)
@@ -471,62 +620,74 @@ void FObjectSystem::ScanObject(WObject* Object)
 	}
 }
 
-void FObjectSystem::MarkReachableObjects()
+void FObjectSystem::StepMarking()
 {
-	for (WObject* const Root : RootObjects)
+	if (PendingObjects.empty())
 	{
-		MarkObject(Root);
+		// Everything reachable has been marked. From this moment the unmarked objects are garbage: they are no
+		// longer valid, weak references to them are null, and nothing can refer to them again.
+		Phase = ECollectionPhase::Notifying;
+		SweepCursor = 0;
+		return;
 	}
 
-	while (!PendingObjects.empty())
-	{
-		WObject* const Object = PendingObjects.back();
-		PendingObjects.pop_back();
-		ScanObject(Object);
-	}
+	WObject* const Object = PendingObjects.back();
+	PendingObjects.pop_back();
+	ScanObject(Object);
 }
 
-void FObjectSystem::NotifyUnreachableObjects()
+void FObjectSystem::StepNotifying()
 {
-	// BeginDestroy may create objects, which can grow the table, so the slot is looked up again on every step.
-	for (std::size_t Index = 0; Index < Slots.size(); ++Index)
+	// BeginDestroy may create objects, which can grow the table, so the table size is read on every step.
+	if (SweepCursor >= Slots.size())
 	{
-		WObject* const Object = Slots[Index].Object;
-		const bool bNeedsNotification = Object != nullptr && !IsMarked(Object) &&
-			!Object->HasInternalFlag(WObject::EInternalFlags::BeginDestroyCalled);
-		if (!bNeedsNotification)
-		{
-			continue;
-		}
+		Phase = ECollectionPhase::Purging;
+		SweepCursor = 0;
+		bIsPurgingClasses = false;
+		return;
+	}
 
+	WObject* const Object = Slots[SweepCursor].Object;
+	const bool bNeedsNotification =
+		Object != nullptr && !IsMarked(Object) && !Object->HasInternalFlag(WObject::EInternalFlags::BeginDestroyCalled);
+	if (bNeedsNotification)
+	{
+		// The flag is set first so that an object whose BeginDestroy fails is not notified a second time.
 		Object->SetInternalFlag(WObject::EInternalFlags::BeginDestroyCalled);
 		Object->BeginDestroy();
 		WW_CHECKF(Object->HasInternalFlag(WObject::EInternalFlags::BeginDestroyReachedBase),
 			"{}::BeginDestroy did not call Super::BeginDestroy()",
 			Object->ClassPrivate->GetName());
 	}
+
+	++SweepCursor;
 }
 
-void FObjectSystem::PurgeUnreachableObjects()
+void FObjectSystem::StepPurging()
 {
-	// Instances are destroyed before classes, because destroying an instance needs its class.
-	for (const bool bPurgeClasses : {false, true})
+	if (SweepCursor >= Slots.size())
 	{
-		for (std::size_t Index = 0; Index < Slots.size(); ++Index)
+		if (bIsPurgingClasses)
 		{
-			WObject* const Object = Slots[Index].Object;
-			if (Object == nullptr || IsMarked(Object))
-			{
-				continue;
-			}
-
-			const bool bIsClass = Object->ClassPrivate->IsChildOf(ClassClass);
-			if (bIsClass == bPurgeClasses)
-			{
-				DestroyObjectNow(Object);
-			}
+			Phase = ECollectionPhase::Idle;
+			SecondsSinceLastCollection = 0.0;
 		}
+		else
+		{
+			bIsPurgingClasses = true;
+			SweepCursor = 0;
+		}
+		return;
 	}
+
+	WObject* const Object = Slots[SweepCursor].Object;
+	const bool bShouldPurge = Object != nullptr && !IsMarked(Object) && IsClassObject(Object) == bIsPurgingClasses;
+	if (bShouldPurge)
+	{
+		DestroyObjectNow(Object);
+	}
+
+	++SweepCursor;
 }
 
 void FObjectSystem::VisitObjectReference(FObjectPtr& Reference)

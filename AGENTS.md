@@ -108,7 +108,8 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Math/                 Math types: Vector.h (FVector, FVector3f), Quat.h (FQuat), Transform.h (FTransform)
     Object/               The object system: Object.h (WObject), Class.h (WClass), ObjectPtr.h (TObjectPtr),
                           WeakObjectPtr.h (TWeakObjectPtr), ObjectGlobals.h (NewObject, Cast, IsValid,
-                          CollectGarbage), ObjectMacros.h (class registration)
+                          CollectGarbage), GarbageCollector.h (FGarbageCollector), ObjectMacros.h (class
+                          registration)
     Reflection/           Reflected properties: Property.h (FProperty), ObjectProperty.h, WeakObjectProperty.h,
                           ArrayProperty.h, PropertyFactory.h (MakeProperty)
   Private/                Sources and module-internal headers, mirroring Public/
@@ -204,7 +205,10 @@ First-party code compiles with `/W4 /WX` on MSVC and an equivalent strict set on
 - **`Destroy()`** marks an object for destruction: `IsValid(Object)` is false and weak references are null from that call on, and the next collection destroys it and sets every remaining `TObjectPtr` to it to null. Check `IsValid()` before using a reference that something else may have destroyed.
 - **Roots.** An object survives if it is rooted with `AddToRoot()` or reachable from a rooted object through registered properties. Classes are rooted automatically. Pair every `AddToRoot()` with a `RemoveFromRoot()`.
 - **`BeginDestroy()`** is where an object releases GPU, audio, physics and other non-memory resources. Always call `Super::BeginDestroy()`. All other objects are still allocated while it runs. **Destructors** run later and must not touch any other object.
-- **Collection points.** `CollectGarbage()` destroys everything unreachable before it returns. Never call it while a function further up the stack holds a raw pointer to an object that nothing else keeps alive, and never from `BeginDestroy()`.
+- **Collection is incremental.** `FGarbageCollector::Tick()` runs once per frame and does a small, time-budgeted part of a collection, so game code runs between the steps of a collection. Never keep a raw pointer to an object from one frame to the next: only registered `TObjectPtr` properties, weak references and the root set are safe across frames. This applies to engine systems as much as to game code.
+- **Storing a reference tells the collector.** Every construction, copy and assignment of a `TObjectPtr` goes through the collector, which is what makes incremental collection correct. Never copy objects that contain `TObjectPtr` members with `memcpy` or similar. Storing a reference to a destroyed object stores null.
+- **`CollectGarbage()`** destroys everything unreachable before it returns. It is for tests and tools. Never call it while a function further up the stack holds a raw pointer to an object that nothing else keeps alive, and never from `BeginDestroy()`.
+- **Leaks fail the test run.** The test executable ends with `FGarbageCollector::ReportLeakedObjects()`; a test that leaves an object in the root set makes the whole run fail. The `linux-sanitize` preset additionally fails on any leaked memory allocation.
 - **Main thread only.** Objects are created, used and collected on the main thread.
 
 Declaring a class, until the header tool generates this from `WCLASS()` and `WPROPERTY()`:

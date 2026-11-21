@@ -198,3 +198,37 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - A weak reference stores the object's slot in the object table and the slot's serial number, which changes whenever the slot is released. Resolving it is two comparisons, needs no list of weak references per object, and can never return a different object that later reuses the slot.
 - A weak reference resolves to null as soon as its object is marked for destruction, and during a collection as soon as marking has shown the object to be unreachable. `BeginDestroy()` therefore cannot obtain a pointer to another object that is about to be freed and hand it to something that survives.
 - Destroying a class, or adding a destroyed object to the root set, is a fatal error.
+
+## D-017: Incremental collection with a write barrier
+
+**Status:** Accepted.
+
+**Context.** The specification requires collection to be incremental with a per-frame time budget, so that it causes no frame hitches. Game code therefore runs between the steps of a collection and changes references while the collector is part-way through marking. Without care, the collector can miss an object: it scans object A, then the game moves the only reference to object B out of a not-yet-scanned object and into A, and B is never marked.
+
+**Decision.**
+
+- A collection is a state machine with three phases, marking, notifying (`BeginDestroy`) and purging, advanced in work units of roughly one object each. `FGarbageCollector::Tick` runs units until the time budget for the frame is spent, reading the clock once per 64 units. The defaults are a collection every 60 seconds and 2 ms per frame.
+- **Write barrier.** Every construction, copy and assignment of a `TObjectPtr` reports the stored object to the collector. During marking the collector marks it, so an object that is given a new referrer cannot be missed. This is the reason strong references must be `TObjectPtr` and not raw pointers (D-015).
+- **Objects created during a collection survive it.** They are not scanned; everything they refer to is reported by the write barrier as it is stored.
+- **Nothing can start referring to a dying object.** Storing a reference to an object that has been destroyed with `Destroy`, or that marking has shown to be unreachable, stores null, and such an object cannot be added to the root set. Together with weak references resolving to null (D-016) this makes it impossible to resurrect an object that is about to be freed.
+- **An object destroyed after the current collection has already marked it** is freed by the next collection instead, because objects scanned earlier may still refer to it and those references are only cleared when their owners are scanned again.
+- `CollectGarbage()` finishes any collection in progress and then runs a complete new one, so that it destroys everything unreachable at the time of the call.
+- `StartCollection` and `AdvanceCollection` expose single steps so that tests can change references at exact points of a collection.
+
+**Consequences.**
+
+- Between two frames only registered `TObjectPtr` properties, weak references and the root set are safe. A raw pointer kept across frames may dangle. This is the same rule as in Unreal.
+- Copying a `TObjectPtr` costs a function call. Arrays of references are therefore slower to grow and sort than arrays of raw pointers. This can be reduced later by inlining the common case; correctness came first.
+- A single object is scanned in one unit however many references it holds, so one object with a very large array is scanned without interruption.
+- The tests were checked by removing the barrier: AddressSanitizer then reports a use-after-free in the incremental collection tests.
+
+## D-018: Leak detection
+
+**Status:** Partly implemented.
+
+**Decision.**
+
+- `FGarbageCollector::ReportLeakedObjects()` runs a full collection and logs an error for every object that still exists and is not a class. The test executable calls it after the tests and fails the run if anything is reported, so a test that leaves an object rooted cannot pass.
+- Engine memory allocations other than objects are checked by LeakSanitizer in the `linux-sanitize` preset, which fails the test run on any leak.
+
+**Still to do.** The specification asks debug builds on the product platform to report leaked engine allocations at shutdown. On MSVC that needs the debug heap of the C runtime (`_CrtSetDbgFlag` and a comparison of heap snapshots around the test run), together with making failed assertions report to stderr instead of opening a dialog. Both are Windows-specific code that belongs with the platform layer and has to be written with an MSVC build to verify it. Until then, allocation leaks are caught on Linux only.

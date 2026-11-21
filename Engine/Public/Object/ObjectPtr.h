@@ -12,6 +12,10 @@ class WObject;
  *
  * All strong object references have this one representation, which is what lets the garbage collector and other
  * reference visitors read and rewrite them without knowing the referenced type.
+ *
+ * Every time a reference is stored, by construction, copy or assignment, the collector is told. That is what
+ * keeps a collection correct while game code changes references between its steps. It is also why a reference
+ * cannot be made to point at an object that has been destroyed: storing one stores null.
  */
 class FObjectPtr
 {
@@ -19,9 +23,22 @@ public:
 	constexpr FObjectPtr() = default;
 
 	explicit FObjectPtr(WObject* InObject)
-		: Object(InObject)
+		: Object(ResolveForStore(InObject))
 	{
 	}
+
+	FObjectPtr(const FObjectPtr& Other)
+		: Object(ResolveForStore(Other.Object))
+	{
+	}
+
+	FObjectPtr& operator=(const FObjectPtr& Other)
+	{
+		Object = ResolveForStore(Other.Object);
+		return *this;
+	}
+
+	~FObjectPtr() = default;
 
 	/** Returns the referenced object, or null. */
 	WObject* Get() const
@@ -36,6 +53,14 @@ public:
 	}
 
 private:
+	/** Returns the pointer to store for a reference to InObject: InObject itself, or null if it is destroyed. */
+	static WObject* ResolveForStore(WObject* InObject)
+	{
+		return InObject != nullptr ? ResolveNonNullForStore(InObject) : nullptr;
+	}
+
+	ENGINE_API static WObject* ResolveNonNullForStore(WObject* InObject);
+
 	WObject* Object = nullptr;
 };
 

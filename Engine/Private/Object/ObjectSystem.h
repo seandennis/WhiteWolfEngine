@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 
 #include "Object/Class.h"
+#include "Object/GarbageCollectorSettings.h"
 #include "Object/Object.h"
 #include "Reflection/ObjectReferenceVisitor.h"
 
@@ -72,10 +73,44 @@ public:
 	/** Returns the object a weak reference identifies, or null if it is gone or no longer valid. */
 	WObject* ResolveWeakReference(int32 ObjectIndex, uint32 SerialNumber) const;
 
-	/** Runs one complete collection: marks from the roots, then destroys every object that was not reached. */
+	/**
+	 * Called whenever a strong reference to Object, which is not null, is about to be stored. Returns the pointer
+	 * to store: Object, or null if Object may no longer be referenced.
+	 */
+	WObject* HandleReferenceStored(WObject* Object);
+
+	// The collector. See FGarbageCollector for the meaning of each function.
+	void TickCollection(double DeltaSeconds);
+	void RequestCollection();
+	FGarbageCollectorSettings GetCollectorSettings() const;
+	void SetCollectorSettings(const FGarbageCollectorSettings& Settings);
 	void CollectGarbage();
+	bool IsCollectionInProgress() const;
+	void StartCollection();
+	bool AdvanceCollection(int32 MaxWorkUnits);
+	int32 GetObjectCount() const;
+	int32 ReportLeakedObjects();
 
 private:
+	/**
+	 * What a collection is doing. Objects are marked first; once marking is complete the unmarked objects are
+	 * known to be garbage, and they are notified and then purged.
+	 */
+	enum class ECollectionPhase : uint8
+	{
+		/** No collection is in progress. */
+		Idle,
+
+		/** Finding every object that is reachable from the root set. */
+		Marking,
+
+		/** Calling BeginDestroy on every unreachable object. */
+		Notifying,
+
+		/** Destructing and freeing every unreachable object. */
+		Purging,
+	};
+
 	/** One entry of the object table. */
 	struct FObjectSlot
 	{
@@ -111,15 +146,30 @@ private:
 		return Object->InternalMarkEpoch == CurrentEpoch;
 	}
 
+	/** Returns true once marking has finished and Object was not reached: it is garbage and will be purged. */
+	bool IsUnreachable(const WObject* Object) const
+	{
+		return (Phase == ECollectionPhase::Notifying || Phase == ECollectionPhase::Purging) && !IsMarked(Object);
+	}
+
+	bool IsClassObject(const WObject* Object) const
+	{
+		return Object->ClassPrivate->IsChildOf(ClassClass);
+	}
+
 	/** Records that Object is reachable and queues it to have its own references followed. */
 	void MarkObject(WObject* Object);
 
 	/** Marks everything Object refers to. */
 	void ScanObject(WObject* Object);
 
-	void MarkReachableObjects();
-	void NotifyUnreachableObjects();
-	void PurgeUnreachableObjects();
+	/** Runs the collection in progress, if any, to its end. */
+	void FinishCollection();
+
+	/** Each step function does one unit of work for its phase and moves to the next phase when it runs out. */
+	void StepMarking();
+	void StepNotifying();
+	void StepPurging();
 
 	// IObjectReferenceVisitor
 	void VisitObjectReference(FObjectPtr& Reference) override;
@@ -141,9 +191,20 @@ private:
 	/** Objects that are marked but whose references have not been followed yet. */
 	std::vector<WObject*> PendingObjects;
 
-	/** True for the whole of a collection. */
-	bool bIsCollecting = false;
+	ECollectionPhase Phase = ECollectionPhase::Idle;
 
-	/** True once marking has finished, while the unmarked objects are being notified and destroyed. */
-	bool bIsSweeping = false;
+	/** The next slot to examine in the notifying and purging phases. */
+	std::size_t SweepCursor = 0;
+
+	/** Purging walks the table twice: instances first, then classes, because destroying an instance needs its class. */
+	bool bIsPurgingClasses = false;
+
+	/** True while a step of the collection is running; guards against collecting from inside the collector. */
+	bool bIsAdvancing = false;
+
+	int32 LiveObjectCount = 0;
+
+	FGarbageCollectorSettings CollectorSettings;
+	double SecondsSinceLastCollection = 0.0;
+	bool bIsCollectionRequested = false;
 };
