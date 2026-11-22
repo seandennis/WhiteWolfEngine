@@ -15,6 +15,7 @@ TEST_SUITE("FInputState")
 		CHECK_FALSE(Input.WasKeyReleased(EKey::W));
 		CHECK_FALSE(Input.IsMouseButtonDown(EMouseButton::Left));
 		CHECK(Input.GetTypedText().empty());
+		CHECK_FALSE(Input.HasMousePosition());
 		CHECK(Input.GetMousePosition() == FVector2D(0.0));
 		CHECK(Input.GetMouseDelta() == FVector2D(0.0));
 		CHECK(Input.GetScrollDelta() == FVector2D(0.0));
@@ -228,8 +229,42 @@ TEST_SUITE("FInputState")
 
 		Input.HandleMouseMove(FVector2D(400.0, 300.0));
 
+		CHECK(Input.HasMousePosition());
 		CHECK(Input.GetMousePosition() == FVector2D(400.0, 300.0));
 		CHECK(Input.GetMouseDelta() == FVector2D(0.0));
+	}
+
+	TEST_CASE("Once the mouse has left, its position is not known and its return is not a movement")
+	{
+		FInputState Input;
+		Input.HandleMouseMove(FVector2D(630.0, 300.0));
+		Input.BeginFrame();
+
+		Input.HandleMouseLeave();
+		CHECK_FALSE(Input.HasMousePosition());
+		CHECK(Input.GetMousePosition() == FVector2D(630.0, 300.0));
+		CHECK(Input.GetMouseDelta() == FVector2D(0.0));
+
+		Input.HandleMouseMove(FVector2D(10.0, 20.0));
+		CHECK(Input.HasMousePosition());
+		CHECK(Input.GetMousePosition() == FVector2D(10.0, 20.0));
+		CHECK(Input.GetMouseDelta() == FVector2D(0.0));
+
+		Input.HandleMouseMove(FVector2D(12.0, 21.0));
+		CHECK(Input.GetMouseDelta() == FVector2D(2.0, 1.0));
+	}
+
+	TEST_CASE("The mouse leaving keeps the movement of that frame and the buttons that are down")
+	{
+		FInputState Input;
+		Input.HandleMouseMove(FVector2D(100.0, 100.0));
+		Input.HandleMouseButtonEvent(EMouseButton::Left, EInputEvent::Pressed);
+		Input.HandleMouseMove(FVector2D(90.0, 100.0));
+
+		Input.HandleMouseLeave();
+
+		CHECK(Input.GetMouseDelta() == FVector2D(-10.0, 0.0));
+		CHECK(Input.IsMouseButtonDown(EMouseButton::Left));
 	}
 
 	TEST_CASE("Mouse movement adds up within a frame and starts again in the next")
@@ -298,8 +333,10 @@ TEST_SUITE("FInputState")
 		Input.BeginFrame();
 
 		Input.ReleaseAll();
+		CHECK_FALSE(Input.HasMousePosition());
 		Input.HandleMouseMove(FVector2D(500.0, 500.0));
 
+		CHECK(Input.HasMousePosition());
 		CHECK(Input.GetMousePosition() == FVector2D(500.0, 500.0));
 		CHECK(Input.GetMouseDelta() == FVector2D(0.0));
 	}

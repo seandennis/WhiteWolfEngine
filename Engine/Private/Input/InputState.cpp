@@ -83,6 +83,11 @@ void FInputState::HandleMouseMove(const FVector2D& Position)
 	bHasMousePosition = true;
 }
 
+void FInputState::HandleMouseLeave()
+{
+	bHasMousePosition = false;
+}
+
 void FInputState::HandleScroll(const FVector2D& Delta)
 {
 	ScrollDelta += Delta;

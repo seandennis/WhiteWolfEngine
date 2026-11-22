@@ -58,6 +58,15 @@ struct FWindow::FImplementation
 		From(WindowHandle).Input.HandleMouseMove(FVector2D(X, Y));
 	}
 
+	static void HandleCursorEnter(GLFWwindow* WindowHandle, int Entered)
+	{
+		// Entering is followed by a position, which says all there is to say.
+		if (Entered == GLFW_FALSE)
+		{
+			From(WindowHandle).Input.HandleMouseLeave();
+		}
+	}
+
 	static void HandleScroll(GLFWwindow* WindowHandle, double X, double Y)
 	{
 		From(WindowHandle).Input.HandleScroll(FVector2D(X, Y));
@@ -118,6 +127,7 @@ std::unique_ptr<FWindow> FWindow::Create(const FWindowDescription& Description, 
 	glfwSetCharCallback(Handle, &FImplementation::HandleCharacter);
 	glfwSetMouseButtonCallback(Handle, &FImplementation::HandleMouseButton);
 	glfwSetCursorPosCallback(Handle, &FImplementation::HandleCursorPosition);
+	glfwSetCursorEnterCallback(Handle, &FImplementation::HandleCursorEnter);
 	glfwSetScrollCallback(Handle, &FImplementation::HandleScroll);
 	glfwSetFramebufferSizeCallback(Handle, &FImplementation::HandleFramebufferSize);
 	glfwSetWindowFocusCallback(Handle, &FImplementation::HandleFocus);

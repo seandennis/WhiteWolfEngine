@@ -49,9 +49,16 @@ public:
 
 	/**
 	 * Records the position of the mouse, in pixels from the top left corner of the window's content. The first
-	 * position after the state is created or reset sets the position without counting as movement.
+	 * position after the state is created, after HandleMouseLeave or after ReleaseAll sets the position without
+	 * counting as movement.
 	 */
 	ENGINE_API void HandleMouseMove(const FVector2D& Position);
+
+	/**
+	 * Records that the mouse has left the window: where it is, is no longer known, and the position that comes
+	 * when it returns is not a movement.
+	 */
+	ENGINE_API void HandleMouseLeave();
 
 	/** Records movement of the scroll wheel; y is the usual vertical wheel, positive away from the user. */
 	ENGINE_API void HandleScroll(const FVector2D& Delta);
@@ -80,6 +87,16 @@ public:
 	const std::string& GetTypedText() const
 	{
 		return TypedText;
+	}
+
+	/**
+	 * Returns true while it is known where the mouse is: a position has been reported, and since then the mouse
+	 * has not left the window and ReleaseAll has not been called. What is under the mouse can only be said while
+	 * this is true.
+	 */
+	bool HasMousePosition() const
+	{
+		return bHasMousePosition;
 	}
 
 	/** Returns the last known position of the mouse, or zero if it has not been seen yet. */
@@ -118,6 +135,9 @@ private:
 	FVector2D MouseDelta = FVector2D(0.0);
 	FVector2D ScrollDelta = FVector2D(0.0);
 
-	/** False until the first mouse position arrives, so that it is not mistaken for a movement from zero. */
+	/**
+	 * False until a mouse position arrives, and again once the mouse has left, so that the position that comes
+	 * next is not mistaken for a movement from the last one.
+	 */
 	bool bHasMousePosition = false;
 };
