@@ -1,5 +1,7 @@
 #include "Input/InputState.h"
 
+#include "Core/Utf8.h"
+
 #include <bitset>
 #include <cstddef>
 
@@ -36,6 +38,7 @@ void FInputState::BeginFrame()
 	KeysReleased.reset();
 	MouseButtonsPressed.reset();
 	MouseButtonsReleased.reset();
+	TypedText.clear();
 	MouseDelta = FVector2D(0.0);
 	ScrollDelta = FVector2D(0.0);
 }
@@ -46,6 +49,17 @@ void FInputState::HandleKeyEvent(EKey Key, EInputEvent Event)
 	if (Index < KeyCount)
 	{
 		ApplyEvent(KeysDown, KeysPressed, KeysReleased, Index, Event);
+	}
+}
+
+void FInputState::HandleTypedCharacter(char32_t Character)
+{
+	// The two ranges of control characters that Unicode has: the ones below the space, and delete with the
+	// ones after it.
+	const bool bIsControlCharacter = Character < 0x20 || (Character >= 0x7F && Character < 0xA0);
+	if (FUtf8::IsCharacter(Character) && !bIsControlCharacter)
+	{
+		FUtf8::AppendCharacter(TypedText, Character);
 	}
 }
 

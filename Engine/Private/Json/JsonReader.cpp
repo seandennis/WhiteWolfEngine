@@ -1,5 +1,6 @@
 #include "Json/JsonReader.h"
 
+#include "Core/Utf8.h"
 #include "Json/JsonValue.h"
 
 #include <charconv>
@@ -16,33 +17,6 @@ namespace
 	bool IsDigit(char Character)
 	{
 		return Character >= '0' && Character <= '9';
-	}
-
-	/** Appends the UTF-8 encoding of a Unicode code point. */
-	void AppendUtf8(std::string& Output, uint32 CodePoint)
-	{
-		if (CodePoint < 0x80)
-		{
-			Output.push_back(static_cast<char>(CodePoint));
-		}
-		else if (CodePoint < 0x800)
-		{
-			Output.push_back(static_cast<char>(0xC0 | (CodePoint >> 6)));
-			Output.push_back(static_cast<char>(0x80 | (CodePoint & 0x3F)));
-		}
-		else if (CodePoint < 0x10000)
-		{
-			Output.push_back(static_cast<char>(0xE0 | (CodePoint >> 12)));
-			Output.push_back(static_cast<char>(0x80 | ((CodePoint >> 6) & 0x3F)));
-			Output.push_back(static_cast<char>(0x80 | (CodePoint & 0x3F)));
-		}
-		else
-		{
-			Output.push_back(static_cast<char>(0xF0 | (CodePoint >> 18)));
-			Output.push_back(static_cast<char>(0x80 | ((CodePoint >> 12) & 0x3F)));
-			Output.push_back(static_cast<char>(0x80 | ((CodePoint >> 6) & 0x3F)));
-			Output.push_back(static_cast<char>(0x80 | (CodePoint & 0x3F)));
-		}
 	}
 
 	/** A recursive-descent parser over one document. */
@@ -352,7 +326,8 @@ namespace
 				CodePoint = 0x10000 + ((CodePoint - 0xD800) << 10) + (LowSurrogate - 0xDC00);
 			}
 
-			AppendUtf8(Output, CodePoint);
+			// What is left is a character: a lone half of a pair was refused, and a pair was put together.
+			FUtf8::AppendCharacter(Output, static_cast<char32_t>(CodePoint));
 			return true;
 		}
 

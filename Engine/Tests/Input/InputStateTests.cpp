@@ -2,9 +2,11 @@
 
 #include <doctest/doctest.h>
 
+#include <string>
+
 TEST_SUITE("FInputState")
 {
-	TEST_CASE("A new input state has nothing down and no movement")
+	TEST_CASE("A new input state has nothing down, nothing typed and no movement")
 	{
 		const FInputState Input;
 
@@ -12,6 +14,7 @@ TEST_SUITE("FInputState")
 		CHECK_FALSE(Input.WasKeyPressed(EKey::W));
 		CHECK_FALSE(Input.WasKeyReleased(EKey::W));
 		CHECK_FALSE(Input.IsMouseButtonDown(EMouseButton::Left));
+		CHECK(Input.GetTypedText().empty());
 		CHECK(Input.GetMousePosition() == FVector2D(0.0));
 		CHECK(Input.GetMouseDelta() == FVector2D(0.0));
 		CHECK(Input.GetScrollDelta() == FVector2D(0.0));
@@ -110,6 +113,85 @@ TEST_SUITE("FInputState")
 		CHECK_FALSE(Input.WasKeyReleased(FarOutOfRange));
 	}
 
+	TEST_CASE("Typed characters add up to text, in the order they were typed")
+	{
+		FInputState Input;
+
+		Input.HandleTypedCharacter(U'H');
+		Input.HandleTypedCharacter(U'i');
+		Input.HandleTypedCharacter(U' ');
+		Input.HandleTypedCharacter(U'!');
+
+		CHECK(Input.GetTypedText() == "Hi !");
+	}
+
+	TEST_CASE("Typed text is UTF-8, whatever the character")
+	{
+		FInputState Input;
+
+		Input.HandleTypedCharacter(U'\xE9');
+		Input.HandleTypedCharacter(U'\x20AC');
+		Input.HandleTypedCharacter(U'\x1F600');
+		Input.HandleTypedCharacter(U'\xA0');
+
+		CHECK(Input.GetTypedText() == "\xC3\xA9\xE2\x82\xAC\xF0\x9F\x98\x80\xC2\xA0");
+	}
+
+	TEST_CASE("What was typed is forgotten when the next frame begins")
+	{
+		FInputState Input;
+		Input.HandleTypedCharacter(U'a');
+
+		Input.BeginFrame();
+		CHECK(Input.GetTypedText().empty());
+
+		Input.HandleTypedCharacter(U'b');
+		CHECK(Input.GetTypedText() == "b");
+	}
+
+	TEST_CASE("Control characters are keys, not text")
+	{
+		FInputState Input;
+
+		Input.HandleTypedCharacter(U'\0');
+		Input.HandleTypedCharacter(U'\b');
+		Input.HandleTypedCharacter(U'\t');
+		Input.HandleTypedCharacter(U'\n');
+		Input.HandleTypedCharacter(U'\r');
+		Input.HandleTypedCharacter(U'\x1B');
+		Input.HandleTypedCharacter(U'\x1F');
+		Input.HandleTypedCharacter(U'\x7F');
+		Input.HandleTypedCharacter(U'\x80');
+		Input.HandleTypedCharacter(U'\x9F');
+
+		CHECK(Input.GetTypedText().empty());
+	}
+
+	TEST_CASE("A value that is not a character is not text")
+	{
+		FInputState Input;
+
+		Input.HandleTypedCharacter(static_cast<char32_t>(0xD800));
+		Input.HandleTypedCharacter(static_cast<char32_t>(0xDFFF));
+		Input.HandleTypedCharacter(static_cast<char32_t>(0x110000));
+		Input.HandleTypedCharacter(static_cast<char32_t>(0xFFFFFFFF));
+
+		CHECK(Input.GetTypedText().empty());
+	}
+
+	TEST_CASE("Typing and pressing keys are told apart")
+	{
+		FInputState Input;
+
+		Input.HandleKeyEvent(EKey::A, EInputEvent::Pressed);
+		CHECK(Input.GetTypedText().empty());
+
+		Input.HandleTypedCharacter(U'w');
+		CHECK_FALSE(Input.IsKeyDown(EKey::W));
+		CHECK_FALSE(Input.WasKeyPressed(EKey::W));
+		CHECK(Input.GetTypedText() == "w");
+	}
+
 	TEST_CASE("Mouse buttons follow the same rules as keys")
 	{
 		FInputState Input;
@@ -197,6 +279,16 @@ TEST_SUITE("FInputState")
 		CHECK(Input.WasKeyReleased(EKey::LeftShift));
 		CHECK(Input.WasMouseButtonReleased(EMouseButton::Left));
 		CHECK_FALSE(Input.WasKeyReleased(EKey::S));
+	}
+
+	TEST_CASE("ReleaseAll leaves what was typed in that frame")
+	{
+		FInputState Input;
+		Input.HandleTypedCharacter(U'x');
+
+		Input.ReleaseAll();
+
+		CHECK(Input.GetTypedText() == "x");
 	}
 
 	TEST_CASE("After ReleaseAll the next mouse position is not a movement")

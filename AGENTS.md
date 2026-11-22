@@ -115,7 +115,7 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     CoreMinimal.h         Included first by every engine header: core types, assertions, logging
     Core/                 Fundamental types and assertions: CoreTypes.h, Assert.h, Version.h, EngineVersion.h,
                           EnumClassFlags.h (WW_ENUM_CLASS_FLAGS), FileHelper.h (FFileHelper: whole text files),
-                          ProcessDiagnostics.h (error dialogs, memory leak report)
+                          ProcessDiagnostics.h (error dialogs, memory leak report), Utf8.h (FUtf8: characters as UTF-8)
     Assets/               Assets and their names: Asset.h (WAsset), AssetPath.h (FAssetPath), AssetPackage.h (WAssetPackage),
                           AssetManager.h (FAssetManager: loads the files of the content directory)
     Input/                Keyboard and mouse: InputState.h (FInputState), Key.h (EKey), MouseButton.h (EMouseButton)
@@ -342,8 +342,8 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 
 - `FPlatform::Initialize(EPlatformMode::Windowed or Headless, Error)` starts the window system, `FWindow::Create` makes a window, and `FPlatform::Shutdown()` stops it after the last window is destroyed. `FPlatform::PollEvents()` is called once per frame. Everything runs on the main thread.
 - **Headless mode** creates windows that exist in memory only. It needs no display, which is what lets tests, build servers and tools run the whole engine unattended. The Linux development builds support only this mode (D-025).
-- **Input is read from an `FInputState`,** one per window: `IsKeyDown` for held keys, `WasKeyPressed` and `WasKeyReleased` for what changed in the current frame, and the mouse position, movement and scroll amount. Keys are `EKey` values named after their position on a US keyboard.
-- **Input can be simulated.** The `Handle...` functions of `FInputState` are public: a window calls them with real events, and tests and tools call them to press keys and move the mouse without a person. Never read keys from GLFW directly.
+- **Input is read from an `FInputState`,** one per window: `IsKeyDown` for held keys, `WasKeyPressed` and `WasKeyReleased` for what changed in the current frame, and the mouse position, movement and scroll amount. Keys are `EKey` values named after their position on a US keyboard. Text is not read from keys: `GetTypedText` is what was typed in the current frame, as the keyboard layout made it.
+- **Input can be simulated.** The `Handle...` functions of `FInputState` are public: a window calls them with real events, and tests and tools call them to press keys, type text and move the mouse without a person. Never read keys from GLFW directly.
 - No GLFW type or header appears outside `Engine/Private/Platform/`. Include `Platform/Glfw.h` there, never `<GLFW/glfw3.h>`.
 
 ## Rendering

@@ -37,6 +37,11 @@ struct FWindow::FImplementation
 		}
 	}
 
+	static void HandleCharacter(GLFWwindow* WindowHandle, unsigned int CodePoint)
+	{
+		From(WindowHandle).Input.HandleTypedCharacter(static_cast<char32_t>(CodePoint));
+	}
+
 	static void HandleMouseButton(GLFWwindow* WindowHandle, int Button, int Action, int /*Modifiers*/)
 	{
 		const bool bIsKnownButton = Button >= 0 && Button <= static_cast<int>(EMouseButton::Last);
@@ -110,6 +115,7 @@ std::unique_ptr<FWindow> FWindow::Create(const FWindowDescription& Description, 
 
 	glfwSetWindowUserPointer(Handle, NewImplementation.get());
 	glfwSetKeyCallback(Handle, &FImplementation::HandleKey);
+	glfwSetCharCallback(Handle, &FImplementation::HandleCharacter);
 	glfwSetMouseButtonCallback(Handle, &FImplementation::HandleMouseButton);
 	glfwSetCursorPosCallback(Handle, &FImplementation::HandleCursorPosition);
 	glfwSetScrollCallback(Handle, &FImplementation::HandleScroll);

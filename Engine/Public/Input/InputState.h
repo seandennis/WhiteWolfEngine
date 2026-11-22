@@ -8,10 +8,11 @@
 
 #include <bitset>
 #include <cstddef>
+#include <string>
 
 /**
  * The state of the keyboard and mouse as one window sees it: which keys and buttons are down, which went down or
- * came up during the current frame, where the mouse is and how far it and the scroll wheel moved.
+ * came up during the current frame, what was typed, where the mouse is and how far it and the scroll wheel moved.
  *
  * The state changes through the Handle functions. A window calls them with the events the operating system
  * reports; tests and tools call them to simulate input, which is how the engine is driven without a person at the
@@ -22,8 +23,8 @@ class FInputState
 public:
 	/**
 	 * Starts a new frame: forgets which keys and buttons were pressed or released during the previous frame and
-	 * resets the mouse and scroll deltas. Keys that are held stay down. Call it once per frame, before the frame's
-	 * events are handled.
+	 * what was typed, and resets the mouse and scroll deltas. Keys that are held stay down. Call it once per frame,
+	 * before the frame's events are handled.
 	 */
 	ENGINE_API void BeginFrame();
 
@@ -32,6 +33,16 @@ public:
 	 * changes nothing. A key outside the range of EKey is ignored.
 	 */
 	ENGINE_API void HandleKeyEvent(EKey Key, EInputEvent Event);
+
+	/**
+	 * Records that a character was typed. Typing is not the same as pressing keys: the keyboard layout, the shift
+	 * keys and dead keys decide which character a key gives, a key that is held down types its character again and
+	 * again, and some characters take several keys. Use keys for controls and typed characters for text.
+	 *
+	 * @param Character A Unicode code point. Control characters, such as those of Enter, Tab and Backspace, are
+	 * ignored, because those are keys; so is a value that is not a character.
+	 */
+	ENGINE_API void HandleTypedCharacter(char32_t Character);
 
 	/** Records that a mouse button went down or came up, with the same rules as HandleKeyEvent. */
 	ENGINE_API void HandleMouseButtonEvent(EMouseButton Button, EInputEvent Event);
@@ -65,6 +76,12 @@ public:
 	ENGINE_API bool WasMouseButtonPressed(EMouseButton Button) const;
 	ENGINE_API bool WasMouseButtonReleased(EMouseButton Button) const;
 
+	/** Returns the text that was typed during the current frame, in the order it was typed, as UTF-8. */
+	const std::string& GetTypedText() const
+	{
+		return TypedText;
+	}
+
 	/** Returns the last known position of the mouse, or zero if it has not been seen yet. */
 	const FVector2D& GetMousePosition() const
 	{
@@ -94,6 +111,8 @@ private:
 	std::bitset<MouseButtonCount> MouseButtonsDown;
 	std::bitset<MouseButtonCount> MouseButtonsPressed;
 	std::bitset<MouseButtonCount> MouseButtonsReleased;
+
+	std::string TypedText;
 
 	FVector2D MousePosition = FVector2D(0.0);
 	FVector2D MouseDelta = FVector2D(0.0);
