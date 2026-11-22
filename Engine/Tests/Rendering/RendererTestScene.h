@@ -7,10 +7,13 @@
 #include "Object/ObjectGlobals.h"
 #include "Rendering/CameraView.h"
 #include "Rendering/DirectionalLightComponent.h"
+#include "Rendering/EnvironmentMap.h"
+#include "Rendering/HdrImage.h"
 #include "Rendering/Image.h"
 #include "Rendering/Material.h"
 #include "Rendering/MeshShapes.h"
 #include "Rendering/PointLightComponent.h"
+#include "Rendering/SkyLightComponent.h"
 #include "Rendering/StaticMesh.h"
 #include "Rendering/StaticMeshComponent.h"
 #include "Rendering/TestSceneRendering.h"
@@ -20,12 +23,17 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <cmath>
+#include <numbers>
 #include <string>
 
 // The renderer's test scene: a small set that uses everything the renderer can do, drawn in tests and compared
 // with a reference image. A floor with a checkerboard texture carries three spheres (red plastic, gold, rough
 // blue), a box with a coloured texture, a box with a grooved normal texture and a small glowing sphere with a
-// lamp above it; a sun lights the whole.
+// lamp above it. A low sun shines from the right and lays the shadow of each thing across the floor beside it. A
+// sky lights the whole from all around: it fills the shadows, is mirrored in the gold sphere, shows behind the
+// scene, and is dimmed by ambient occlusion where the things stand on the floor.
 //
 // Everything is placed relative to an origin, at offsets that are multiples of an eighth of a metre. Double
 // precision represents those exactly even ten billion kilometres from the world origin, so the scene is the same
@@ -34,9 +42,6 @@
 /** The size of the pictures taken of the test scene. */
 inline constexpr int32 RendererTestSceneWidth = 320;
 inline constexpr int32 RendererTestSceneHeight = 180;
-
-/** The colour behind the test scene. */
-inline constexpr FLinearColor RendererTestSceneBackground(0.02f, 0.03f, 0.05f);
 
 /** A texture of the given picture, which a test expects to be valid. */
 inline WTexture* MakeTestSceneTexture(const FImage& Image, ETextureColorSpace ColorSpace)
@@ -92,6 +97,39 @@ inline FImage MakeTestSceneGrooves()
 		{
 			const bool bLeansRight = (X / StripeWidth) % 2 == 0;
 			Image.SetPixel(X, Y, bLeansRight ? FColor(204, 128, 230) : FColor(51, 128, 230));
+		}
+	}
+	return Image;
+}
+
+/**
+ * The surroundings of the test scene: a sky that is deep blue overhead and pale at the horizon, above a ground of
+ * warm grey. The colours change smoothly with height and not at all with direction, so the picture has no sharp
+ * edge for two graphics cards to draw differently. The sky is bright enough to light what the sun does not reach,
+ * and dim enough for the sun's shadows to stay clearly darker than the floor around them.
+ */
+inline FHdrImage MakeTestSceneSky()
+{
+	constexpr int32 Width = 64;
+	constexpr int32 Height = 32;
+	const FVector3f Zenith(0.08f, 0.18f, 0.44f);
+	const FVector3f Horizon(0.44f, 0.50f, 0.56f);
+	const FVector3f Ground(0.13f, 0.11f, 0.10f);
+
+	FHdrImage Image(Width, Height);
+	for (int32 Y = 0; Y < Height; ++Y)
+	{
+		// The rows run from straight up, at the top, to straight down. How far up a row looks, from 1 to -1:
+		const float Elevation =
+			std::numbers::pi_v<float> * (0.5f - (static_cast<float>(Y) + 0.5f) / static_cast<float>(Height));
+		const float Up = std::sin(Elevation);
+
+		// The sky pales towards the horizon, and the ground takes over within a short way below it.
+		const FVector3f Color = Up >= 0.0f ? glm::mix(Horizon, Zenith, std::sqrt(Up))
+										   : glm::mix(Horizon, Ground, std::min(1.0f, -4.0f * Up));
+		for (int32 X = 0; X < Width; ++X)
+		{
+			Image.SetPixel(X, Y, FLinearColor(Color.x, Color.y, Color.z));
 		}
 	}
 	return Image;
@@ -177,13 +215,24 @@ inline void BuildRendererTestScene(WScene& Scene, const FVector& Origin)
 	LampLight->Intensity = 1.5f;
 	LampLight->Range = 6.0f;
 
+	// The sun stands low on the right and a little in front, so that the shadows fall to the left across the floor,
+	// where the camera sees them, and the fronts of the things are still in its light.
 	WEntity* const Sun = Scene.CreateEntity("Sun");
 	REQUIRE(Sun != nullptr);
-	Sun->SetRelativeTransform(MakeTransform(Origin, Turn(35.0f, AxisY) * Turn(-50.0f, AxisX)));
+	Sun->SetRelativeTransform(MakeTransform(Origin, Turn(70.0f, AxisY) * Turn(-35.0f, AxisX)));
 	WDirectionalLightComponent* const SunLight = Sun->AddComponent<WDirectionalLightComponent>();
 	REQUIRE(SunLight != nullptr);
 	SunLight->Color = FLinearColor(1.0f, 0.95f, 0.9f);
 	SunLight->Intensity = 3.0f;
+
+	WEntity* const Sky = Scene.CreateEntity("Sky");
+	REQUIRE(Sky != nullptr);
+	WSkyLightComponent* const SkyLight = Sky->AddComponent<WSkyLightComponent>();
+	REQUIRE(SkyLight != nullptr);
+	WEnvironmentMap* const Environment = NewObject<WEnvironmentMap>();
+	std::string Error;
+	REQUIRE(Environment->SetImage(MakeTestSceneSky(), Error));
+	SkyLight->Environment = Environment;
 }
 
 /** Returns the view the pictures of the test scene are taken from: in front of it, looking slightly down. */
