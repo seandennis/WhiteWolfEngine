@@ -10,6 +10,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -61,6 +62,49 @@ namespace
 			Darkest = std::min(Darkest, static_cast<int32>(Image.GetPixel(X, Row).R));
 		}
 		return Darkest;
+	}
+
+	/** The largest number of shades by which a pixel differs from the next one in its row, anywhere in the picture. */
+	int32 GetLargestStepAlongRows(const FImage& Image, int32 FirstColumn = 16, int32 LastColumn = Size - 17)
+	{
+		int32 LargestStep = 0;
+		for (int32 Y = 0; Y < Image.GetHeight(); ++Y)
+		{
+			for (int32 X = FirstColumn; X < LastColumn; ++X)
+			{
+				const int32 Shade = Image.GetPixel(X, Y).R;
+				const int32 NextShade = Image.GetPixel(X + 1, Y).R;
+				LargestStep = std::max(LargestStep, std::abs(Shade - NextShade));
+			}
+		}
+		return LargestStep;
+	}
+
+	/**
+	 * The largest number of shades by which a column gets darker again on the way from its darkest pixel to the
+	 * top or to the bottom of the picture: zero if the occlusion of a crease fades away evenly on both sides.
+	 */
+	int32 GetLargestRipple(const FImage& Image, int32 Column)
+	{
+		int32 DarkestRow = 0;
+		for (int32 Y = 1; Y < Image.GetHeight(); ++Y)
+		{
+			if (Image.GetPixel(Column, Y).R < Image.GetPixel(Column, DarkestRow).R)
+			{
+				DarkestRow = Y;
+			}
+		}
+
+		int32 LargestRipple = 0;
+		for (int32 Y = DarkestRow; Y > 0; --Y)
+		{
+			LargestRipple = std::max(LargestRipple, Image.GetPixel(Column, Y).R - Image.GetPixel(Column, Y - 1).R);
+		}
+		for (int32 Y = DarkestRow; Y < Image.GetHeight() - 1; ++Y)
+		{
+			LargestRipple = std::max(LargestRipple, Image.GetPixel(Column, Y).R - Image.GetPixel(Column, Y + 1).R);
+		}
+		return LargestRipple;
 	}
 
 	int32 CountPixelsThatAreNot(const FImage& Image, FColor Color)
@@ -139,12 +183,56 @@ TEST_SUITE("FSceneRenderer ambient occlusion")
 			CHECK(Image.GetPixel(X, OpenWallRow) == White);
 			CHECK(Image.GetPixel(X, OpenFloorRow) == White);
 		}
-		// The crease is equally dark all along: the grain of the samples has been smoothed away.
+		// The crease is about as dark at the sides of the picture as in its middle.
 		const int32 Darkest = GetDarkest(Image, CreaseRow);
 		for (int32 X = 16; X < Size - 16; X += 5)
 		{
 			CHECK(Image.GetPixel(X, CreaseRow).R <= Darkest + 30);
 		}
+		CHECK(CountLoggedErrors(Test.Capture) == 0);
+	}
+
+	TEST_CASE("Occlusion is smooth: no grain along a crease and no ripples on the way from it")
+	{
+		// Every pixel takes its samples at one of sixteen angles, in a pattern that repeats every four pixels.
+		// The smoothing afterwards has to cancel that pattern, not just soften it into a grain. A crease that runs
+		// straight across the picture shows whether it does: all pixels of a row have the same surroundings, so
+		// they must be equally dark, and above and below the crease the picture must only get lighter.
+		FSceneRenderTest Test;
+		AddFloor(*Test.Scene.Get());
+		AddWall(*Test.Scene.Get());
+
+		FCameraView View;
+		SUBCASE("Seen level")
+		{
+			View = MakeWideView();
+		}
+		SUBCASE("Seen from above, looking down")
+		{
+			View = MakeWideView(FVector(0.0, 0.5, 0.0));
+			View.Rotation = Turn(-30.0f, AxisX);
+		}
+
+		const FImage Image = RenderOcclusion(Test, View);
+
+		// The crease is in the picture, and it is dark.
+		int32 Darkest = 255;
+		for (int32 Y = 0; Y < Size; ++Y)
+		{
+			Darkest = std::min(Darkest, GetDarkest(Image, Y));
+		}
+		CHECK(Darkest < 190);
+
+		// A pixel differs from the next in its row by a shade or two of 255, because the crease is not quite as
+		// dark at the sides of the picture as in its middle. Grain would be ten times that.
+		CHECK(GetLargestStepAlongRows(Image) <= 4);
+
+		int32 LargestRipple = 0;
+		for (int32 X = 16; X < Size - 16; ++X)
+		{
+			LargestRipple = std::max(LargestRipple, GetLargestRipple(Image, X));
+		}
+		CHECK(LargestRipple <= 2);
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 

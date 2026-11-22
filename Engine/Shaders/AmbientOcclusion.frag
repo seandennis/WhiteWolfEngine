@@ -20,11 +20,15 @@ const float SpiralTurns = 7.0;
 
 const float TwoPi = 6.28318530717959;
 
-// A number from 0 to 1 that differs from each pixel to its neighbours in a regular pattern, which turns the
-// banding of a few samples into a fine grain that the blur afterwards removes (Jimenez, 2014).
-float GetPixelNoise(vec2 Pixel)
+// Returns the angle at which a pixel's spiral starts. With every spiral in the same place, the few samples would
+// show as bands, so each pixel turns its spiral by one of sixteen angles, a sixteenth of a turn apart. The angles
+// are laid out in a pattern in which each row repeats every four pixels and holds four angles a quarter turn
+// apart, and any four rows, one below the other, together hold all sixteen. The blur afterwards gives the four
+// places in a row the same share and then the four rows the same share, so it averages the sixteen spirals and
+// leaves no trace of the pattern.
+float GetStartAngle(ivec2 Pixel)
 {
-	return fract(52.9829189 * fract(dot(Pixel, vec2(0.06711056, 0.00583715))));
+	return float((4 * Pixel.x + 5 * Pixel.y) & 15) * (TwoPi / 16.0);
 }
 
 void main()
@@ -56,7 +60,7 @@ void main()
 	float Bias = 0.02 * Radius + 0.002 * Distance;
 
 	float RadiusSquared = Radius * Radius;
-	float StartAngle = GetPixelNoise(gl_FragCoord.xy) * TwoPi;
+	float StartAngle = GetStartAngle(Pixel);
 	ivec2 PictureSize = ivec2(Pass.Settings.zw);
 
 	float Sum = 0.0;

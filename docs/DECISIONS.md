@@ -542,7 +542,7 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 
 **Decision.**
 
-- **The renderer has one test scene,** built in code by `Tests/Rendering/RendererTestScene.h`: a textured floor, spheres of plastic, metal and chalk, a box with a colour texture, a box with a normal texture, an emissive sphere, a point light and a directional light. It is built in code, not loaded from a file, so that it needs no assets, exercises `FMeshShapes`, and can be placed anywhere in the world by passing an origin.
+- **The renderer has one test scene,** built in code by `Tests/Rendering/RendererTestScene.h`: a textured floor, spheres of plastic, metal and chalk, a box with a colour texture, a box with a normal texture, an emissive sphere, a point light and a directional light. It is built in code, not loaded from a file, so that it needs no assets, exercises `FMeshShapes`, and can be placed anywhere in the world by passing an origin. (D-039 adds a sky and lowers the sun.)
 - **A test draws the scene without a window, 320 by 180 pixels, and compares the picture with a PNG in the repository,** `Engine/Tests/Rendering/ReferenceImages/RendererTestScene.png`, as the specification asks.
 - **The comparison has a tolerance.** A pixel counts as different if a channel is off by more than 12 of 255, and at most 2% of the pixels may be different. The reference was drawn on one graphics card and the tests run on several, including software rendering in CI: lighting arithmetic differs in the last bits, and a triangle's edge may fall on the other side of a pixel centre. The tolerance is wide enough for that and far too narrow to pass a missing object, a wrong material or a light that is off, each of which changes thousands of pixels by much more.
 - **The same reference serves the scene at the origin, 1,000 km and ten billion kilometres from it,** as the specification asks. The test also requires the three pictures to be equal to each other pixel for pixel on the machine that draws them, which no tolerance could hide a precision problem from.
@@ -596,9 +596,39 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 
 - **A prepass draws depth and normals.** Before the lit pass, the meshes are drawn once into the render target's depth buffer and a normal texture. The lit pass then draws the same meshes at the same depths; `StaticMesh.vert` declares its position invariant so that both passes arrive at exactly the same depth.
 - **The estimator is "scalable ambient obscurance"** (McGuire, Mara, Luebke, 2012): 16 samples on a spiral within a radius that is fixed in the world, `AmbientOcclusionRadius` (0.5 m by default), each counting how far the surface it finds rises above the plane of the pixel's own surface. It needs only depth and normals, works with a far plane at infinity, and gives a flat surface exactly no occlusion at any viewing angle, which a test demands of every pixel.
-- **The result is smoothed in two passes,** across and down, over every second pixel up to eight away, without spreading across differences in depth of more than three percent.
+- **The result is smoothed in two passes,** across and down, over every second pixel up to eight away, without spreading across differences in depth of more than three percent. (Superseded by D-038, which smooths over every pixel up to four away, with weights that cancel the pattern of the samples.)
 - **Ambient occlusion dims the sky light only,** like a material's occlusion texture (D-035). Light from lamps and suns is not ambient and is left alone.
 - **It belongs to the render target.** The normal texture and two occlusion textures are created with each render target, and reach the lit pass as descriptor set 2. When ambient occlusion is off, the prepass is skipped and the lit pass reads a white pixel instead.
 - **`ESceneViewMode::AmbientOcclusion`** shows the result by itself, for inspecting it and for testing it exactly.
 
 **Testing.** In the occlusion view mode: an empty scene, a wall seen head-on and a floor seen at flat angles must be white in every pixel; a corner must be dark at its crease, lighter away from it and white beyond the radius; the radius and intensity must do what they say; something near the camera must not darken a wall five metres behind it; the band of occlusion must be as dark in a picture twice the size; and the picture must be pixel for pixel the same ten billion kilometres from the origin. Lit, ambient occlusion must darken a crease under a sky light and change nothing under a sun alone.
+
+## D-038: Ambient occlusion turns its samples in a pattern that the smoothing cancels
+
+**Status:** Accepted. Supersedes the smoothing of D-037.
+
+**Context.** With 16 samples in the same places for every pixel, ambient occlusion shows bands, so each pixel turns its spiral of samples by its own angle and a blur afterwards averages neighbouring pixels. D-037 took the angle from interleaved gradient noise and blurred over every second pixel. That left a grain: a straight crease drawn 128 pixels high had neighbouring pixels up to 36 shades of 255 apart, and the wall above it had ripples of up to 18 shades. A blur over every second pixel averages the even and the odd pixels separately, and nothing makes those two averages equal.
+
+**Decision.**
+
+- **The angle comes from a pattern whose rows repeat every four pixels:** angle number (4x + 5y) mod 16, of sixteen angles a sixteenth of a turn apart. Each row holds four angles a quarter of a turn apart, and any four rows, one below the other, hold all sixteen once. Four rows down the pattern is the same again, moved one pixel across.
+- **The blur takes every pixel up to four away, with the weights 1, 4, 8, 12, 14, 12, 8, 4, 1 of 64.** The pixels at each of four places in succession add up to the same share, 16 of 64, so a pass across averages the four angles of a row exactly, which leaves every fourth row the same, and a pass down then averages the four rows: all sixteen spirals, 256 samples, in equal parts. The pattern cancels instead of being softened, wherever every pixel counts in full.
+- **It costs what it did:** nine pixels in each of two passes.
+- **Where it is not exact.** The blur still leaves out pixels whose depth differs by more than three percent, so next to an edge, and on a surface that falls away from the camera steeply, the shares are no longer equal. What remains there is small, because a pass across has by then averaged four angles a quarter of a turn apart.
+
+**Alternatives considered.** Blurring every pixel with the noise of D-037 removed the grain but left diagonal streaks in large pictures, because that noise changes slowly along one direction. A dither matrix in place of the lattice cancels as exactly, but its rows hold angles in two pairs instead of evenly spread, which leaves more behind wherever one of the two passes is cut short.
+
+**Testing.** A crease that runs straight across the picture, seen level and from above: a pixel must be within 4 shades of the next along every row, where D-037 measured 20 and 36, and going up or down from the crease the picture must not get darker again by more than 2 shades, where it measured 6 and 18. The tests of D-037 hold unchanged.
+
+## D-039: The renderer's test scene shows image-based lighting, shadows and ambient occlusion
+
+**Status:** Accepted. Extends D-034.
+
+**Context.** The test scene of D-034 had a sun and a lamp but no sky light, so its reference image showed neither image-based lighting nor ambient occlusion, which dims sky light only (D-037). Its sun stood high and behind the camera, so most of each shadow lay hidden behind the thing that cast it: without shadows only 1.5% of the picture changed by more than the comparison's tolerance, less than the 2% the comparison lets pass. The reference image would not have noticed shadows stop working.
+
+**Decision.**
+
+- **The scene has a sky,** an environment map made in code like the rest of the scene: 64 by 32 pixels, deep blue overhead, pale at the horizon, warm grey below it. It changes smoothly with height and not at all with direction, so it gives two graphics cards no sharp edge to draw differently. It lights the scene, fills the shadows, is mirrored in the gold sphere and is the background of the picture, which no longer needs a background colour.
+- **The sun stands low on the right:** turned 70 degrees and 35 degrees below the horizon instead of 35 and 50. Shadows now fall to the left across the floor, beside the things that cast them and onto each other, where the camera sees them, and the fronts of the things are still in the sun.
+- **A test proves that the picture depends on each of the three.** It draws the scene whole, then with the sky light, the shadows or ambient occlusion switched off, and requires more of the picture to change than the comparison with the reference image allows: 99%, 5.8% and 3.2% of the pixels, against the 2% that may differ. A reference image tests only what its picture depends on; this keeps it from quietly ceasing to test one of them.
+- **The reference image was drawn by Lavapipe,** the software implementation of Vulkan that CI also uses, with the tolerances of D-034 unchanged. The image it replaces was drawn by a graphics card, and Lavapipe differed from it in 0.08% of the pixels, a twenty-fifth of what the comparison allows.
