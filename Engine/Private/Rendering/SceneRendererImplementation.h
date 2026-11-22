@@ -10,19 +10,15 @@
 #include "Rendering/SceneRenderer.h"
 #include "Rendering/ShadowMaps.h"
 #include "Rendering/StaticMeshBuffers.h"
-#include "Rendering/TextureResource.h"
-#include "Rendering/TextureWrap.h"
+#include "Rendering/TextureCache.h"
 
 #include <nvrhi/nvrhi.h>
 
-#include <array>
-#include <cstddef>
 #include <memory>
 #include <unordered_map>
 
 class WMaterial;
 class WStaticMesh;
-class WTexture;
 
 /** Everything a scene renderer holds. It lives here so that no NVRHI type appears in an engine header. */
 struct FSceneRenderer::FImplementation
@@ -87,35 +83,17 @@ struct FSceneRenderer::FImplementation
 	/** How the textures of a material reach the shaders: four textures and a sampler for each. */
 	nvrhi::BindingLayoutHandle MaterialBindingLayout;
 
-	/** One sampler for every pair of wrap modes; the index is WrapU * WrapModeCount + WrapV. */
-	static constexpr std::size_t WrapModeCount = 3;
-	std::array<nvrhi::SamplerHandle, WrapModeCount * WrapModeCount> Samplers;
-
-	/** What a material slot without a texture reads: one white pixel, which changes nothing it multiplies. */
-	nvrhi::TextureHandle WhiteTexture;
-
-	/** The pictures on the graphics card of every texture that a drawn material has used. Keyed like MeshBuffers. */
-	std::unordered_map<const WTexture*, FTextureResource> Textures;
+	/**
+	 * The pictures on the graphics card of every texture that a drawn material has used, the samplers they are
+	 * read with, and the white texture that a material slot without a texture reads.
+	 */
+	FTextureCache Textures;
 
 	/**
 	 * The binding sets of every material that has been drawn. The key is only an address; null is the key of the
 	 * set for components without a material.
 	 */
 	std::unordered_map<const WMaterial*, FMaterialBindings> Materials;
-
-	/** Creates Samplers and WhiteTexture. Called once, when the renderer is created. Returns false on failure. */
-	bool CreateSamplersAndWhiteTexture();
-
-	/**
-	 * Returns the picture of a texture on the graphics card, creating it if it is not there or not current. A
-	 * texture that is null, destroyed or without a picture gives the white texture.
-	 *
-	 * @return Null if the graphics card could not create the texture.
-	 */
-	nvrhi::ITexture* FindOrCreateTexture(WTexture* Texture);
-
-	/** Returns the sampler for a pair of wrap modes. */
-	nvrhi::ISampler* GetSampler(ETextureWrap WrapU, ETextureWrap WrapV) const;
 
 	/**
 	 * Returns the binding set with the textures of a material, creating it if it does not exist or the material's
@@ -125,13 +103,6 @@ struct FSceneRenderer::FImplementation
 	 * @return Null if the graphics card could not create a texture or the set.
 	 */
 	nvrhi::IBindingSet* FindOrCreateMaterialBindings(WMaterial* Material);
-
-	/**
-	 * Writes the picture, with its smaller versions, of every texture that was created since the last call.
-	 *
-	 * @return How many textures were written.
-	 */
-	int32 WritePendingTextures(nvrhi::ICommandList& CommandList);
 
 	/** True once a warning about a scene with too many lights has been logged, so that it is logged only once. */
 	bool bWarnedAboutLightLimit = false;

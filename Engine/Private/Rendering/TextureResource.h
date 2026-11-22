@@ -11,7 +11,7 @@
 struct FTextureResource
 {
 	/** The texture this is a copy of. Null once the texture is gone, which is when the copy is released. */
-	TWeakObjectPtr<WTexture> Texture;
+	TWeakObjectPtr<const WTexture> Texture;
 
 	/** The version of the picture that was copied; see WTexture::GetImageVersion. */
 	uint64 ImageVersion = 0;
