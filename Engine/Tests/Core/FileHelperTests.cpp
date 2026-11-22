@@ -112,4 +112,19 @@ TEST_SUITE("FFileHelper")
 		CHECK(Text.starts_with("Sc\xC3\xA8nes"));
 		CHECK(Text.ends_with("Level.json"));
 	}
+
+	TEST_CASE("PathFromUtf8 returns the path that UTF-8 text names")
+	{
+		const std::filesystem::path Path = FFileHelper::PathFromUtf8("Sc\xC3\xA8nes/Level.json");
+
+		CHECK(Path == std::filesystem::path(u8"Scènes") / "Level.json");
+		CHECK(FFileHelper::PathFromUtf8("").empty());
+	}
+
+	TEST_CASE("A path survives the round trip through UTF-8 text")
+	{
+		const std::filesystem::path Path = std::filesystem::path(u8"Szenen") / u8"Übung 日本.json";
+
+		CHECK(FFileHelper::PathFromUtf8(FFileHelper::PathToUtf8(Path)) == Path);
+	}
 }

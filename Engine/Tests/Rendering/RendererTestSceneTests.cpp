@@ -14,7 +14,6 @@
 #include <filesystem>
 #include <ostream>
 #include <string>
-#include <string_view>
 #include <vector>
 
 // The renderer's test scene is drawn without a window and compared with a reference image that is stored in the
@@ -35,11 +34,6 @@ namespace
 	 */
 	constexpr int32 SameMachineChannelTolerance = 6;
 	constexpr double SameMachineMaxDifferentPixelFraction = 0.002;
-
-	std::filesystem::path PathFromUtf8(std::string_view Text)
-	{
-		return std::filesystem::path(std::u8string(Text.begin(), Text.end()));
-	}
 
 	/** Draws the test scene built around Origin. */
 	FImage DrawTestScene(const FVector& Origin, FSceneRenderStatistics* OutStatistics = nullptr)
@@ -68,9 +62,10 @@ namespace
 	 */
 	void CheckAgainstReference(const FImage& Actual, const std::string& Name, const std::string& OutputSuffix = "")
 	{
-		const std::filesystem::path ReferencePath = PathFromUtf8(WW_REFERENCE_IMAGE_DIRECTORY) / (Name + ".png");
+		const std::filesystem::path ReferencePath =
+			FFileHelper::PathFromUtf8(WW_REFERENCE_IMAGE_DIRECTORY) / (Name + ".png");
 		const std::filesystem::path OutputPath =
-			PathFromUtf8(WW_TEST_OUTPUT_DIRECTORY) / (Name + OutputSuffix + ".png");
+			FFileHelper::PathFromUtf8(WW_TEST_OUTPUT_DIRECTORY) / (Name + OutputSuffix + ".png");
 
 		FImage Reference;
 		std::string Error;

@@ -79,3 +79,8 @@ std::string FFileHelper::PathToUtf8(const std::filesystem::path& Path)
 	const std::u8string Text = Path.u8string();
 	return std::string(Text.begin(), Text.end());
 }
+
+std::filesystem::path FFileHelper::PathFromUtf8(std::string_view Text)
+{
+	return std::filesystem::path(std::u8string(Text.begin(), Text.end()));
+}

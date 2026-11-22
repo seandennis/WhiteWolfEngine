@@ -34,4 +34,7 @@ public:
 
 	/** Returns a path as UTF-8 text, for messages and for saving in files. */
 	ENGINE_API static std::string PathToUtf8(const std::filesystem::path& Path);
+
+	/** Returns the path that UTF-8 text names: the opposite of PathToUtf8. */
+	ENGINE_API static std::filesystem::path PathFromUtf8(std::string_view Text);
 };

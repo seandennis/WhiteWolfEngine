@@ -60,11 +60,6 @@ namespace
 		std::string LastError;
 	};
 
-	std::filesystem::path PathFromUtf8(std::string_view Text)
-	{
-		return std::filesystem::path(std::u8string(Text.begin(), Text.end()));
-	}
-
 	/** Reads a file for cgltf through the engine's file functions, which handle paths that are not ASCII. */
 	cgltf_result ReadFileForGltf(const cgltf_memory_options* /*MemoryOptions*/,
 		const cgltf_file_options* FileOptions,
@@ -75,7 +70,7 @@ namespace
 		FGltfFileStore& Store = *static_cast<FGltfFileStore*>(FileOptions->user_data);
 
 		std::unique_ptr<std::string> Content = std::make_unique<std::string>();
-		if (!FFileHelper::LoadFileToString(PathFromUtf8(Path), *Content, Store.LastError))
+		if (!FFileHelper::LoadFileToString(FFileHelper::PathFromUtf8(Path), *Content, Store.LastError))
 		{
 			return cgltf_result_file_not_found;
 		}
@@ -787,7 +782,7 @@ namespace
 			// The picture is a file beside the glTF file. Its address may have characters written as %20 and the like.
 			std::string FileName(Uri);
 			FileName.resize(cgltf_decode_uri(FileName.data()));
-			return FImageFile::Load(Path.parent_path() / PathFromUtf8(FileName), OutImage, OutProblem);
+			return FImageFile::Load(Path.parent_path() / FFileHelper::PathFromUtf8(FileName), OutImage, OutProblem);
 		}
 
 		using FTextureKey = std::pair<const cgltf_texture*, ETextureColorSpace>;
