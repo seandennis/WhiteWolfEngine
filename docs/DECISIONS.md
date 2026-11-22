@@ -781,3 +781,23 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** The project file holds nothing but the name yet. There is no command that moves, renames or removes an asset file, and a scene that names an asset by its old path does not follow it. Nothing remembers which project was open last.
 
 **Testing.** `FProject`: creating and opening, and every way either can fail. The commands, on a project in a temporary directory: importing each kind of file, a `.gltf` file with a buffer and a picture beside it, every reason an import is refused and that nothing is left in the project then; listing and describing; placing a model at the root and below an entity, undoing it, and saving and opening the scene with it; and scenes by relative path.
+
+## D-046: User interfaces are drawn by the engine, from lists of triangles
+
+**Status:** Accepted.
+
+**Context.** The editor needs a user interface, and so will games. Whatever lays a user interface out, a library or code of the engine's own, what comes out of it is the same: flat triangles in the pixels of a surface, in colours, covered with pictures, clipped to rectangles. Only `Engine/Private/Rendering` may know NVRHI and Vulkan, so the module that lays out the editor's user interface cannot draw it. And the specification wants pictures of the editor compared with reference images in the test run, where there is no window.
+
+**Decision.**
+
+- **`FUiRenderer` draws an `FUiDrawList` onto a render target.** The list is vertices (a position in pixels, a texture coordinate, a colour), 32-bit indices, and commands that each draw a run of triangles with one picture inside one clip rectangle. That is the form user-interface libraries produce, and the engine does not know which one made a list.
+- **It draws onto a render target, as the scene renderer does,** over what the target shows. A user interface can therefore be drawn and read back without a window, and whatever shows a render target in a window shows a user interface.
+- **Colours are sRGB-encoded where they are given and blended in linear light.** A vertex colour is an `FColor`, as colours are picked and stored; the vertex shader decodes it, and the surface encodes what is drawn. An opaque colour is read back as the colour that was given. Where colours are translucent, the result is that of blending light, not of blending encoded numbers, which is what many user-interface libraries assume: translucent overlays come out a little lighter than such a library's own pictures of itself.
+- **A picture is a `WTexture`, or the surface of another render target.** Fonts, icons and thumbnails are textures like any other, through the cache the scene renderer uses (`FTextureCache`, which was part of the scene renderer until now). A render target is shown as an editor's viewport shows the scene, with its alpha ignored.
+- **A list is checked before any of it is drawn:** every index, every range, every offset. A list that is not consistent is refused as a whole with a message that names the command.
+
+**Alternatives considered.** Giving the editor module access to NVRHI would put knowledge of the graphics interface into a second module. Letting a user-interface library draw with a Vulkan backend of its own would put third-party code in charge of part of every frame, outside NVRHI's tracking of what the graphics card holds, and tied to a window. Drawing user interfaces with the scene renderer, as meshes, would bend a renderer built around depth, lighting and materials to something that needs none of them.
+
+**Limits.** There is one picture to a command and no way to give a shader of one's own. Text is whatever triangles and font picture the layout produces; the engine has no notion of text.
+
+**Testing.** Lists of rectangles on a surface of sixteen by sixteen pixels, read back and compared pixel for pixel: which pixels a rectangle covers, from which corner positions count, that an opaque colour is read back as given and a translucent one blends as light does, the order of commands, clip rectangles inside, across and outside the surface, a texture shown pixel for pixel and multiplied by a colour, a texture's alpha, a texture whose picture is replaced, a render target shown and then drawn to again, a command's own part of a list, a list larger than the buffers, and each way a list can be inconsistent, with nothing drawn then. All with NVRHI's validation on and no error logged.
