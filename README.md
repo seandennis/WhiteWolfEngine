@@ -13,7 +13,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | 1 | Repository, CMake build, test framework, `AGENTS.md`, code style tooling, first push to GitHub | Complete |
 | 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | Complete |
 | 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Complete |
-| 4 | Renderer: image-based lighting, soft shadows, SSAO | In progress. Done: Radiance HDR image files; environment maps and sky lights, which light a scene from an HDRI, mirror it in metals and show it as the sky; cascaded shadow maps with soft edges for directional lights; screen-space ambient occlusion; the renderer's test scene, lit by a sky and a low sun, and its reference image, which show all three. Still to do: a green CI run |
+| 4 | Renderer: image-based lighting, soft shadows, SSAO | Complete |
 | 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | Not started |
 | 6 | Plugin system, ChronoPhysics plugin, audio components | Not started |
 | 7 | C++ scripting module with hot reload, prefabs, full test scene | Not started |
@@ -21,7 +21,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | 9 | Blueprint visual scripting, and Tetris rebuilt with Blueprints only | Not started |
 | 10 | ChronoVehicle plugin | Not started |
 
-What exists today: the build system, the `Engine` module (`WhiteWolfEngine.dll`) with versioning (`FVersion`, `FEngineVersion`), logging (`WW_LOG`, categories, console, file and in-memory sinks) assertions (`WW_CHECK`), math types (`FVector`, `FQuat`, `FTransform`) the object system (`WObject`, `WClass`, `NewObject`, `TObjectPtr`, `TWeakObjectPtr`, garbage collection), JSON reading and writing (`FJsonValue`) and reflection (`WCLASS()`, `WPROPERTY()`, `WFUNCTION()`, with `WhiteWolfHeaderTool` generating the registration code), scenes (`WScene`, `WEntity`, `WComponent`) that are saved and loaded as JSON text (`FSceneSerializer`), windows and input (`FPlatform`, `FWindow`, `FInputState`, with a headless mode for unattended runs), the unit test harness, formatting tooling and continuous integration.
+What exists today: the build system, the `Engine` module (`WhiteWolfEngine.dll`) with versioning (`FVersion`, `FEngineVersion`), logging (`WW_LOG`, categories, console, file and in-memory sinks) assertions (`WW_CHECK`), math types (`FVector`, `FQuat`, `FTransform`) the object system (`WObject`, `WClass`, `NewObject`, `TObjectPtr`, `TWeakObjectPtr`, garbage collection), JSON reading and writing (`FJsonValue`) and reflection (`WCLASS()`, `WPROPERTY()`, `WFUNCTION()`, with `WhiteWolfHeaderTool` generating the registration code), scenes (`WScene`, `WEntity`, `WComponent`) that are saved and loaded as JSON text (`FSceneSerializer`), windows and input (`FPlatform`, `FWindow`, `FInputState`, with a headless mode for unattended runs), the renderer (`FRenderDevice`, `FSceneRenderer`: Vulkan through NVRHI, camera-relative rendering with reversed depth, glTF import, physically based materials and lights in high dynamic range, image-based lighting from HDRIs, soft cascaded shadows and screen-space ambient occlusion, drawn without a window and compared with a reference image), the unit test harness, formatting tooling and continuous integration.
 
 ## Requirements
 
@@ -49,7 +49,7 @@ To work in Visual Studio, open the solution in `Build/windows/` after the first 
 | --- | --- |
 | `Engine/` | The core engine module, `WhiteWolfEngine.dll`: `Public/` headers, `Private/` sources, `Tests/` unit tests |
 | `CMake/` | Build helpers: compiler settings, module declaration, pinned dependencies |
-| `Tools/` | Development tools: the reflection header tool, source formatting, git hooks |
+| `Tools/` | Development tools: the reflection header tool, the shader compiler, source formatting, git hooks |
 | `docs/DECISIONS.md` | Every design and tooling decision, with its reasons |
 | `AGENTS.md` | Build and test commands, code style, directory layout and the pre-commit review checklist |
 | `.claude/skills/` | Step-by-step procedures for agents working on the engine |
