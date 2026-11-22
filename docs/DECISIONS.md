@@ -819,3 +819,23 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Alternatives considered.** Saving the selection with the scene would put a user's momentary attention into a file that is shared and compared. Making the selection part of the history's states, as editors that record every change as a transaction do, would make each click a step that an undo has to pass through. Selecting components as well as entities is left out until something needs it: the details panel shows the components of the selected entity.
 
 **Testing.** That the selection is what was set, in order and without duplicates; that identifiers of no entity and of components select nothing; that a destroyed entity drops out and an undo brings it back; that selecting adds no step to the history; that a new scene starts with nothing selected; and for `Selection.Set`, each kind of argument that does not select entities, with its reason and the selection left as it was.
+
+## D-048: The viewport's camera and view mode are the editor's, with commands of their own
+
+**Status:** Accepted.
+
+**Context.** The editor's viewport shows the scene from a point of view that the user steers, in a view mode that the user picks. The specification wants every editor action to be a command and an agent to be able to capture a screenshot, which is only of use if the agent can say from where. And the tests of the viewport have to know exactly what it shows.
+
+**Decision.**
+
+- **`FEditor` holds the viewport's camera and view mode,** though it has no viewport: they say what a picture of the scene being edited shows, whoever draws it, a window or a screenshot.
+- **The camera is an `FViewportCamera`:** a location in world space (double precision, like every position), a yaw and a pitch in degrees, a field of view and an exposure. Two angles and not a rotation, because that is how a viewport is steered and what a person can read and type: yaw turns around the world's up axis, counter-clockwise seen from above, from looking along -Z (D-028); pitch looks up from the horizon and stops one degree short of straight up and down, where left and right would stop meaning anything. The horizon is always level.
+- **`Viewport.GetCamera`, `Viewport.SetCamera`, `Viewport.GetViewMode` and `Viewport.SetViewMode`** are the commands. `Viewport.SetCamera` changes what it is given and leaves the rest, and takes `LookAt`, a point to face, in place of the two angles, because an agent that wants a picture of something knows where the thing is and not which angles face it.
+- **Neither is part of the scene.** They are not saved with it, changing them is not a step of the history, and they stay as they are when another scene is opened. The user interface moves the camera every frame while the user flies through the scene, and does that by setting it on the editor directly: a command is for an action, and a frame of flying is not one. Only what changes the scene has to be a command (D-040).
+- **A new scene is first seen from a short way off, looking down at its origin** from a diagonal, so that what is placed there shows its shape.
+
+**Alternatives considered.** A camera entity in the scene would be saved with it and shipped with the game. Keeping the camera in the user interface would leave tests and agents without a way to say what the viewport shows, and a screenshot command without a point of view. A quaternion for the direction can roll the horizon and cannot be typed.
+
+**Limits.** There is one viewport and one camera. Exposure is set by hand: nothing measures the brightness of the scene.
+
+**Testing.** The camera: the directions that each angle gives, that the right-hand direction stays level, `LookAt` in each direction, far from the origin, straight up and down, and at the point the camera is at, the view it gives the renderer, and each number that makes it invalid. The commands: what they return, that `Viewport.SetCamera` changes only what it is given, `LookAt` with and without a location, every argument that is refused with its reason and the camera left as it was, including numbers that are not finite, each view mode by name, a name that is no view mode, and that none of it is a step of the history.

@@ -11,6 +11,7 @@
 #include "Commands/PropertyCommands.h"
 #include "Commands/SceneCommands.h"
 #include "Commands/SelectionCommands.h"
+#include "Commands/ViewportCommands.h"
 #include "Json/JsonFormat.h"
 #include "Json/JsonValue.h"
 #include "Json/JsonWriter.h"
@@ -34,6 +35,7 @@ FEditor::FEditor()
 	FComponentCommands::Register(Commands);
 	FPropertyCommands::Register(Commands);
 	FSelectionCommands::Register(Commands);
+	FViewportCommands::Register(Commands);
 
 	WScene* const EmptyScene = NewObject<WScene>();
 	EmptyScene->SetName(std::string(DefaultSceneName));
@@ -152,6 +154,12 @@ void FEditor::SetSelection(const std::vector<int64>& EntityIds)
 			SelectedEntityIds.push_back(EntityId);
 		}
 	}
+}
+
+void FEditor::SetViewportCamera(const FViewportCamera& NewCamera)
+{
+	WW_CHECKF(NewCamera.IsValid(), "The camera of the viewport was given numbers that no picture can be drawn from");
+	ViewportCamera = NewCamera;
 }
 
 std::filesystem::path FEditor::ResolveFilePath(const std::filesystem::path& Path) const

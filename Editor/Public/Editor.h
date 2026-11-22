@@ -7,6 +7,8 @@
 #include "History/UndoHistory.h"
 #include "Object/WeakObjectPtr.h"
 #include "Project/Project.h"
+#include "Rendering/SceneViewMode.h"
+#include "Viewport/ViewportCamera.h"
 
 #include <filesystem>
 #include <optional>
@@ -29,7 +31,8 @@ extern EDITOR_API FLogCategory LogEditor;
  *
  * An editor always has a scene: an empty one called "Untitled" to begin with. The editor keeps its scene alive.
  * It may have a project (FProject), which is where the assets that scenes refer to are. It knows which entities
- * of the scene are selected: the ones that the user is working on.
+ * of the scene are selected, the ones that the user is working on, and from where the scene is looked at: the
+ * camera of the viewport, which is the user's eye and not something in the scene.
  *
  * Every change to the scene can be undone. After each command that can change the scene (ECommandEffect), the
  * editor writes the scene down, and if it differs from what it was, that is a step of the history; Undo and Redo
@@ -142,6 +145,32 @@ public:
 	 */
 	EDITOR_API void SetSelection(const std::vector<int64>& EntityIds);
 
+	/** Returns the point of view from which the viewport shows the scene. */
+	const FViewportCamera& GetViewportCamera() const
+	{
+		return ViewportCamera;
+	}
+
+	/**
+	 * Moves the camera of the viewport. It is the user's point of view and not part of the scene, so moving it is
+	 * not a step of the history, and it stays where it is when another scene is opened.
+	 *
+	 * @param NewCamera A valid camera (FViewportCamera::IsValid). Anything else is a fatal error.
+	 */
+	EDITOR_API void SetViewportCamera(const FViewportCamera& NewCamera);
+
+	/** Returns how the viewport shades the scene. */
+	ESceneViewMode GetViewMode() const
+	{
+		return ViewMode;
+	}
+
+	/** Makes the viewport shade the scene in another way. Like the camera, this is not part of the scene. */
+	void SetViewMode(ESceneViewMode NewViewMode)
+	{
+		ViewMode = NewViewMode;
+	}
+
 	/** Returns the project being worked on, or null while none is open. */
 	const FProject* GetProject() const
 	{
@@ -186,6 +215,10 @@ private:
 
 	/** The identifiers of the selected entities, some of which may no longer exist; see GetSelection. */
 	std::vector<int64> SelectedEntityIds;
+
+	FViewportCamera ViewportCamera;
+
+	ESceneViewMode ViewMode = ESceneViewMode::Lit;
 
 	std::optional<FProject> Project;
 };

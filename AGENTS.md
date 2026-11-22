@@ -161,19 +161,21 @@ Editor/                   The editor module (WhiteWolfEditorCore.dll): everythin
   CMakeLists.txt
   Main.cpp                Entry point of the editor's executable, WhiteWolfEditor
   Public/
-    Editor.h              FEditor: the scene being edited, what is selected in it and the commands that change it
+    Editor.h              FEditor: the scene being edited, what is selected in it, from where it is looked at and the
+                          commands that change it
     Commands/             The command system: CommandRegistry.h (FCommandRegistry, FCommandFunction),
                           CommandDescription.h, CommandParameter.h, CommandArgumentType.h (ECommandArgumentType),
                           CommandEffect.h (ECommandEffect), CommandArguments.h (FCommandArguments),
                           CommandResult.h (FCommandResult)
     History/              UndoHistory.h (FUndoHistory: the states a scene has been in, for undo and redo)
     Project/              Project.h (FProject: a game project, a directory with a project file and a Content directory)
+    Viewport/             ViewportCamera.h (FViewportCamera: the point of view of the editor's viewport)
     Agent/                AgentServer.h (FAgentServer: the commands as tools of a Model Context Protocol server)
     EditorApplication.h   FEditorApplication: what the executable does, given a command line and streams
   Private/
     Commands/             The editor's own commands, one class per area (FSceneCommands, FEntityCommands,
                           FComponentCommands, FPropertyCommands, FEditCommands, FProjectCommands, FAssetCommands,
-                          FSelectionCommands, FEditorCommands), and what they share
+                          FSelectionCommands, FViewportCommands, FEditorCommands), and what they share
   Tests/                  Unit tests (EditorTests executable)
     TestEditorObjects.h   Component classes for the tests, FScopedEditorTest, JSON written as text
     Agent/                The agent server's tests, and a session of messages that CTest gives the executable
@@ -380,6 +382,7 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 - **Undo and redo need nothing from a command.** After every command the editor writes the whole scene down as the text of a scene file, and a difference from the last state is a step of the history (`FUndoHistory`, D-041); `Edit.Undo` and `Edit.Redo` load a state. What a command changes must therefore be something a scene file holds. A command that cannot change the scene says so in its description with `ECommandEffect::LeavesScene`, which spares the editor the writing-down; add it to the second list in `Editor/Tests/EditorTests.cpp`.
 - **Do not keep a pointer into the scene from one command to the next.** Undo, redo, `Scene.New` and `Scene.Open` replace the scene object, with all its entities and components. They keep their identifiers: keep those, and ask `Editor.GetScene()` again.
 - **What is selected is the editor's, not the scene's** (D-047): `Editor.GetSelection()` is the identifiers of the selected entities, the last of which is the one whose properties are shown, and `Selection.Set` and `Selection.Get` are its commands. Selecting is not a step of the history. A destroyed entity drops out of the selection by itself and is back in it when an undo brings the entity back, so nothing that destroys entities has to tend the selection.
+- **The viewport's camera and view mode are the editor's too** (D-048): `Editor.GetViewportCamera()` is an `FViewportCamera`, a location with a yaw and a pitch in degrees, and `Editor.GetViewMode()` an `ESceneViewMode`. `Viewport.SetCamera` and `Viewport.SetViewMode` change them, so a test or an agent can say exactly what the viewport shows; they are not saved with the scene and not steps of the history.
 - **Assets belong to a project.** `Project.New` and `Project.Open` give the editor an `FProject`, a directory with a `.wwproject` file and a `Content` directory, which becomes the engine's content directory (D-045). `Asset.Import` copies a model, picture or environment into it, `Asset.Place` puts a model into the scene, and components take single assets as paths through `Object.SetProperty`. A relative path given to `Scene.Save` or `Scene.Open` is relative to the content directory. A command that needs the project fails with a sentence that says so while none is open.
 - **Agents reach the commands through `WhiteWolfEditor --mcp`,** a Model Context Protocol server on standard input and output in which every registered command is a tool (`FAgentServer`, D-042). A new command needs nothing to appear there. With `--mcp`, standard output carries the protocol and nothing else: never write to `std::cout` from editor or engine code, use the log. `FEditorApplication::Run` is what the executable does, with its streams as parameters, which is how tests run it.
 - **Failures are results.** Whatever can go wrong because of what was asked (no such entity, a class that is not a component, a file that cannot be read) returns `FCommandResult::Failure` with a sentence that says what is wrong, and leaves the editor as it was. Check before changing anything. `WW_CHECK` is for mistakes in the code only.

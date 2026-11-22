@@ -99,11 +99,15 @@ TEST_SUITE("FEditor")
 			"Scene.Save",
 			"Selection.Get",
 			"Selection.Set",
+			"Viewport.GetCamera",
+			"Viewport.GetViewMode",
+			"Viewport.SetCamera",
+			"Viewport.SetViewMode",
 		};
 		CHECK(Names == ExpectedNames);
 	}
 
-	TEST_CASE("The commands that only read, save or select say that they leave the scene as it is")
+	TEST_CASE("The commands that only read, save, select or change the view say that they leave the scene as it is")
 	{
 		const FScopedEditorTest EditorTest;
 		const FEditor Editor;
@@ -130,6 +134,10 @@ TEST_SUITE("FEditor")
 			"Scene.Save",
 			"Selection.Get",
 			"Selection.Set",
+			"Viewport.GetCamera",
+			"Viewport.GetViewMode",
+			"Viewport.SetCamera",
+			"Viewport.SetViewMode",
 		};
 		CHECK(Names == ExpectedNames);
 	}
