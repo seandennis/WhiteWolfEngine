@@ -59,6 +59,7 @@ add_subdirectory(Tools/ToolSupport)
 add_subdirectory(Tools/HeaderTool)
 add_subdirectory(Tools/ShaderCompiler)
 add_subdirectory(Engine)
+add_subdirectory(Editor)
 
 # Code style. `format` rewrites the sources with clang-format and `format-check` verifies them;
 # CTest runs the same check, so a passing test run also means the code is formatted.

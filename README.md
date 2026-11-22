@@ -14,14 +14,14 @@ The engine is built in the milestones defined by the specification. Each one mus
 | 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | Complete |
 | 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Complete |
 | 4 | Renderer: image-based lighting, soft shadows, SSAO | Complete |
-| 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | Not started |
+| 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | In progress. Done: the `Editor` module with the command system (named commands with typed arguments and structured results) and the commands for scenes, entities, components and reflected properties. Still to do: undo and redo, the agent interface, assets, the editor's windows (viewport, hierarchy, property panels) and the gizmo |
 | 6 | Plugin system, ChronoPhysics plugin, audio components | Not started |
 | 7 | C++ scripting module with hot reload, prefabs, full test scene | Not started |
 | 8 | Game export, and the Tetris acceptance test through the agent interface | Not started |
 | 9 | Blueprint visual scripting, and Tetris rebuilt with Blueprints only | Not started |
 | 10 | ChronoVehicle plugin | Not started |
 
-What exists today: the build system, the `Engine` module (`WhiteWolfEngine.dll`) with versioning (`FVersion`, `FEngineVersion`), logging (`WW_LOG`, categories, console, file and in-memory sinks) assertions (`WW_CHECK`), math types (`FVector`, `FQuat`, `FTransform`) the object system (`WObject`, `WClass`, `NewObject`, `TObjectPtr`, `TWeakObjectPtr`, garbage collection), JSON reading and writing (`FJsonValue`) and reflection (`WCLASS()`, `WPROPERTY()`, `WFUNCTION()`, with `WhiteWolfHeaderTool` generating the registration code), scenes (`WScene`, `WEntity`, `WComponent`) that are saved and loaded as JSON text (`FSceneSerializer`), windows and input (`FPlatform`, `FWindow`, `FInputState`, with a headless mode for unattended runs), the renderer (`FRenderDevice`, `FSceneRenderer`: Vulkan through NVRHI, camera-relative rendering with reversed depth, glTF import, physically based materials and lights in high dynamic range, image-based lighting from HDRIs, soft cascaded shadows and screen-space ambient occlusion, drawn without a window and compared with a reference image), the unit test harness, formatting tooling and continuous integration.
+What exists today: the build system, the `Engine` module (`WhiteWolfEngine.dll`) with versioning (`FVersion`, `FEngineVersion`), logging (`WW_LOG`, categories, console, file and in-memory sinks) assertions (`WW_CHECK`), math types (`FVector`, `FQuat`, `FTransform`) the object system (`WObject`, `WClass`, `NewObject`, `TObjectPtr`, `TWeakObjectPtr`, garbage collection), JSON reading and writing (`FJsonValue`) and reflection (`WCLASS()`, `WPROPERTY()`, `WFUNCTION()`, with `WhiteWolfHeaderTool` generating the registration code), scenes (`WScene`, `WEntity`, `WComponent`) that are saved and loaded as JSON text (`FSceneSerializer`), windows and input (`FPlatform`, `FWindow`, `FInputState`, with a headless mode for unattended runs), the renderer (`FRenderDevice`, `FSceneRenderer`: Vulkan through NVRHI, camera-relative rendering with reversed depth, glTF import, physically based materials and lights in high dynamic range, image-based lighting from HDRIs, soft cascaded shadows and screen-space ambient occlusion, drawn without a window and compared with a reference image), the `Editor` module (`FEditor`, `FCommandRegistry`: the editor's commands for scenes, entities, components and properties, which tests and agents give without a window), the unit test harness, formatting tooling and continuous integration.
 
 ## Requirements
 
@@ -48,6 +48,7 @@ To work in Visual Studio, open the solution in `Build/windows/` after the first 
 | Path | Contents |
 | --- | --- |
 | `Engine/` | The core engine module, `WhiteWolfEngine.dll`: `Public/` headers, `Private/` sources, `Tests/` unit tests |
+| `Editor/` | The editor module, `WhiteWolfEditorCore.dll`: the editor's commands, which need no window |
 | `CMake/` | Build helpers: compiler settings, module declaration, pinned dependencies |
 | `Tools/` | Development tools: the reflection header tool, the shader compiler, source formatting, git hooks |
 | `docs/DECISIONS.md` | Every design and tooling decision, with its reasons |

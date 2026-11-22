@@ -76,7 +76,7 @@ Build\windows\Binaries\Debug\EngineTests.exe --test-suite="FVersion"
 Build\windows\Binaries\Debug\EngineTests.exe --test-case="*Parse*"
 ```
 
-- Tests use [doctest](https://github.com/doctest/doctest). Each module has one test executable, `<Module>Tests`, built from every file under `<Module>/Tests/`, and one CTest entry of the same name. The build tools have their own: `HeaderToolTests` and `ShaderCompilerTests`.
+- Tests use [doctest](https://github.com/doctest/doctest). Each module has one test executable, `<Module>Tests`, built from every file under `<Module>/Tests/`, and one CTest entry of the same name: `EngineTests` and `EditorTests`. The build tools have their own: `HeaderToolTests` and `ShaderCompilerTests`.
 - Tests are headless: they never open a window, wait for input or need a display. The renderer tests do need Vulkan 1.3: they create an `FRenderDevice`, draw to an `FRenderTarget` and read the pixels back, on whatever graphics card or software driver the machine has. A machine without Vulkan fails them; it does not skip them.
 - Test executables are built with `DOCTEST_CONFIG_NO_MULTITHREADING`: call doctest assertions (`CHECK`, `REQUIRE`) on the main thread only. A test may start threads that run engine code. A test that needs a window creates an `FScopedHeadlessPlatform` (`Tests/Platform/ScopedHeadlessPlatform.h`), under which `FWindow::Create` makes windows that exist in memory only, and feeds input through `Window->GetInput().HandleKeyEvent(...)`.
 - `EngineTests.DetectsMemoryLeaks` is a CTest entry that leaks memory on purpose and passes only if the leak is reported. It exists in MSVC Debug builds and under `linux-sanitize`, the builds that can detect leaked allocations.
@@ -151,6 +151,18 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Rendering/TestGltfFiles.h       Builds small .gltf and .glb files for the importer's tests
     Rendering/RendererTestScene.h   The renderer's test scene, which is compared with a reference image
     Rendering/ReferenceImages/      The reference images
+Editor/                   The editor module (WhiteWolfEditorCore.dll): everything the editor does, without its windows
+  CMakeLists.txt
+  Public/
+    Editor.h              FEditor: the scene being edited and the commands that change it
+    Commands/             The command system: CommandRegistry.h (FCommandRegistry, FCommandFunction),
+                          CommandDescription.h, CommandParameter.h, CommandArgumentType.h (ECommandArgumentType),
+                          CommandArguments.h (FCommandArguments), CommandResult.h (FCommandResult)
+  Private/
+    Commands/             The editor's own commands, one class per area (FSceneCommands, FEntityCommands,
+                          FComponentCommands, FPropertyCommands, FEditorCommands), and what they share
+  Tests/                  Unit tests (EditorTests executable)
+    TestEditorObjects.h   Component classes for the tests, FScopedEditorTest, JSON written as text
 Tools/
   Format.cmake            Formats or checks all C++ sources
   GitHooks/pre-commit     Optional hook that runs the format check
@@ -167,13 +179,13 @@ docs/
   DECISIONS.md            Decision log
 ```
 
-Reserved by the specification and created by later milestones: `Editor/` (editor executable), `Runtime/` (game runtime executable) and `Plugins/<Name>/` (optional plugin DLLs).
+Reserved by the specification and created by later milestones: `Runtime/` (game runtime executable) and `Plugins/<Name>/` (optional plugin DLLs).
 
 ## Adding code
 
 - **A new class or struct**: one type per header/source pair. Put the header in `<Module>/Public/<Area>/` if other modules may use it, otherwise in `<Module>/Private/<Area>/`. Put the source in `<Module>/Private/<Area>/`. The file name is the type name without its prefix: `FVersion` lives in `Version.h` and `Version.cpp`.
 - **No CMake edit is needed** for new files: modules glob their `Public/`, `Private/` and `Tests/` directories.
-- **Exporting from a module**: mark every function or class that another module (including the tests) must link to with the module's API macro, `ENGINE_API` for the Engine module. Annotate individual functions on value types and whole classes when they have virtual functions. Symbols without the macro are not visible outside the DLL on any compiler.
+- **Exporting from a module**: mark every function or class that another module (including the tests) must link to with the module's API macro: `ENGINE_API` for the Engine module, `EDITOR_API` for the Editor module. Annotate individual functions on value types and whole classes when they have virtual functions. Symbols without the macro are not visible outside the DLL on any compiler.
 - **Include order**: a `.cpp` includes its own header first. Every engine header starts with `#include "CoreMinimal.h"` (the headers that `CoreMinimal.h` itself includes start with `Core/CoreTypes.h` instead). Then project headers, then a blank line, then third-party and standard headers. Include exactly what the file uses; do not rely on indirect includes. Prefer forward declarations in headers.
 - **Tests**: add `<Module>/Tests/<Area>/<Subject>Tests.cpp` in the same commit as the code it tests.
 - **Test helper types** that exist only to exercise one feature may share a single `Test<Feature>.h`/`.cpp` pair, as `Tests/Object/TestObjects.h` does. This is the only exception to one type per file.
@@ -342,6 +354,17 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 - Everything created from a render device keeps the graphics card alive, so the order in which the device and its resources are destroyed does not matter.
 - No NVRHI or Vulkan type or header appears outside `Engine/Private/Rendering/`. Include `Rendering/VulkanApi.h` there, never `<vulkan/vulkan.hpp>`, so that the engine and NVRHI configure Vulkan identically; call Vulkan through the function table it sets up, with the plain C functions.
 - Test rendering with validation on (`FRenderDeviceDescription::bEnableValidation`) and check that nothing was logged as an error: the validation layer reports misuse of the rendering interface to `LogRendering`.
+
+## The editor and its commands
+
+- **Everything the editor does is a command.** A command has a name (`Entity.Create`), typed parameters and a function, and is registered in the editor's `FCommandRegistry` (D-040). The user interface, the tests and the agent interface all act through `Editor.ExecuteCommand(Name, Arguments)` and nothing else: never give the user interface a way to change the scene that is not a command.
+- **`FEditor` is the editor without its windows:** the scene being edited (`GetScene()`; there always is one) and the commands. It needs no window or graphics card. Only the editor replaces or destroys its scene (`SetScene`).
+- **Adding a command.** Write a function `FCommandResult MyCommand(FEditor& Editor, const FCommandArguments& Arguments)` in the anonymous namespace of the area's file in `Editor/Private/Commands/` (`EntityCommands.cpp` for `Entity.*`) and register it in that file's `Register` function, with a summary and a description for every parameter: those sentences are all an agent knows about the command. A new area is a new `F<Area>Commands` class, registered in `FEditor`'s constructor. Add the command's name to the list in `Editor/Tests/EditorTests.cpp`.
+- **Arguments are checked before the command runs.** The registry refuses a call with a missing argument, an argument of the wrong type or an argument that has no parameter. In the function, read arguments with `GetString`, `GetInteger`, `GetNumber`, `GetBoolean` and `GetJson` without checking them again, and ask `Has` first for an optional one.
+- **Failures are results.** Whatever can go wrong because of what was asked (no such entity, a class that is not a component, a file that cannot be read) returns `FCommandResult::Failure` with a sentence that says what is wrong, and leaves the editor as it was. Check before changing anything. `WW_CHECK` is for mistakes in the code only.
+- **Refer to entities and components by identifier,** in arguments, in results and in property values. `FCommandTargets` (`Private/Commands/CommandTargets.h`) finds them and words the failure.
+- **Properties go through reflection.** `Object.GetProperty` and `Object.SetProperty` work for every `WPROPERTY()` that is not `Transient`, of any class, so a new component needs no command of its own for its data.
+- **Test a command through `FEditor::ExecuteCommand`:** set the scene up with the scene's own functions, give the command, then check the scene and the result, and for every failure the exact reason and that nothing changed. Start such a test with `const FScopedEditorTest EditorTest;` before the `FEditor` (`Tests/TestEditorObjects.h`).
 
 ## Third-party dependencies
 
