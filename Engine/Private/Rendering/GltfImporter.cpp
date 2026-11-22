@@ -1,5 +1,8 @@
 #include "Rendering/GltfImporter.h"
 
+#include "Assets/Asset.h"
+#include "Assets/AssetManager.h"
+#include "Assets/AssetPackage.h"
 #include "Core/FileHelper.h"
 #include "Math/LinearColor.h"
 #include "Object/ObjectGlobals.h"
@@ -241,11 +244,58 @@ namespace
 	class FGltfImport
 	{
 	public:
-		FGltfImport(const cgltf_data& InData, std::filesystem::path InPath, std::vector<std::string>* InWarnings)
+		/**
+		 * @param InPackage The package of the file, if it is a file of the content directory: its meshes and
+		 * materials are then taken from the package instead of being created. Null to create them.
+		 */
+		FGltfImport(const cgltf_data& InData,
+			std::filesystem::path InPath,
+			std::vector<std::string>* InWarnings,
+			const WAssetPackage* InPackage)
 			: Data(InData)
 			, Path(std::move(InPath))
 			, Warnings(InWarnings)
+			, Package(InPackage)
 		{
+		}
+
+		/** Creates every mesh, material and texture of the file, and returns each with its key in the file's package.
+		 */
+		std::vector<std::pair<std::string, WAsset*>> CreateAllAssets()
+		{
+			std::vector<std::pair<std::string, WAsset*>> Assets;
+			for (cgltf_size Index = 0; Index < Data.materials_count; ++Index)
+			{
+				// A material is always created; at worst it is without a texture that could not be read.
+				Assets.emplace_back(GetMaterialKey(Data.materials[Index]), GetMaterial(&Data.materials[Index]));
+			}
+
+			// The textures are the ones the materials use, each once for every way it is used.
+			for (const std::pair<const FTextureKey, WTexture*>& Entry : Textures)
+			{
+				if (Entry.second != nullptr)
+				{
+					const std::string_view ColorSpaceName =
+						Entry.first.second == ETextureColorSpace::Srgb ? "Srgb" : "Linear";
+					Assets.emplace_back(
+						std::format("Textures/{}/{}", cgltf_texture_index(&Data, Entry.first.first), ColorSpaceName),
+						Entry.second);
+				}
+			}
+
+			for (cgltf_size MeshIndex = 0; MeshIndex < Data.meshes_count; ++MeshIndex)
+			{
+				const cgltf_mesh& Mesh = Data.meshes[MeshIndex];
+				for (cgltf_size PartIndex = 0; PartIndex < Mesh.primitives_count; ++PartIndex)
+				{
+					const cgltf_primitive& Primitive = Mesh.primitives[PartIndex];
+					if (WStaticMesh* const StaticMesh = GetMesh(Mesh, Primitive))
+					{
+						Assets.emplace_back(GetMeshKey(Mesh, Primitive), StaticMesh);
+					}
+				}
+			}
+			return Assets;
 		}
 
 		/** Creates the entities of the file's scene below a new entity named after the file, and returns that. */
@@ -406,6 +456,20 @@ namespace
 			}
 		}
 
+		/** Returns the key that one part of a glTF mesh has in the file's package. */
+		std::string GetMeshKey(const cgltf_mesh& Mesh, const cgltf_primitive& Primitive) const
+		{
+			return std::format("Meshes/{}/Primitives/{}",
+				cgltf_mesh_index(&Data, &Mesh),
+				static_cast<std::size_t>(&Primitive - Mesh.primitives));
+		}
+
+		/** Returns the key that a glTF material has in the file's package. */
+		std::string GetMaterialKey(const cgltf_material& Material) const
+		{
+			return std::format("Materials/{}", cgltf_material_index(&Data, &Material));
+		}
+
 		std::string DescribeMesh(const cgltf_mesh& Mesh) const
 		{
 			return Mesh.name != nullptr ? std::format("mesh '{}'", Mesh.name)
@@ -415,6 +479,12 @@ namespace
 		/** Returns the static mesh for one part of a glTF mesh, created on first use. Null if it cannot be imported. */
 		WStaticMesh* GetMesh(const cgltf_mesh& Mesh, const cgltf_primitive& Primitive)
 		{
+			if (Package != nullptr)
+			{
+				// The package has every part that could be read, and said why when it left one out.
+				return Cast<WStaticMesh>(Package->FindAsset(GetMeshKey(Mesh, Primitive)));
+			}
+
 			const auto Existing = Meshes.find(&Primitive);
 			if (Existing != Meshes.end())
 			{
@@ -586,6 +656,10 @@ namespace
 			if (Source == nullptr)
 			{
 				return nullptr;
+			}
+			if (Package != nullptr)
+			{
+				return Cast<WMaterial>(Package->FindAsset(GetMaterialKey(*Source)));
 			}
 
 			const auto Existing = Materials.find(Source);
@@ -790,6 +864,7 @@ namespace
 		const cgltf_data& Data;
 		std::filesystem::path Path;
 		std::vector<std::string>* Warnings = nullptr;
+		const WAssetPackage* Package = nullptr;
 
 		// What has been created so far. Null marks something that could not be imported, so that it is neither
 		// tried nor warned about twice.
@@ -797,62 +872,115 @@ namespace
 		std::unordered_map<const cgltf_material*, WMaterial*> Materials;
 		std::map<FTextureKey, WTexture*> Textures;
 	};
+
+	/** A glTF file that has been read and checked, with everything its data points into. */
+	struct FParsedGltf
+	{
+		// Declared before the data, and so destroyed after it: the data points into both.
+		std::string FileContent;
+		FGltfFileStore FileStore;
+		std::unique_ptr<cgltf_data, FGltfDataDeleter> Data;
+	};
+
+	/** Reads a glTF file with its buffers and checks it. On failure OutError says why it cannot be imported. */
+	bool ParseGltfFile(const std::filesystem::path& Path, FParsedGltf& OutParsed, std::string& OutError)
+	{
+		const std::string PathText = FFileHelper::PathToUtf8(Path);
+
+		if (!FFileHelper::LoadFileToString(Path, OutParsed.FileContent, OutError))
+		{
+			return false;
+		}
+
+		cgltf_options Options{};
+		Options.file.read = &ReadFileForGltf;
+		Options.file.release = &ReleaseFileForGltf;
+		Options.file.user_data = &OutParsed.FileStore;
+
+		cgltf_data* ParsedData = nullptr;
+		cgltf_result Result =
+			cgltf_parse(&Options, OutParsed.FileContent.data(), OutParsed.FileContent.size(), &ParsedData);
+		OutParsed.Data.reset(ParsedData);
+		if (Result != cgltf_result_success)
+		{
+			OutError = std::format("'{}' cannot be imported: {}", PathText, DescribeResult(Result));
+			return false;
+		}
+
+		for (cgltf_size Index = 0; Index < OutParsed.Data->extensions_required_count; ++Index)
+		{
+			const std::string_view Extension(OutParsed.Data->extensions_required[Index]);
+			const bool bIsSupported =
+				std::ranges::find(SupportedExtensions, Extension) != std::ranges::end(SupportedExtensions);
+			if (!bIsSupported)
+			{
+				OutError = std::format("'{}' cannot be imported: it requires the extension {}, which is not supported",
+					PathText,
+					Extension);
+				return false;
+			}
+		}
+
+		Result = cgltf_load_buffers(&Options, OutParsed.Data.get(), PathText.c_str());
+		if (Result != cgltf_result_success)
+		{
+			const std::string_view Reason =
+				OutParsed.FileStore.LastError.empty() ? DescribeResult(Result) : OutParsed.FileStore.LastError;
+			OutError = std::format("'{}' cannot be imported: {}", PathText, Reason);
+			return false;
+		}
+
+		Result = cgltf_validate(OutParsed.Data.get());
+		if (Result != cgltf_result_success)
+		{
+			OutError = std::format("'{}' cannot be imported: {}", PathText, DescribeResult(Result));
+			return false;
+		}
+		return true;
+	}
 }
 
 WEntity* FGltfImporter::Import(
 	const std::filesystem::path& Path, WScene& Scene, std::string& OutError, std::vector<std::string>* OutWarnings)
 {
-	const std::string PathText = FFileHelper::PathToUtf8(Path);
-
-	std::string FileContent;
-	if (!FFileHelper::LoadFileToString(Path, FileContent, OutError))
+	// A file of the content directory is brought in as the assets of its package, which have asset paths, so that
+	// the scene can be saved with its references to them. Any other file gets meshes and materials of its own.
+	const WAssetPackage* Package = nullptr;
+	if (const std::optional<std::string> AssetFile = FAssetManager::GetAssetFileOfPath(Path))
 	{
-		return nullptr;
-	}
-
-	FGltfFileStore FileStore;
-	cgltf_options Options{};
-	Options.file.read = &ReadFileForGltf;
-	Options.file.release = &ReleaseFileForGltf;
-	Options.file.user_data = &FileStore;
-
-	cgltf_data* ParsedData = nullptr;
-	cgltf_result Result = cgltf_parse(&Options, FileContent.data(), FileContent.size(), &ParsedData);
-	const std::unique_ptr<cgltf_data, FGltfDataDeleter> Data(ParsedData);
-	if (Result != cgltf_result_success)
-	{
-		OutError = std::format("'{}' cannot be imported: {}", PathText, DescribeResult(Result));
-		return nullptr;
-	}
-
-	for (cgltf_size Index = 0; Index < Data->extensions_required_count; ++Index)
-	{
-		const std::string_view Extension(Data->extensions_required[Index]);
-		const bool bIsSupported =
-			std::ranges::find(SupportedExtensions, Extension) != std::ranges::end(SupportedExtensions);
-		if (!bIsSupported)
+		Package = FAssetManager::LoadPackage(*AssetFile, OutError);
+		if (Package == nullptr)
 		{
-			OutError = std::format(
-				"'{}' cannot be imported: it requires the extension {}, which is not supported", PathText, Extension);
 			return nullptr;
+		}
+		if (OutWarnings != nullptr)
+		{
+			OutWarnings->insert(OutWarnings->end(), Package->GetWarnings().begin(), Package->GetWarnings().end());
 		}
 	}
 
-	Result = cgltf_load_buffers(&Options, Data.get(), PathText.c_str());
-	if (Result != cgltf_result_success)
+	FParsedGltf Parsed;
+	if (!ParseGltfFile(Path, Parsed, OutError))
 	{
-		const std::string_view Reason = FileStore.LastError.empty() ? DescribeResult(Result) : FileStore.LastError;
-		OutError = std::format("'{}' cannot be imported: {}", PathText, Reason);
 		return nullptr;
 	}
 
-	Result = cgltf_validate(Data.get());
-	if (Result != cgltf_result_success)
-	{
-		OutError = std::format("'{}' cannot be imported: {}", PathText, DescribeResult(Result));
-		return nullptr;
-	}
-
-	FGltfImport ImportInProgress(*Data, Path, OutWarnings);
+	FGltfImport ImportInProgress(*Parsed.Data, Path, OutWarnings, Package);
 	return ImportInProgress.CreateEntities(Scene);
+}
+
+bool FGltfImporter::LoadAssets(const std::filesystem::path& Path,
+	std::vector<std::pair<std::string, WAsset*>>& OutAssets,
+	std::string& OutError,
+	std::vector<std::string>* OutWarnings)
+{
+	FParsedGltf Parsed;
+	if (!ParseGltfFile(Path, Parsed, OutError))
+	{
+		return false;
+	}
+
+	FGltfImport ImportInProgress(*Parsed.Data, Path, OutWarnings, nullptr);
+	OutAssets = ImportInProgress.CreateAllAssets();
+	return true;
 }

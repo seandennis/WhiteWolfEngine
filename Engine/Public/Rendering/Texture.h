@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Assets/Asset.h"
 #include "Object/ObjectMacros.h"
 #include "Rendering/Image.h"
 #include "Rendering/TextureColorSpace.h"
@@ -16,9 +17,9 @@
  * for viewing it from a distance, the first time it is used and again whenever the picture is replaced.
  */
 WCLASS()
-class ENGINE_API WTexture : public WObject
+class ENGINE_API WTexture : public WAsset
 {
-	WW_DECLARE_CLASS(WTexture, WObject)
+	WW_DECLARE_CLASS(WTexture, WAsset)
 
 public:
 	/** The largest width or height a texture can have, in pixels. */

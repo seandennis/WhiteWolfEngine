@@ -34,8 +34,10 @@ class WScene;
  *
  * "Properties" holds every WPROPERTY() of the object that is not Transient, written by reflection, so a new
  * component type is saved and loaded without any code of its own. Entities appear parents before children, and
- * siblings in order. A reference to an entity or component of the same scene is written as that object's "Id";
- * a reference to anything else cannot be saved and is written as null, with a warning in the log.
+ * siblings in order. A reference to an entity or component of the same scene is written as that object's "Id", and
+ * a reference to an asset of the content directory as its asset path, for example "Models/Crate.glb#Materials/0"
+ * (FAssetPath); loading the scene loads the assets it refers to. A reference to anything else cannot be saved and
+ * is written as null, with a warning in the log.
  *
  * Loading separates what makes a file unusable from what does not. A file whose structure is wrong (not a scene,
  * a newer format version, a duplicate or missing "Id", a parent that does not exist or is its own descendant) is

@@ -1,8 +1,12 @@
+#include "Assets/TestAssets.h"
 #include "Core/FileHelper.h"
 #include "Editor.h"
 #include "History/UndoHistory.h"
 #include "Object/ObjectGlobals.h"
 #include "Object/WeakObjectPtr.h"
+#include "Rendering/Material.h"
+#include "Rendering/StaticMesh.h"
+#include "Rendering/StaticMeshComponent.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneSerializer.h"
@@ -207,6 +211,36 @@ TEST_SUITE("FEditor undo and redo")
 		REQUIRE(Redone.has_value());
 		CHECK(*Redone == CommandName);
 		CHECK(WriteScene(Editor) == After);
+	}
+
+	TEST_CASE("Undo brings back an entity with its references to assets")
+	{
+		const FScopedContentDirectory Content;
+		Content.WriteSquare("Models/Square.gltf");
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		Run(Editor, "Entity.Create", R"({"Name": "Square"})");
+		Run(Editor, "Component.Add", R"({"Entity": 1, "Class": "WStaticMeshComponent"})");
+		Run(Editor,
+			"Object.SetProperty",
+			R"({"Object": 2, "Property": "Mesh", "Value": "Models/Square.gltf#Meshes/0/Primitives/0"})");
+		Run(Editor,
+			"Object.SetProperty",
+			R"({"Object": 2, "Property": "Material", "Value": "Models/Square.gltf#Materials/0"})");
+		const std::string Before = WriteScene(Editor);
+
+		Run(Editor, "Entity.Delete", R"({"Entity": 1})");
+		// The assets are in use by nothing now; collected, they have to be loaded again for the undo.
+		CollectGarbage();
+		REQUIRE(Editor.Undo().has_value());
+
+		CHECK(WriteScene(Editor) == Before);
+		const std::vector<WStaticMeshComponent*> Components = Editor.GetScene().GetComponents<WStaticMeshComponent>();
+		REQUIRE(Components.size() == 1);
+		REQUIRE(Components[0]->Mesh != nullptr);
+		CHECK(Components[0]->Mesh->GetTriangleCount() == 2);
+		REQUIRE(Components[0]->Material != nullptr);
+		CHECK(Components[0]->Material->GetAssetPath() == "Models/Square.gltf#Materials/0");
 	}
 
 	TEST_CASE("Steps are undone last first and redone in the order they were made")

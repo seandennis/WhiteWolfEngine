@@ -492,13 +492,16 @@ TEST_SUITE("FSceneSerializer")
 
 		const WScene* const Scene = LoadValid(
 			SceneWithEntities(R"({"Id": 1, "Components": [{"Id": 2, "Class": "WTestComponent", "Properties": {)"
-							  R"("TargetEntity": 99, "Partner": 1, "Waypoints": [1, "first"]}}]})"),
+							  R"("TargetEntity": 99, "Partner": 1, "Waypoints": [1, true]}}]})"),
 			Warnings);
 
 		REQUIRE(Warnings.size() == 3);
 		CHECK(Mentions(Warnings[0], "\"TargetEntity\": there is no entity or component with the identifier 99"));
 		CHECK(Mentions(Warnings[1], "\"Partner\": the reference is to a WEntity, which is not a WTestComponent"));
-		CHECK(Mentions(Warnings[2], "\"Waypoints\": element 1: expected the identifier of an entity or component"));
+		// A string would be the path of an asset; a boolean is no kind of reference.
+		CHECK(Mentions(Warnings[2],
+			"\"Waypoints\": element 1: expected the identifier of an entity or component, or the path of an asset, "
+			"but found a boolean"));
 
 		const std::vector<WTestComponent*> Components = Scene->GetComponents<WTestComponent>();
 		REQUIRE(Components.size() == 1);

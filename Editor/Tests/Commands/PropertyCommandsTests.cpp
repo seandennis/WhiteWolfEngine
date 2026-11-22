@@ -1,4 +1,8 @@
+#include "Assets/TestAssets.h"
 #include "Editor.h"
+#include "Rendering/Material.h"
+#include "Rendering/StaticMesh.h"
+#include "Rendering/StaticMeshComponent.h"
 #include "Scene/Component.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
@@ -151,6 +155,60 @@ TEST_SUITE("Property commands")
 
 		REQUIRE(Test.SetComponentProperty("TargetEntity", "null").HasSucceeded());
 		CHECK(Test.Component->TargetEntity.Get() == nullptr);
+	}
+
+	TEST_CASE("A reference to an asset is set from the asset's path and read as that path")
+	{
+		const FScopedContentDirectory Content;
+		Content.WriteSquare("Models/Square.gltf");
+		FPropertyCommandTest Test;
+		const WStaticMeshComponent* const MeshComponent = Test.Player->AddComponent<WStaticMeshComponent>();
+		REQUIRE(MeshComponent != nullptr);
+
+		const FCommandResult Written = Test.Execute("Object.SetProperty",
+			std::format(R"({{"Object": {}, "Property": "Material", "Value": "Models/Square.gltf#Materials/0"}})",
+				MeshComponent->GetId()));
+
+		INFO("Error: ", Written.GetError());
+		REQUIRE(Written.HasSucceeded());
+		REQUIRE(MeshComponent->Material != nullptr);
+		CHECK(MeshComponent->Material->GetAssetPath() == "Models/Square.gltf#Materials/0");
+
+		const FCommandResult Read = Test.Execute(
+			"Object.GetProperty", std::format(R"({{"Object": {}, "Property": "Material"}})", MeshComponent->GetId()));
+		REQUIRE(Read.HasSucceeded());
+		CHECK(Read.GetValue() == FJsonValue("Models/Square.gltf#Materials/0"));
+	}
+
+	TEST_CASE("An asset that cannot be loaded, or is of another class, is refused and the reference left as it was")
+	{
+		const FScopedContentDirectory Content;
+		Content.WriteSquare("Models/Square.gltf");
+		FPropertyCommandTest Test;
+		const WStaticMeshComponent* const MeshComponent = Test.Player->AddComponent<WStaticMeshComponent>();
+		REQUIRE(MeshComponent != nullptr);
+		std::string AssetPath;
+		std::string ExpectedReason;
+
+		SUBCASE("A file that is not there")
+		{
+			AssetPath = "Models/Gone.gltf#Materials/0";
+			ExpectedReason = "the content directory has no file \"Models/Gone.gltf\"";
+		}
+		SUBCASE("A mesh where a material is wanted")
+		{
+			AssetPath = "Models/Square.gltf#Meshes/0/Primitives/0";
+			ExpectedReason = "the reference is to a WStaticMesh, which is not a WMaterial";
+		}
+
+		const FCommandResult Result = Test.Execute("Object.SetProperty",
+			std::format(
+				R"({{"Object": {}, "Property": "Material", "Value": "{}"}})", MeshComponent->GetId(), AssetPath));
+
+		CHECK_FALSE(Result.HasSucceeded());
+		CHECK(Result.GetError() ==
+			"The property \"Material\" of the class WStaticMeshComponent was not changed: " + ExpectedReason + ".");
+		CHECK(MeshComponent->Material == nullptr);
 	}
 
 	TEST_CASE("Object.SetProperty changes the properties of an entity")

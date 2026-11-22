@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Assets/Asset.h"
 #include "Math/Vector.h"
 #include "Object/ObjectMacros.h"
 #include "Rendering/HdrImage.h"
@@ -19,9 +20,9 @@
  * (+Y) and the bottom row is down. Such a picture is twice as wide as it is high.
  */
 WCLASS()
-class ENGINE_API WEnvironmentMap : public WObject
+class ENGINE_API WEnvironmentMap : public WAsset
 {
-	WW_DECLARE_CLASS(WEnvironmentMap, WObject)
+	WW_DECLARE_CLASS(WEnvironmentMap, WAsset)
 
 public:
 	/** The largest width or height the picture can have, in pixels. */

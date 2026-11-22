@@ -1,5 +1,7 @@
 #include "Commands/ScenePropertyContext.h"
 
+#include "Assets/Asset.h"
+#include "Assets/AssetManager.h"
 #include "Json/JsonValue.h"
 #include "Object/ObjectGlobals.h"
 #include "Scene/Component.h"
@@ -27,15 +29,32 @@ FJsonValue FScenePropertyContext::ExportObjectReference(const WObject& Object)
 		return FJsonValue(Component->GetId());
 	}
 
+	const WAsset* const Asset = Cast<WAsset>(&Object);
+	if (Asset != nullptr && !Asset->GetAssetPath().empty())
+	{
+		return FJsonValue(Asset->GetAssetPath());
+	}
+
 	return FJsonValue();
 }
 
 bool FScenePropertyContext::ImportObjectReference(const FJsonValue& Json, WObject*& OutObject, std::string& OutError)
 {
+	if (Json.IsString())
+	{
+		WAsset* const Asset = FAssetManager::Load(Json.GetString(), OutError);
+		if (Asset == nullptr)
+		{
+			return false;
+		}
+		OutObject = Asset;
+		return true;
+	}
 	if (!Json.IsInteger())
 	{
 		OutError =
-			std::format("expected the identifier of an entity or component but found {}", Json.GetTypeDescription());
+			std::format("expected the identifier of an entity or component, or the path of an asset, but found {}",
+				Json.GetTypeDescription());
 		return false;
 	}
 

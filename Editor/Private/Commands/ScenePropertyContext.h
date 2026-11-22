@@ -11,8 +11,9 @@ class WObject;
 class WScene;
 
 /**
- * How commands read and write the references that properties hold to other objects: an entity or a component of
- * the scene is its identifier, as in a scene file. A reference to anything else reads as JSON null.
+ * How commands read and write the references that properties hold to other objects, which is how a scene file
+ * writes them: an entity or a component of the scene is its identifier, and an asset of the content directory is its
+ * asset path. A reference to anything else reads as JSON null.
  */
 class FScenePropertyContext final : public IPropertyJsonContext
 {

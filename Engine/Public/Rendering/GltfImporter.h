@@ -4,8 +4,10 @@
 
 #include <filesystem>
 #include <string>
+#include <utility>
 #include <vector>
 
+class WAsset;
 class WEntity;
 class WScene;
 
@@ -31,9 +33,12 @@ public:
 	/**
 	 * Imports a file into a scene.
 	 *
-	 * One entity named after the file is created, and the file's nodes become its descendants. Meshes, materials
-	 * and textures are created as objects that the new entities' components refer to; what is used several times
-	 * in the file is created once and shared.
+	 * One entity named after the file is created, and the file's nodes become its descendants. Their components
+	 * refer to the file's meshes and materials; what is used several times in the file is shared.
+	 *
+	 * If the file is in the content directory (FAssetManager), those meshes and materials are the assets of the
+	 * file's package: they have asset paths, so the scene can be saved, and importing the file twice shares them.
+	 * For a file anywhere else they are created for this import alone, and a saved scene cannot refer to them.
 	 *
 	 * @param Path The .gltf or .glb file. Files it refers to are looked for relative to its directory.
 	 * @param Scene The scene the entities are created in.
@@ -45,6 +50,21 @@ public:
 	 */
 	ENGINE_API static WEntity* Import(const std::filesystem::path& Path,
 		WScene& Scene,
+		std::string& OutError,
+		std::vector<std::string>* OutWarnings = nullptr);
+
+	/**
+	 * Creates the meshes, materials and textures of a file, without a scene. This is how FAssetManager loads a
+	 * glTF file; ask it for the assets instead of calling this.
+	 *
+	 * @param OutAssets Receives every asset with the key it has in the file's package: "Meshes/0/Primitives/0",
+	 * "Materials/0", "Textures/0/Srgb" and so on, numbered as in the file. Nothing refers to the new objects yet.
+	 * @param OutError Receives the reason on failure.
+	 * @param OutWarnings If given, receives one line for every part of the file that was left out.
+	 * @return False if the file cannot be imported, for the reasons Import gives.
+	 */
+	ENGINE_API static bool LoadAssets(const std::filesystem::path& Path,
+		std::vector<std::pair<std::string, WAsset*>>& OutAssets,
 		std::string& OutError,
 		std::vector<std::string>* OutWarnings = nullptr);
 };

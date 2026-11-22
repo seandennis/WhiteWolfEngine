@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Assets/Asset.h"
 #include "Math/LinearColor.h"
 #include "Object/ObjectMacros.h"
 #include "Object/ObjectPtr.h"
@@ -18,9 +19,9 @@ class WTexture;
  * One material can be used by any number of meshes in any number of scenes; changing it changes all of them.
  */
 WCLASS()
-class ENGINE_API WMaterial : public WObject
+class ENGINE_API WMaterial : public WAsset
 {
-	WW_DECLARE_CLASS(WMaterial, WObject)
+	WW_DECLARE_CLASS(WMaterial, WAsset)
 
 public:
 	/**

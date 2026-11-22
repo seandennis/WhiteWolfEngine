@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Assets/Asset.h"
 #include "Object/ObjectMacros.h"
 #include "Rendering/StaticMeshVertex.h"
 
@@ -19,9 +20,9 @@
  * the mesh, and again whenever the geometry is replaced.
  */
 WCLASS()
-class ENGINE_API WStaticMesh : public WObject
+class ENGINE_API WStaticMesh : public WAsset
 {
-	WW_DECLARE_CLASS(WStaticMesh, WObject)
+	WW_DECLARE_CLASS(WStaticMesh, WAsset)
 
 public:
 	/** The largest number of vertices, and of indices, a mesh can have. */

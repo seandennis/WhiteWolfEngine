@@ -1,5 +1,7 @@
 #include "Scene/SceneSerializer.h"
 
+#include "Assets/Asset.h"
+#include "Assets/AssetManager.h"
 #include "Core/FileHelper.h"
 #include "Json/JsonReader.h"
 #include "Json/JsonValue.h"
@@ -159,10 +161,17 @@ private:
 			return FJsonValue(Component->GetId());
 		}
 
+		// An asset that was loaded from the content directory is written as the path it can be loaded by again.
+		const WAsset* const Asset = Cast<WAsset>(&Object);
+		if (Asset != nullptr && !Asset->GetAssetPath().empty())
+		{
+			return FJsonValue(Asset->GetAssetPath());
+		}
+
 		WW_LOG(LogScene,
 			Warning,
-			"Saving scene '{}': property {} of {} refers to a {} that is not part of the scene; the reference is "
-			"saved as null",
+			"Saving scene '{}': property {} of {} refers to a {} that is not part of the scene and has no asset "
+			"path; the reference is saved as null",
 			Scene.GetName(),
 			CurrentProperty,
 			CurrentOwner,
@@ -642,10 +651,22 @@ private:
 
 	bool ImportObjectReference(const FJsonValue& Json, WObject*& OutObject, std::string& OutError) override
 	{
+		if (Json.IsString())
+		{
+			// The path of an asset, which is loaded if it is not loaded yet.
+			WAsset* const Asset = FAssetManager::Load(Json.GetString(), OutError);
+			if (Asset == nullptr)
+			{
+				return false;
+			}
+			OutObject = Asset;
+			return true;
+		}
 		if (!Json.IsInteger())
 		{
-			OutError = std::format(
-				"expected the identifier of an entity or component but found {}", Json.GetTypeDescription());
+			OutError =
+				std::format("expected the identifier of an entity or component, or the path of an asset, but found {}",
+					Json.GetTypeDescription());
 			return false;
 		}
 
