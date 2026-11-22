@@ -26,6 +26,7 @@
 #include <glm/matrix.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <format>
 #include <map>
@@ -982,5 +983,52 @@ bool FGltfImporter::LoadAssets(const std::filesystem::path& Path,
 
 	FGltfImport ImportInProgress(*Parsed.Data, Path, OutWarnings, nullptr);
 	OutAssets = ImportInProgress.CreateAllAssets();
+	return true;
+}
+
+bool FGltfImporter::IsGltfFile(const std::filesystem::path& Path)
+{
+	std::string Extension = FFileHelper::PathToUtf8(Path.extension());
+	std::ranges::transform(Extension,
+		Extension.begin(),
+		[](unsigned char Character) { return static_cast<char>(std::tolower(Character)); });
+	return Extension == ".gltf" || Extension == ".glb";
+}
+
+bool FGltfImporter::GetExternalFiles(
+	const std::filesystem::path& Path, std::vector<std::string>& OutFiles, std::string& OutError)
+{
+	FParsedGltf Parsed;
+	if (!ParseGltfFile(Path, Parsed, OutError))
+	{
+		return false;
+	}
+
+	OutFiles.clear();
+	const auto AddFile = [&OutFiles](const char* Uri)
+	{
+		// Data that is written into the glTF file itself is no file, and neither is data that has no address.
+		if (Uri == nullptr || std::string_view(Uri).starts_with("data:"))
+		{
+			return;
+		}
+
+		// An address may have characters written as %20 and the like.
+		std::string FileName(Uri);
+		FileName.resize(cgltf_decode_uri(FileName.data()));
+		if (std::ranges::find(OutFiles, FileName) == OutFiles.end())
+		{
+			OutFiles.push_back(std::move(FileName));
+		}
+	};
+
+	for (cgltf_size Index = 0; Index < Parsed.Data->buffers_count; ++Index)
+	{
+		AddFile(Parsed.Data->buffers[Index].uri);
+	}
+	for (cgltf_size Index = 0; Index < Parsed.Data->images_count; ++Index)
+	{
+		AddFile(Parsed.Data->images[Index].uri);
+	}
 	return true;
 }

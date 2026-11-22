@@ -166,11 +166,13 @@ Editor/                   The editor module (WhiteWolfEditorCore.dll): everythin
                           CommandEffect.h (ECommandEffect), CommandArguments.h (FCommandArguments),
                           CommandResult.h (FCommandResult)
     History/              UndoHistory.h (FUndoHistory: the states a scene has been in, for undo and redo)
+    Project/              Project.h (FProject: a game project, a directory with a project file and a Content directory)
     Agent/                AgentServer.h (FAgentServer: the commands as tools of a Model Context Protocol server)
     EditorApplication.h   FEditorApplication: what the executable does, given a command line and streams
   Private/
     Commands/             The editor's own commands, one class per area (FSceneCommands, FEntityCommands,
-                          FComponentCommands, FPropertyCommands, FEditCommands, FEditorCommands), and what they share
+                          FComponentCommands, FPropertyCommands, FEditCommands, FProjectCommands, FAssetCommands,
+                          FEditorCommands), and what they share
   Tests/                  Unit tests (EditorTests executable)
     TestEditorObjects.h   Component classes for the tests, FScopedEditorTest, JSON written as text
     Agent/                The agent server's tests, and a session of messages that CTest gives the executable
@@ -375,6 +377,7 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 - **Arguments are checked before the command runs.** The registry refuses a call with a missing argument, an argument of the wrong type or an argument that has no parameter. In the function, read arguments with `GetString`, `GetInteger`, `GetNumber`, `GetBoolean` and `GetJson` without checking them again, and ask `Has` first for an optional one.
 - **Undo and redo need nothing from a command.** After every command the editor writes the whole scene down as the text of a scene file, and a difference from the last state is a step of the history (`FUndoHistory`, D-041); `Edit.Undo` and `Edit.Redo` load a state. What a command changes must therefore be something a scene file holds. A command that cannot change the scene says so in its description with `ECommandEffect::LeavesScene`, which spares the editor the writing-down; add it to the second list in `Editor/Tests/EditorTests.cpp`.
 - **Do not keep a pointer into the scene from one command to the next.** Undo, redo, `Scene.New` and `Scene.Open` replace the scene object, with all its entities and components. They keep their identifiers: keep those, and ask `Editor.GetScene()` again.
+- **Assets belong to a project.** `Project.New` and `Project.Open` give the editor an `FProject`, a directory with a `.wwproject` file and a `Content` directory, which becomes the engine's content directory (D-045). `Asset.Import` copies a model, picture or environment into it, `Asset.Place` puts a model into the scene, and components take single assets as paths through `Object.SetProperty`. A relative path given to `Scene.Save` or `Scene.Open` is relative to the content directory. A command that needs the project fails with a sentence that says so while none is open.
 - **Agents reach the commands through `WhiteWolfEditor --mcp`,** a Model Context Protocol server on standard input and output in which every registered command is a tool (`FAgentServer`, D-042). A new command needs nothing to appear there. With `--mcp`, standard output carries the protocol and nothing else: never write to `std::cout` from editor or engine code, use the log. `FEditorApplication::Run` is what the executable does, with its streams as parameters, which is how tests run it.
 - **Failures are results.** Whatever can go wrong because of what was asked (no such entity, a class that is not a component, a file that cannot be read) returns `FCommandResult::Failure` with a sentence that says what is wrong, and leaves the editor as it was. Check before changing anything. `WW_CHECK` is for mistakes in the code only.
 - **Refer to entities and components by identifier,** in arguments, in results and in property values. `FCommandTargets` (`Private/Commands/CommandTargets.h`) finds them and words the failure.

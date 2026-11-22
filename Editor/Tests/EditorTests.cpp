@@ -73,6 +73,10 @@ TEST_SUITE("FEditor")
 		}
 
 		const std::vector<std::string> ExpectedNames = {
+			"Asset.Describe",
+			"Asset.Import",
+			"Asset.List",
+			"Asset.Place",
 			"Component.Add",
 			"Component.Remove",
 			"Edit.GetHistory",
@@ -86,6 +90,9 @@ TEST_SUITE("FEditor")
 			"Object.GetProperties",
 			"Object.GetProperty",
 			"Object.SetProperty",
+			"Project.Get",
+			"Project.New",
+			"Project.Open",
 			"Scene.GetHierarchy",
 			"Scene.New",
 			"Scene.Open",
@@ -109,10 +116,14 @@ TEST_SUITE("FEditor")
 		}
 
 		const std::vector<std::string> ExpectedNames = {
+			"Asset.Describe",
+			"Asset.Import",
+			"Asset.List",
 			"Edit.GetHistory",
 			"Editor.ListCommands",
 			"Object.GetProperties",
 			"Object.GetProperty",
+			"Project.Get",
 			"Scene.GetHierarchy",
 			"Scene.Save",
 		};

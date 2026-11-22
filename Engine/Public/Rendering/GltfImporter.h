@@ -67,4 +67,21 @@ public:
 		std::vector<std::pair<std::string, WAsset*>>& OutAssets,
 		std::string& OutError,
 		std::vector<std::string>* OutWarnings = nullptr);
+
+	/** Returns true if a file with this name is a glTF file, going by the end of the name: .gltf or .glb, in any case.
+	 */
+	ENGINE_API static bool IsGltfFile(const std::filesystem::path& Path);
+
+	/**
+	 * Lists the files that a glTF file keeps its data in: the buffers and pictures it names instead of containing
+	 * them. Whoever copies a glTF file has to copy these with it.
+	 *
+	 * @param OutFiles Receives each file once, as the glTF file names it: a path relative to the glTF file's
+	 * directory, with forward slashes. Empty for a .glb file or a .gltf file that holds everything itself.
+	 * @param OutError Receives the reason on failure.
+	 * @return False if the file cannot be imported, for the reasons Import gives; that includes a buffer it names
+	 * that is not there.
+	 */
+	ENGINE_API static bool GetExternalFiles(
+		const std::filesystem::path& Path, std::vector<std::string>& OutFiles, std::string& OutError);
 };

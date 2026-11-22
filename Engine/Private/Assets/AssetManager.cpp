@@ -59,7 +59,7 @@ namespace
 			Extension.begin(),
 			[](unsigned char Character) { return static_cast<char>(std::tolower(Character)); });
 
-		if (Extension == ".gltf" || Extension == ".glb")
+		if (FGltfImporter::IsGltfFile(Path))
 		{
 			return EAssetFileKind::Gltf;
 		}

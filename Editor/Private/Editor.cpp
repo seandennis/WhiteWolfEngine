@@ -1,10 +1,13 @@
 #include "Editor.h"
 
+#include "Assets/AssetManager.h"
+#include "Commands/AssetCommands.h"
 #include "Commands/CommandEffect.h"
 #include "Commands/ComponentCommands.h"
 #include "Commands/EditCommands.h"
 #include "Commands/EditorCommands.h"
 #include "Commands/EntityCommands.h"
+#include "Commands/ProjectCommands.h"
 #include "Commands/PropertyCommands.h"
 #include "Commands/SceneCommands.h"
 #include "Json/JsonFormat.h"
@@ -22,6 +25,8 @@ FEditor::FEditor()
 {
 	FEditorCommands::Register(Commands);
 	FEditCommands::Register(Commands);
+	FProjectCommands::Register(Commands);
+	FAssetCommands::Register(Commands);
 	FSceneCommands::Register(Commands);
 	FEntityCommands::Register(Commands);
 	FComponentCommands::Register(Commands);
@@ -38,6 +43,12 @@ FEditor::~FEditor()
 	if (WScene* const CurrentScene = Scene.Get())
 	{
 		CurrentScene->Destroy();
+	}
+
+	// The content directory was this editor's project's.
+	if (Project.has_value())
+	{
+		FAssetManager::SetContentDirectory(std::filesystem::path());
 	}
 }
 
@@ -90,6 +101,26 @@ void FEditor::SetScene(WScene& NewScene, std::filesystem::path NewScenePath)
 void FEditor::SetScenePath(std::filesystem::path NewScenePath)
 {
 	ScenePath = std::move(NewScenePath);
+}
+
+void FEditor::SetProject(FProject NewProject)
+{
+	FAssetManager::SetContentDirectory(NewProject.GetContentDirectory());
+	Project = std::move(NewProject);
+
+	// The scene of another project, or of none, has nothing to do with this one's assets.
+	WScene* const EmptyScene = NewObject<WScene>();
+	EmptyScene->SetName(std::string(DefaultSceneName));
+	SetScene(*EmptyScene, std::filesystem::path());
+}
+
+std::filesystem::path FEditor::ResolveFilePath(const std::filesystem::path& Path) const
+{
+	if (Project.has_value() && !Path.empty() && Path.is_relative())
+	{
+		return Project->GetContentDirectory() / Path;
+	}
+	return Path;
 }
 
 std::optional<std::string> FEditor::Undo()

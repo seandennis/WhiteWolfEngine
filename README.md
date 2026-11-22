@@ -14,7 +14,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | Complete |
 | 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Complete |
 | 4 | Renderer: image-based lighting, soft shadows, SSAO | Complete |
-| 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | In progress. Done: the `Editor` module with the command system (named commands with typed arguments and structured results) and the commands for scenes, entities, components and reflected properties; undo and redo of every change to the scene; the agent interface, a Model Context Protocol server in the editor's executable; assets that scenes refer to by path, so that a scene with imported models can be saved. Still to do: a project and the commands that import and place assets, the commands for play mode, screenshots and the log, the editor's windows (viewport, hierarchy, property panels) and the gizmo |
+| 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | In progress. Done: the `Editor` module with the command system (named commands with typed arguments and structured results) and the commands for scenes, entities, components and reflected properties; undo and redo of every change to the scene; the agent interface, a Model Context Protocol server in the editor's executable; assets that scenes refer to by path, so that a scene with imported models can be saved; a game project with a content directory, and commands that import assets into it and place models in the scene. Still to do: the commands for play mode, screenshots and the log, the editor's windows (viewport, hierarchy, property panels) and the gizmo |
 | 6 | Plugin system, ChronoPhysics plugin, audio components | Not started |
 | 7 | C++ scripting module with hot reload, prefabs, full test scene | Not started |
 | 8 | Game export, and the Tetris acceptance test through the agent interface | Not started |
@@ -58,7 +58,7 @@ Everything the editor can do is a command, and `WhiteWolfEditor --mcp` offers ev
 }
 ```
 
-The tool `Editor.ListCommands` describes all the others. Entities and components are referred to by the identifiers that `Scene.GetHierarchy` lists, and `Edit.Undo` undoes any change to the scene.
+The tool `Editor.ListCommands` describes all the others. A session usually begins with `Project.New` or `Project.Open`; `Asset.Import` then brings models, pictures and environments into the project and `Asset.Place` puts a model into the scene. Entities and components are referred to by the identifiers that `Scene.GetHierarchy` lists, and `Edit.Undo` undoes any change to the scene.
 
 ## Repository layout
 

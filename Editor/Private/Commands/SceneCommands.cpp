@@ -66,7 +66,7 @@ namespace
 
 	FCommandResult OpenScene(FEditor& Editor, const FCommandArguments& Arguments)
 	{
-		std::filesystem::path Path = FFileHelper::PathFromUtf8(Arguments.GetString("Path"));
+		std::filesystem::path Path = Editor.ResolveFilePath(FFileHelper::PathFromUtf8(Arguments.GetString("Path")));
 
 		std::string Error;
 		std::vector<std::string> Warnings;
@@ -89,8 +89,9 @@ namespace
 
 	FCommandResult SaveScene(FEditor& Editor, const FCommandArguments& Arguments)
 	{
-		std::filesystem::path Path =
-			Arguments.Has("Path") ? FFileHelper::PathFromUtf8(Arguments.GetString("Path")) : Editor.GetScenePath();
+		std::filesystem::path Path = Arguments.Has("Path")
+			? Editor.ResolveFilePath(FFileHelper::PathFromUtf8(Arguments.GetString("Path")))
+			: Editor.GetScenePath();
 		if (Path.empty())
 		{
 			return FCommandResult::Failure(
@@ -142,7 +143,10 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 			"Replaces the scene being edited with one loaded from a scene file. What was not saved of the old scene "
 			"is lost, and Edit.Undo does not bring it back. Returns the warnings about values in the file that could "
 			"not be loaded.",
-			{FCommandParameter::Required("Path", ECommandArgumentType::String, "The scene file to load.")}},
+			{FCommandParameter::Required("Path",
+				ECommandArgumentType::String,
+				"The scene file to load. A relative path is relative to the content directory of the project, if one "
+				"is open.")}},
 		OpenScene);
 
 	Registry.Register(
@@ -150,7 +154,8 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 			"Saves the scene being edited to a scene file, which becomes the scene's file. Returns its path.",
 			{FCommandParameter::Optional("Path",
 				ECommandArgumentType::String,
-				"The file to save to. The file the scene was opened from or last saved to if left out.")},
+				"The file to save to; a relative path is relative to the content directory of the project, if one is "
+				"open. The file the scene was opened from or last saved to if left out.")},
 			ECommandEffect::LeavesScene},
 		SaveScene);
 

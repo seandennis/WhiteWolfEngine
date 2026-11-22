@@ -6,6 +6,7 @@
 #include "Commands/CommandResult.h"
 #include "History/UndoHistory.h"
 #include "Object/WeakObjectPtr.h"
+#include "Project/Project.h"
 
 #include <filesystem>
 #include <optional>
@@ -26,6 +27,7 @@ extern EDITOR_API FLogCategory LogEditor;
  * the whole of the editor's behaviour can be driven and tested unattended.
  *
  * An editor always has a scene: an empty one called "Untitled" to begin with. The editor keeps its scene alive.
+ * It may have a project (FProject), which is where the assets that scenes refer to are.
  *
  * Every change to the scene can be undone. After each command that can change the scene (ECommandEffect), the
  * editor writes the scene down, and if it differs from what it was, that is a step of the history; Undo and Redo
@@ -119,6 +121,26 @@ public:
 	/** Records the file the scene now belongs to, after it has been saved there. */
 	EDITOR_API void SetScenePath(std::filesystem::path NewScenePath);
 
+	/** Returns the project being worked on, or null while none is open. */
+	const FProject* GetProject() const
+	{
+		return Project.has_value() ? &*Project : nullptr;
+	}
+
+	/**
+	 * Makes a project the one being worked on. Its content directory becomes the directory that asset paths are
+	 * relative to (FAssetManager), and the scene is replaced by an empty one, with a history that starts anew. The
+	 * editor gives the content directory up again when it is destroyed.
+	 */
+	EDITOR_API void SetProject(FProject NewProject);
+
+	/**
+	 * Returns the file that a path given to a command means: a relative path is relative to the content directory
+	 * of the project, if one is open, so that a scene can be named as "Scenes/Level1.json". Any other path is
+	 * returned as it is.
+	 */
+	EDITOR_API std::filesystem::path ResolveFilePath(const std::filesystem::path& Path) const;
+
 private:
 	/** Returns the scene written down: everything that is saved with it, as the text of the history's states. */
 	std::string WriteSceneState() const;
@@ -140,4 +162,6 @@ private:
 	TWeakObjectPtr<WScene> Scene;
 
 	std::filesystem::path ScenePath;
+
+	std::optional<FProject> Project;
 };

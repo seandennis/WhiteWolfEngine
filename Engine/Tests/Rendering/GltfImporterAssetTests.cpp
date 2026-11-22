@@ -18,6 +18,7 @@
 
 #include <ostream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -171,5 +172,66 @@ TEST_SUITE("FGltfImporter in the content directory")
 
 		CHECK_FALSE(FGltfImporter::LoadAssets(Directory.GetPath() / "Missing.gltf", Assets, Error));
 		CHECK_FALSE(Error.empty());
+	}
+
+	TEST_CASE("IsGltfFile goes by the end of a file's name, in any case")
+	{
+		CHECK(FGltfImporter::IsGltfFile("Crate.gltf"));
+		CHECK(FGltfImporter::IsGltfFile("Models/Crate.glb"));
+		CHECK(FGltfImporter::IsGltfFile("Crate.GLTF"));
+		CHECK(FGltfImporter::IsGltfFile("Crate.Glb"));
+		CHECK_FALSE(FGltfImporter::IsGltfFile("Crate.png"));
+		CHECK_FALSE(FGltfImporter::IsGltfFile("Crate.gltf.txt"));
+		CHECK_FALSE(FGltfImporter::IsGltfFile("gltf"));
+		CHECK_FALSE(FGltfImporter::IsGltfFile(""));
+	}
+
+	TEST_CASE("GetExternalFiles lists the files a glTF file keeps its data in, each once")
+	{
+		const FScopedTempDirectory Directory;
+		const FTestGltfBuffer Buffer = MakeTestSquareBuffer();
+		WriteTestGltfFile(Directory.GetPath() / "Square Data.bin",
+			std::string_view(reinterpret_cast<const char*>(Buffer.Bytes.data()), Buffer.Bytes.size()));
+		FTestGltf Gltf;
+		// Two pictures in files, one of them named twice, and one written into the glTF file itself.
+		Gltf.More = R"("images": [{"uri": "Textures/Paint.png"}, {"uri": "Textures/Paint.png"}, {"uri": "Rust.jpg"},)"
+					R"( {"uri": "data:image/png;base64,AAAA"}], )";
+		// The name of the buffer's file has a space, which a glTF file writes as %20.
+		WriteTestGltfFile(
+			Directory.GetPath() / "Square.gltf", Gltf.Build(R"({"byteLength": 140, "uri": "Square%20Data.bin"})"));
+		std::vector<std::string> Files;
+		std::string Error;
+
+		REQUIRE(FGltfImporter::GetExternalFiles(Directory.GetPath() / "Square.gltf", Files, Error));
+
+		CHECK(Files == std::vector<std::string>{"Square Data.bin", "Textures/Paint.png", "Rust.jpg"});
+	}
+
+	TEST_CASE("GetExternalFiles gives none for a file that holds everything itself")
+	{
+		const FScopedTempDirectory Directory;
+		const FTestGltfBuffer Buffer = MakeTestSquareBuffer();
+		WriteTestGltfFile(Directory.GetPath() / "Square.gltf", FTestGltf().BuildWithEmbeddedBuffer(Buffer));
+		WriteTestGltfFile(Directory.GetPath() / "Square.glb", FTestGltf().BuildBinaryFile(Buffer));
+		std::vector<std::string> Files = {"Left over from before"};
+		std::string Error;
+
+		REQUIRE(FGltfImporter::GetExternalFiles(Directory.GetPath() / "Square.gltf", Files, Error));
+		CHECK(Files.empty());
+		REQUIRE(FGltfImporter::GetExternalFiles(Directory.GetPath() / "Square.glb", Files, Error));
+		CHECK(Files.empty());
+	}
+
+	TEST_CASE("GetExternalFiles fails for a file that cannot be imported")
+	{
+		const FScopedTempDirectory Directory;
+		WriteTestGltfFile(
+			Directory.GetPath() / "Square.gltf", FTestGltf().Build(R"({"byteLength": 140, "uri": "Gone.bin"})"));
+		std::vector<std::string> Files;
+		std::string Error;
+
+		CHECK_FALSE(FGltfImporter::GetExternalFiles(Directory.GetPath() / "Square.gltf", Files, Error));
+		CHECK(Error.find("Square.gltf") != std::string::npos);
+		CHECK_FALSE(FGltfImporter::GetExternalFiles(Directory.GetPath() / "Missing.gltf", Files, Error));
 	}
 }

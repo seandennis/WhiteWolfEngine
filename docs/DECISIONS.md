@@ -725,11 +725,11 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 - **A scene file writes a reference to an asset as its path,** a string, where a reference to an entity or component is a number (D-024). Loading a scene loads the assets it names; one that cannot be loaded is a warning and a null reference, like any value that cannot be read. The editor's property commands read and write references the same way.
 - **A picture is a colour texture, or with the key `Linear` a data texture,** and becomes either when it is first asked for. What a picture's channels mean is decided by what uses it, as in glTF.
 - **`FGltfImporter::Import` of a file in the content directory** gives the new components the assets of the file's package, so the scene can be saved and a file imported twice is in memory once. A file anywhere else is imported as before, with objects of its own.
-- **The content directory is one setting of the engine,** `FAssetManager::SetContentDirectory`. Who runs the engine says where it is.
+- **The content directory is one setting of the engine,** `FAssetManager::SetContentDirectory`. Who runs the engine says where it is; for the editor that is the project (D-045).
 
 **Alternatives considered.** Converting every source into a file of the engine's own on import, as Unreal does, makes loading fast and lets an asset be edited apart from its source; it also means a second copy of everything, a format to keep compatible, and a step that can be forgotten. It can be added for the kinds of asset that need it. Numbering assets with identifiers that survive renaming needs a file beside each asset to keep the number in; paths are what a person and an agent can read in a scene file. Loading single assets of a file on demand saves memory for files of which little is used, and has to parse the file again for each of them or keep it parsed.
 
-**Limits.** Assets cannot be changed and saved: a material of a glTF file is what the file says, and the editor has no file of its own for a material yet. A file that changes on disk is not loaded again while its assets are in use. Names are compared letter for letter, which a file system that ignores case does not do. Loading happens on the main thread, when the asset is asked for.
+**Limits.** Assets cannot be changed and saved: a material of a glTF file is what the file says, and the editor has no file of its own for a material yet. (The project and the commands that import and place assets came with D-045.) A file that changes on disk is not loaded again while its assets are in use. Names are compared letter for letter, which a file system that ignores case does not do. Loading happens on the main thread, when the asset is asked for.
 
 **Testing.** Asset paths: every way text can fail to be one. The manager, with files written into a temporary content directory: each kind of file, the keys of a glTF file and of its textures, that a file is loaded once while it is in use and again after it was collected, every reason a load fails, another content directory, and the mapping between asset paths and file-system paths. Scene files: references are saved as paths and loaded as the same shared objects, the text is the same after a round trip, and an asset that is missing, of the wrong class or not a path is a warning. The importer: a file in the content directory gives components assets with paths, a scene with it saves and loads, two imports share, and a file elsewhere behaves as before.
 
@@ -760,3 +760,24 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** The report was intermittent, so one run without it shows little. This entry is to be amended with what CI shows over the runs that follow: either that the report has not come back, or the stack it now names.
 
 **Testing.** The render device's tests create and destroy a render device many times in one process, which now exercises a second and later device on an instance that already exists, with NVRHI's validation on; nothing new is observable from outside. The sanitizer job of CI is the test of what this was for.
+
+## D-045: A project is a directory with a project file and a Content directory
+
+**Status:** Accepted.
+
+**Context.** Assets are the files of a content directory (D-043), and something has to say where that directory is. The specification speaks of a game project that the editor opens, with a project file that will list the project's plugins, and of bringing assets in by importing them.
+
+**Decision.**
+
+- **A project is a directory** that holds a project file, `<Name>.wwproject`, and a directory `Content`. The project file is JSON, like every file the editor writes: its format, a version and the project's name. `Content` is the content directory, for assets and for scenes.
+- **The editor works on one project at a time.** `Project.New` and `Project.Open` make a project the editor's: its content directory becomes the engine's, and the scene is replaced by an empty one, because a scene's assets are those of its project. An editor without a project can still edit a scene, as before; it cannot refer to assets.
+- **A path given to a scene command is relative to the content directory** when a project is open and the path is relative, so a scene is `Scenes/Level1.json` to an agent as an asset is `Models/Crate.glb`.
+- **`Asset.Import` copies a file into the content directory** and loads it, to see that it can be. A `.gltf` file takes the files along that it keeps its data in, at the same places beside it; one that keeps data outside its own directory is refused. Nothing of the project is replaced, and a file that cannot be loaded is not left behind.
+- **`Asset.Place` puts a model into the scene** as entities, through `FGltfImporter::Import`, and is a step of the history like any change. Single assets are used by setting the properties of components to their paths.
+- **`Asset.List` and `Asset.Describe`** say what the project has: the asset files, and the path and class of every asset in one of them.
+
+**Alternatives considered.** A content directory that is set by a command of its own, without a project, would have had to be replaced by the project as soon as plugins and export need one. Importing by reference, leaving the file where it is, makes a project that works on one machine. Converting on import is what D-043 decided against.
+
+**Limits.** The project file holds nothing but the name yet. There is no command that moves, renames or removes an asset file, and a scene that names an asset by its old path does not follow it. Nothing remembers which project was open last.
+
+**Testing.** `FProject`: creating and opening, and every way either can fail. The commands, on a project in a temporary directory: importing each kind of file, a `.gltf` file with a buffer and a picture beside it, every reason an import is refused and that nothing is left in the project then; listing and describing; placing a model at the root and below an entity, undoing it, and saving and opening the scene with it; and scenes by relative path.
