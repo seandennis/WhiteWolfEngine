@@ -79,6 +79,7 @@ Build\windows\Binaries\Debug\EngineTests.exe --test-case="*Parse*"
 - Tests use [doctest](https://github.com/doctest/doctest). Each module has one test executable, `<Module>Tests`, built from every file under `<Module>/Tests/`, and one CTest entry of the same name: `EngineTests` and `EditorTests`. The build tools have their own: `HeaderToolTests` and `ShaderCompilerTests`.
 - Tests are headless: they never open a window, wait for input or need a display. The renderer tests do need Vulkan 1.3: they create an `FRenderDevice`, draw to an `FRenderTarget` and read the pixels back, on whatever graphics card or software driver the machine has. A machine without Vulkan fails them; it does not skip them.
 - Test executables are built with `DOCTEST_CONFIG_NO_MULTITHREADING`: call doctest assertions (`CHECK`, `REQUIRE`) on the main thread only. A test may start threads that run engine code. A test that needs a window creates an `FScopedHeadlessPlatform` (`Tests/Platform/ScopedHeadlessPlatform.h`), under which `FWindow::Create` makes windows that exist in memory only, and feeds input through `Window->GetInput().HandleKeyEvent(...)`.
+- `WhiteWolfEditor.ServesAnAgent` is a CTest entry that starts the editor's executable as an agent does, gives it the messages of `Editor/Tests/Agent/AgentSession.jsonl` on its standard input and checks its answers (`RunAgentSession.cmake`).
 - `EngineTests.DetectsMemoryLeaks` is a CTest entry that leaks memory on purpose and passes only if the leak is reported. It exists in MSVC Debug builds and under `linux-sanitize`, the builds that can detect leaked allocations.
 - A test executable's `main` starts with `FProcessDiagnostics::DisableErrorDialogs()` and `FProcessDiagnostics::EnableMemoryLeakReport()`, so a crash cannot hang the run in a dialog and leaks are reported at exit.
 - `CodeStyle.ClangFormat` is a CTest entry that runs the format check. It reports **Skipped** (not Passed) when clang-format 18 is not installed; install it rather than committing unchecked code.
@@ -153,6 +154,7 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Rendering/ReferenceImages/      The reference images
 Editor/                   The editor module (WhiteWolfEditorCore.dll): everything the editor does, without its windows
   CMakeLists.txt
+  Main.cpp                Entry point of the editor's executable, WhiteWolfEditor
   Public/
     Editor.h              FEditor: the scene being edited and the commands that change it
     Commands/             The command system: CommandRegistry.h (FCommandRegistry, FCommandFunction),
@@ -160,11 +162,14 @@ Editor/                   The editor module (WhiteWolfEditorCore.dll): everythin
                           CommandEffect.h (ECommandEffect), CommandArguments.h (FCommandArguments),
                           CommandResult.h (FCommandResult)
     History/              UndoHistory.h (FUndoHistory: the states a scene has been in, for undo and redo)
+    Agent/                AgentServer.h (FAgentServer: the commands as tools of a Model Context Protocol server)
+    EditorApplication.h   FEditorApplication: what the executable does, given a command line and streams
   Private/
     Commands/             The editor's own commands, one class per area (FSceneCommands, FEntityCommands,
                           FComponentCommands, FPropertyCommands, FEditCommands, FEditorCommands), and what they share
   Tests/                  Unit tests (EditorTests executable)
     TestEditorObjects.h   Component classes for the tests, FScopedEditorTest, JSON written as text
+    Agent/                The agent server's tests, and a session of messages that CTest gives the executable
 Tools/
   Format.cmake            Formats or checks all C++ sources
   GitHooks/pre-commit     Optional hook that runs the format check
@@ -365,6 +370,7 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 - **Arguments are checked before the command runs.** The registry refuses a call with a missing argument, an argument of the wrong type or an argument that has no parameter. In the function, read arguments with `GetString`, `GetInteger`, `GetNumber`, `GetBoolean` and `GetJson` without checking them again, and ask `Has` first for an optional one.
 - **Undo and redo need nothing from a command.** After every command the editor writes the whole scene down as the text of a scene file, and a difference from the last state is a step of the history (`FUndoHistory`, D-041); `Edit.Undo` and `Edit.Redo` load a state. What a command changes must therefore be something a scene file holds. A command that cannot change the scene says so in its description with `ECommandEffect::LeavesScene`, which spares the editor the writing-down; add it to the second list in `Editor/Tests/EditorTests.cpp`.
 - **Do not keep a pointer into the scene from one command to the next.** Undo, redo, `Scene.New` and `Scene.Open` replace the scene object, with all its entities and components. They keep their identifiers: keep those, and ask `Editor.GetScene()` again.
+- **Agents reach the commands through `WhiteWolfEditor --mcp`,** a Model Context Protocol server on standard input and output in which every registered command is a tool (`FAgentServer`, D-042). A new command needs nothing to appear there. With `--mcp`, standard output carries the protocol and nothing else: never write to `std::cout` from editor or engine code, use the log. `FEditorApplication::Run` is what the executable does, with its streams as parameters, which is how tests run it.
 - **Failures are results.** Whatever can go wrong because of what was asked (no such entity, a class that is not a component, a file that cannot be read) returns `FCommandResult::Failure` with a sentence that says what is wrong, and leaves the editor as it was. Check before changing anything. `WW_CHECK` is for mistakes in the code only.
 - **Refer to entities and components by identifier,** in arguments, in results and in property values. `FCommandTargets` (`Private/Commands/CommandTargets.h`) finds them and words the failure.
 - **Properties go through reflection.** `Object.GetProperty` and `Object.SetProperty` work for every `WPROPERTY()` that is not `Transient`, of any class, so a new component needs no command of its own for its data.

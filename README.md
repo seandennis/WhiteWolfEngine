@@ -14,7 +14,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | Complete |
 | 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Complete |
 | 4 | Renderer: image-based lighting, soft shadows, SSAO | Complete |
-| 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | In progress. Done: the `Editor` module with the command system (named commands with typed arguments and structured results) and the commands for scenes, entities, components and reflected properties; undo and redo of every change to the scene. Still to do: the agent interface, assets, the editor's windows (viewport, hierarchy, property panels) and the gizmo |
+| 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | In progress. Done: the `Editor` module with the command system (named commands with typed arguments and structured results) and the commands for scenes, entities, components and reflected properties; undo and redo of every change to the scene; the agent interface, a Model Context Protocol server in the editor's executable. Still to do: the commands for play mode, screenshots and the log, assets, the editor's windows (viewport, hierarchy, property panels) and the gizmo |
 | 6 | Plugin system, ChronoPhysics plugin, audio components | Not started |
 | 7 | C++ scripting module with hot reload, prefabs, full test scene | Not started |
 | 8 | Game export, and the Tetris acceptance test through the agent interface | Not started |
@@ -42,6 +42,23 @@ cmake --workflow --preset windows-debug
 That one command configures the project, builds it and runs every test. Use `windows-release` for an optimised build.
 
 To work in Visual Studio, open the solution in `Build/windows/` after the first configure: `WhiteWolfEngine.slnx` with Visual Studio 2026, `WhiteWolfEngine.sln` with Visual Studio 2022. Everything else (individual steps, running single tests, the Linux cross-check presets) is described in [`AGENTS.md`](AGENTS.md).
+
+## Giving the editor commands from an AI agent
+
+Everything the editor can do is a command, and `WhiteWolfEditor --mcp` offers every command as a tool to an agent: it is a [Model Context Protocol](https://modelcontextprotocol.io) server on its standard input and output. An agent's program starts it and needs no window. For a program that reads its servers from a `.mcp.json` file, such as Claude Code:
+
+```json
+{
+  "mcpServers": {
+    "white-wolf-editor": {
+      "command": "Build/windows/Binaries/Release/WhiteWolfEditor.exe",
+      "args": ["--mcp"]
+    }
+  }
+}
+```
+
+The tool `Editor.ListCommands` describes all the others. Entities and components are referred to by the identifiers that `Scene.GetHierarchy` lists, and `Edit.Undo` undoes any change to the scene.
 
 ## Repository layout
 
