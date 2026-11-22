@@ -10,6 +10,7 @@
 #include "Commands/ProjectCommands.h"
 #include "Commands/PropertyCommands.h"
 #include "Commands/SceneCommands.h"
+#include "Commands/SelectionCommands.h"
 #include "Json/JsonFormat.h"
 #include "Json/JsonValue.h"
 #include "Json/JsonWriter.h"
@@ -17,6 +18,7 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneSerializer.h"
 
+#include <algorithm>
 #include <utility>
 
 constinit FLogCategory LogEditor("LogEditor", ELogVerbosity::Log);
@@ -31,6 +33,7 @@ FEditor::FEditor()
 	FEntityCommands::Register(Commands);
 	FComponentCommands::Register(Commands);
 	FPropertyCommands::Register(Commands);
+	FSelectionCommands::Register(Commands);
 
 	WScene* const EmptyScene = NewObject<WScene>();
 	EmptyScene->SetName(std::string(DefaultSceneName));
@@ -96,6 +99,9 @@ void FEditor::SetScene(WScene& NewScene, std::filesystem::path NewScenePath)
 
 	ReplaceScene(NewScene);
 	History.Reset(WriteSceneState());
+
+	// The identifiers of the old scene's entities mean nothing in the new one, or other entities.
+	SelectedEntityIds.clear();
 }
 
 void FEditor::SetScenePath(std::filesystem::path NewScenePath)
@@ -112,6 +118,40 @@ void FEditor::SetProject(FProject NewProject)
 	WScene* const EmptyScene = NewObject<WScene>();
 	EmptyScene->SetName(std::string(DefaultSceneName));
 	SetScene(*EmptyScene, std::filesystem::path());
+}
+
+std::vector<int64> FEditor::GetSelection() const
+{
+	const WScene& CurrentScene = GetScene();
+	std::vector<int64> Selection;
+	for (const int64 EntityId : SelectedEntityIds)
+	{
+		if (CurrentScene.FindEntityById(EntityId) != nullptr)
+		{
+			Selection.push_back(EntityId);
+		}
+	}
+	return Selection;
+}
+
+bool FEditor::IsSelected(int64 EntityId) const
+{
+	const bool bIsAmongSelected = std::ranges::find(SelectedEntityIds, EntityId) != SelectedEntityIds.end();
+	return bIsAmongSelected && GetScene().FindEntityById(EntityId) != nullptr;
+}
+
+void FEditor::SetSelection(const std::vector<int64>& EntityIds)
+{
+	const WScene& CurrentScene = GetScene();
+	SelectedEntityIds.clear();
+	for (const int64 EntityId : EntityIds)
+	{
+		const bool bIsNew = std::ranges::find(SelectedEntityIds, EntityId) == SelectedEntityIds.end();
+		if (bIsNew && CurrentScene.FindEntityById(EntityId) != nullptr)
+		{
+			SelectedEntityIds.push_back(EntityId);
+		}
+	}
 }
 
 std::filesystem::path FEditor::ResolveFilePath(const std::filesystem::path& Path) const

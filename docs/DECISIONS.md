@@ -801,3 +801,21 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** There is one picture to a command and no way to give a shader of one's own. Text is whatever triangles and font picture the layout produces; the engine has no notion of text.
 
 **Testing.** Lists of rectangles on a surface of sixteen by sixteen pixels, read back and compared pixel for pixel: which pixels a rectangle covers, from which corner positions count, that an opaque colour is read back as given and a translucent one blends as light does, the order of commands, clip rectangles inside, across and outside the surface, a texture shown pixel for pixel and multiplied by a colour, a texture's alpha, a texture whose picture is replaced, a render target shown and then drawn to again, a command's own part of a list, a list larger than the buffers, and each way a list can be inconsistent, with nothing drawn then. All with NVRHI's validation on and no error logged.
+
+## D-047: What is selected belongs to the editor, not to the scene
+
+**Status:** Accepted.
+
+**Context.** The editor's windows act on the selected entities: the outliner highlights them, the details panel shows their properties, the gizmo moves them, and Delete, Duplicate and Focus mean them. An agent that places things for a user to look at wants to select them too. Undo and redo put back the whole scene from the text of a scene file (D-041), and what is selected is not in a scene file.
+
+**Decision.**
+
+- **`FEditor` holds the selection:** the identifiers of the selected entities, in the order they were selected. Whatever shows one entity shows the last.
+- **`Selection.Set` and `Selection.Get` are its commands,** like everything else the user interface does (D-040). `Selection.Set` takes the whole list; adding to a selection or taking from it is the caller's arithmetic, so there is one way to change it. Both leave the scene as it is (`ECommandEffect::LeavesScene`).
+- **Selecting is not a step of the history.** Undo undoes changes to the scene, and a user who undoes a move does not expect to get an earlier selection back first.
+- **The selection is identifiers, looked up when it is asked for.** An entity that has been destroyed is simply not among the selected ones any more, and when an undo brings it back, with the identifier it had (D-041), it is selected again. Nothing that destroys or restores entities has to tell the selection.
+- **A scene that replaces the one being edited starts with nothing selected,** because the same identifiers name other entities there. An identifier that no entity has is not accepted, so that an entity created later cannot turn out to be selected.
+
+**Alternatives considered.** Saving the selection with the scene would put a user's momentary attention into a file that is shared and compared. Making the selection part of the history's states, as editors that record every change as a transaction do, would make each click a step that an undo has to pass through. Selecting components as well as entities is left out until something needs it: the details panel shows the components of the selected entity.
+
+**Testing.** That the selection is what was set, in order and without duplicates; that identifiers of no entity and of components select nothing; that a destroyed entity drops out and an undo brings it back; that selecting adds no step to the history; that a new scene starts with nothing selected; and for `Selection.Set`, each kind of argument that does not select entities, with its reason and the selection left as it was.

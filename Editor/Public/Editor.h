@@ -12,6 +12,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 class FJsonValue;
 class WScene;
@@ -27,7 +28,8 @@ extern EDITOR_API FLogCategory LogEditor;
  * the whole of the editor's behaviour can be driven and tested unattended.
  *
  * An editor always has a scene: an empty one called "Untitled" to begin with. The editor keeps its scene alive.
- * It may have a project (FProject), which is where the assets that scenes refer to are.
+ * It may have a project (FProject), which is where the assets that scenes refer to are. It knows which entities
+ * of the scene are selected: the ones that the user is working on.
  *
  * Every change to the scene can be undone. After each command that can change the scene (ECommandEffect), the
  * editor writes the scene down, and if it differs from what it was, that is a step of the history; Undo and Redo
@@ -121,6 +123,25 @@ public:
 	/** Records the file the scene now belongs to, after it has been saved there. */
 	EDITOR_API void SetScenePath(std::filesystem::path NewScenePath);
 
+	/**
+	 * Returns the identifiers of the selected entities, in the order they were selected. What is shown for one
+	 * entity, as its properties are, is shown for the last of them. An entity that no longer exists is not among
+	 * them, and is selected again if an undo brings it back.
+	 */
+	EDITOR_API std::vector<int64> GetSelection() const;
+
+	/** Returns true if the entity with the given identifier exists and is selected. */
+	EDITOR_API bool IsSelected(int64 EntityId) const;
+
+	/**
+	 * Selects the given entities and no others. What is selected is not part of the scene: selecting is not a step
+	 * of the history, and a scene that replaces the one being edited (SetScene) starts with nothing selected.
+	 *
+	 * @param EntityIds The identifiers of the entities, in the order they count as selected. An identifier that is
+	 * given more than once counts where it is given first, and one that no entity of the scene has is ignored.
+	 */
+	EDITOR_API void SetSelection(const std::vector<int64>& EntityIds);
+
 	/** Returns the project being worked on, or null while none is open. */
 	const FProject* GetProject() const
 	{
@@ -162,6 +183,9 @@ private:
 	TWeakObjectPtr<WScene> Scene;
 
 	std::filesystem::path ScenePath;
+
+	/** The identifiers of the selected entities, some of which may no longer exist; see GetSelection. */
+	std::vector<int64> SelectedEntityIds;
 
 	std::optional<FProject> Project;
 };

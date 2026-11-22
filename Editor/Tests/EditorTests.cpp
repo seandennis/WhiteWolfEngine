@@ -97,11 +97,13 @@ TEST_SUITE("FEditor")
 			"Scene.New",
 			"Scene.Open",
 			"Scene.Save",
+			"Selection.Get",
+			"Selection.Set",
 		};
 		CHECK(Names == ExpectedNames);
 	}
 
-	TEST_CASE("The commands that only read, and the one that saves, say that they leave the scene as it is")
+	TEST_CASE("The commands that only read, save or select say that they leave the scene as it is")
 	{
 		const FScopedEditorTest EditorTest;
 		const FEditor Editor;
@@ -126,6 +128,8 @@ TEST_SUITE("FEditor")
 			"Project.Get",
 			"Scene.GetHierarchy",
 			"Scene.Save",
+			"Selection.Get",
+			"Selection.Set",
 		};
 		CHECK(Names == ExpectedNames);
 	}
