@@ -1,5 +1,6 @@
 #include "Commands/PropertyCommands.h"
 
+#include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
 #include "Commands/CommandTargets.h"
 #include "Commands/ScenePropertyContext.h"
@@ -146,14 +147,16 @@ void FPropertyCommands::Register(FCommandRegistry& Registry)
 		{"Object.GetProperties",
 			"Returns the class of an entity or component and the value of every property that is saved with the "
 			"scene. A reference to an entity or component is its identifier.",
-			{ObjectParameter}},
+			{ObjectParameter},
+			ECommandEffect::LeavesScene},
 		GetProperties);
 
 	Registry.Register(
 		{"Object.GetProperty",
 			"Returns the value of one property of an entity or component.",
 			{ObjectParameter,
-				FCommandParameter::Required("Property", ECommandArgumentType::String, "The name of the property.")}},
+				FCommandParameter::Required("Property", ECommandArgumentType::String, "The name of the property.")},
+			ECommandEffect::LeavesScene},
 		GetProperty);
 
 	Registry.Register(

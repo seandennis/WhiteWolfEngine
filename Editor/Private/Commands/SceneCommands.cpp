@@ -1,5 +1,6 @@
 #include "Commands/SceneCommands.h"
 
+#include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
 #include "Core/FileHelper.h"
 #include "Editor.h"
@@ -130,7 +131,8 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 {
 	Registry.Register(
 		{"Scene.New",
-			"Replaces the scene being edited with an empty one. What was not saved of the old scene is lost.",
+			"Replaces the scene being edited with an empty one. What was not saved of the old scene is lost, and "
+			"Edit.Undo does not bring it back.",
 			{FCommandParameter::Optional(
 				"Name", ECommandArgumentType::String, "The name of the new scene. \"Untitled\" if left out.")}},
 		NewScene);
@@ -138,7 +140,8 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 	Registry.Register(
 		{"Scene.Open",
 			"Replaces the scene being edited with one loaded from a scene file. What was not saved of the old scene "
-			"is lost. Returns the warnings about values in the file that could not be loaded.",
+			"is lost, and Edit.Undo does not bring it back. Returns the warnings about values in the file that could "
+			"not be loaded.",
 			{FCommandParameter::Required("Path", ECommandArgumentType::String, "The scene file to load.")}},
 		OpenScene);
 
@@ -147,13 +150,15 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 			"Saves the scene being edited to a scene file, which becomes the scene's file. Returns its path.",
 			{FCommandParameter::Optional("Path",
 				ECommandArgumentType::String,
-				"The file to save to. The file the scene was opened from or last saved to if left out.")}},
+				"The file to save to. The file the scene was opened from or last saved to if left out.")},
+			ECommandEffect::LeavesScene},
 		SaveScene);
 
 	Registry.Register(
 		{"Scene.GetHierarchy",
 			"Returns the name and file of the scene being edited and the tree of its entities: each with its "
 			"identifier, name, components (identifier and class) and children.",
-			{}},
+			{},
+			ECommandEffect::LeavesScene},
 		GetHierarchy);
 }

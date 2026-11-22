@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Commands/CommandEffect.h"
 #include "Commands/CommandParameter.h"
 
 #include <string>
@@ -18,4 +19,7 @@ struct FCommandDescription
 
 	/** The arguments the command takes. A command is refused if it is given any other argument. */
 	std::vector<FCommandParameter> Parameters;
+
+	/** Whether the command can change the scene; see ECommandEffect. */
+	ECommandEffect Effect = ECommandEffect::ChangesScene;
 };

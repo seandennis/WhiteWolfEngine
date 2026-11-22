@@ -1,6 +1,7 @@
 #include "Commands/EditorCommands.h"
 
 #include "Commands/CommandArgumentType.h"
+#include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
 #include "Editor.h"
 #include "Json/JsonValue.h"
@@ -28,6 +29,7 @@ namespace
 			FJsonValue CommandJson = FJsonValue::MakeObject();
 			CommandJson.SetMember("Name", Description->Name);
 			CommandJson.SetMember("Summary", Description->Summary);
+			CommandJson.SetMember("ChangesScene", Description->Effect == ECommandEffect::ChangesScene);
 			CommandJson.SetMember("Parameters", std::move(ParameterList));
 			CommandList.AddElement(std::move(CommandJson));
 		}
@@ -39,7 +41,9 @@ void FEditorCommands::Register(FCommandRegistry& Registry)
 {
 	Registry.Register(
 		{"Editor.ListCommands",
-			"Returns every command of the editor, in the order of their names, with its summary and parameters.",
-			{}},
+			"Returns every command of the editor, in the order of their names: its summary, whether it can change the "
+			"scene, and its parameters.",
+			{},
+			ECommandEffect::LeavesScene},
 		ListCommands);
 }

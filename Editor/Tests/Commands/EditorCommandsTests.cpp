@@ -35,6 +35,7 @@ TEST_SUITE("Editor commands")
 		const FJsonValue Expected = ParseTestJson(R"({
 			"Name": "Entity.Create",
 			"Summary": "Creates an entity in the scene being edited. Returns its identifier.",
+			"ChangesScene": true,
 			"Parameters": [
 				{
 					"Name": "Name",
@@ -53,6 +54,31 @@ TEST_SUITE("Editor commands")
 		CHECK(WriteTestJson(*CreateEntity) == WriteTestJson(Expected));
 	}
 
+	TEST_CASE("Editor.ListCommands says which commands leave the scene as it is")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+
+		const FCommandResult Result = Editor.ExecuteCommand("Editor.ListCommands", FJsonValue());
+
+		REQUIRE(Result.HasSucceeded());
+		for (const FJsonValue& Command : Result.GetValue().GetElements())
+		{
+			const FJsonValue* const Name = Command.FindMember("Name");
+			const FJsonValue* const ChangesScene = Command.FindMember("ChangesScene");
+			REQUIRE(Name != nullptr);
+			REQUIRE(ChangesScene != nullptr);
+			if (*Name == FJsonValue("Scene.GetHierarchy"))
+			{
+				CHECK(*ChangesScene == FJsonValue(false));
+			}
+			if (*Name == FJsonValue("Entity.Delete"))
+			{
+				CHECK(*ChangesScene == FJsonValue(true));
+			}
+		}
+	}
+
 	TEST_CASE("Editor.ListCommands lists the commands in the order of their names, including ones added later")
 	{
 		const FScopedEditorTest EditorTest;
@@ -67,7 +93,7 @@ TEST_SUITE("Editor commands")
 		const FJsonValue::FArray& Commands = Result.GetValue().GetElements();
 		REQUIRE(Commands.size() >= 2);
 		CHECK(WriteTestJson(Commands[0]) ==
-			R"({"Name":"Aardvark.Feed","Summary":"Feeds the aardvark.","Parameters":[]})");
+			R"({"Name":"Aardvark.Feed","Summary":"Feeds the aardvark.","ChangesScene":true,"Parameters":[]})");
 		std::string PreviousName;
 		for (const FJsonValue& Command : Commands)
 		{

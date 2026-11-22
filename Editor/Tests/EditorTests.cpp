@@ -53,7 +53,7 @@ TEST_SUITE("FEditor")
 		CHECK_FALSE(Scene.IsValid());
 	}
 
-	TEST_CASE("The editor has the commands of the editor, scenes, entities, components and properties")
+	TEST_CASE("The editor has the commands of the editor, the history, scenes, entities, components and properties")
 	{
 		const FScopedEditorTest EditorTest;
 		const FEditor Editor;
@@ -75,6 +75,9 @@ TEST_SUITE("FEditor")
 		const std::vector<std::string> ExpectedNames = {
 			"Component.Add",
 			"Component.Remove",
+			"Edit.GetHistory",
+			"Edit.Redo",
+			"Edit.Undo",
 			"Editor.ListCommands",
 			"Entity.Create",
 			"Entity.Delete",
@@ -86,6 +89,31 @@ TEST_SUITE("FEditor")
 			"Scene.GetHierarchy",
 			"Scene.New",
 			"Scene.Open",
+			"Scene.Save",
+		};
+		CHECK(Names == ExpectedNames);
+	}
+
+	TEST_CASE("The commands that only read, and the one that saves, say that they leave the scene as it is")
+	{
+		const FScopedEditorTest EditorTest;
+		const FEditor Editor;
+
+		std::vector<std::string> Names;
+		for (const FCommandDescription* const Description : Editor.GetCommands().GetCommands())
+		{
+			if (Description->Effect == ECommandEffect::LeavesScene)
+			{
+				Names.push_back(Description->Name);
+			}
+		}
+
+		const std::vector<std::string> ExpectedNames = {
+			"Edit.GetHistory",
+			"Editor.ListCommands",
+			"Object.GetProperties",
+			"Object.GetProperty",
+			"Scene.GetHierarchy",
 			"Scene.Save",
 		};
 		CHECK(Names == ExpectedNames);

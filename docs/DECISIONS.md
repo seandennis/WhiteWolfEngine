@@ -653,6 +653,35 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 
 **Alternatives considered.** A class per command, with a virtual function, is more code for each command and adds nothing: a description and a function are all a command is. Commands with C++ parameter lists, checked by the compiler, would still need the check at run time, because everything that gives a command gives it as a name and JSON. Putting the editor into the runtime executable and stripping it from exported games needs conditional compilation throughout; a module that the runtime does not link needs none.
 
-**Limits.** Milestone 5 is not finished with this. There is no undo and redo yet, no process through which an agent reaches the commands, and no window. A property that refers to a mesh, a material or a texture reads as null and cannot be set, until assets have names that a reference can be written as (D-033). Setting an array property to a value with a bad element fails, but leaves the array filled up to that element, as `FProperty::ImportJson` says.
+**Limits.** Milestone 5 is not finished with this. There is no process yet through which an agent reaches the commands, and no window; undo and redo came with D-041. A property that refers to a mesh, a material or a texture reads as null and cannot be set, until assets have names that a reference can be written as (D-033). Setting an array property to a value with a bad element fails, but leaves the array filled up to that element, as `FProperty::ImportJson` says; since D-041 that half-change is a step that can be undone.
 
 **Testing.** The registry: finding and listing commands, every way in which arguments can fail to fit, and that a command does not run when they do. The editor: that it keeps its scene alive and destroys the one it replaces. Every command, through `FEditor::ExecuteCommand` alone: what it does, what it returns, and for each way it can fail, the reason it gives and that nothing changed.
+
+## D-041: Undo and redo put back the whole scene
+
+**Status:** Accepted.
+
+**Context.** The specification wants every edit to be undoable, undo and redo to go through the command system, and stopping play to restore the scene exactly as it was. The usual design gives every command a second function that reverses it. That is two functions to keep in agreement for each command, written again by every plugin that adds commands, and a command that forgets something leaves the scene in a state it was never in.
+
+**Decision.**
+
+- **A step of the history is a state of the whole scene.** After every command that can change the scene, the editor writes the scene down as the JSON text of a scene file (D-024), without the layout, and compares it with the last state. If it differs, that is a step, named after the command. `FUndoHistory` keeps the states and knows nothing about scenes.
+- **Undo and redo load a state.** The scene object is replaced by one loaded from the state's text, as when a scene file is opened, so undo is exactly as good as saving and loading, which has to be right anyway and has its own tests.
+- **Commands have nothing to do to be undoable,** and cannot get it wrong: not the editor's own, and not the ones plugins will add. A command that changes nothing is not a step.
+- **A command that only reads says so,** with `ECommandEffect::LeavesScene` in its description, and the editor then does not write the scene down after it. That is for speed only. If such a command changes the scene after all, the change is recorded with the next step, like a change made without a command.
+- **Entities and components keep their identifiers** across undo and redo, and are new objects. Whatever refers to them from one command to the next refers by identifier (D-023), as arguments and results already do.
+- **A change made without a command is a step too.** Before undoing or redoing, the editor records what has changed since the last step as a step called "Direct change". What a tool does to the scene by hand, such as a gizmo while it is dragged, is therefore part of the next command's step, or undone by itself.
+- **A command that fails is recorded like one that succeeds.** It should leave the scene as it was, and then there is nothing to record; if one does not, what it left behind can be undone.
+- **Another scene starts the history anew.** `Scene.New`, `Scene.Open` and `FEditor::SetScene` cannot be undone.
+- **The history is limited by memory,** 256 MB of state text by default. Over that, the oldest steps are forgotten, but never the last one.
+- **The commands** are `Edit.Undo`, `Edit.Redo` and `Edit.GetHistory`, named after the menu the specification puts them in.
+
+**Consequences.**
+
+- Every command that can change the scene costs one writing-down of the whole scene, and every undo one load. Measured with MSVC in a Release build, on a scene of 1,000 entities with one component of five properties each: 3.1 ms a command, 11 ms an undo, and 296 KB a step, so that the default budget holds about 900 steps of such a scene. A Debug build takes about twenty times as long. The cost grows with the scene: ten times the entities take ten times the time for each command and leave a tenth of the steps.
+- An identifier that an undone command gave out is given out again by the next command, as if the undone one had never run. This departs from D-023's "never reused" in the one case where the object that had the identifier no longer exists in any state that can be reached.
+- What a scene file does not hold does not survive undo: `Transient` properties, which objects work out again, and, until assets have names, references to meshes, materials and textures (D-040).
+
+**Alternatives considered.** A reverse function per command, for the reasons above. Recording the old and new value of each changed property, as Unreal's transactions do, needs every change to announce itself before it happens, and the first forgotten announcement breaks undo silently. Storing only the entities that differ between two states would save most of the memory, and is what to do when scenes of tens of thousands of entities need a long history; it changes how `FUndoHistory` stores a state and nothing outside it. It would not save the time, which needs the scene to know what has changed in it.
+
+**Testing.** `FUndoHistory` by itself: steps, undo and redo in order, a new step taking the place of redoable ones, and the memory budget. Through the editor: for a deleted entity with children and components, a removed component, property values of several kinds, a reference, a name, a place in the hierarchy and a location ten billion kilometres from the origin, the scene written as a file must be the same text after undo as before the command, and after redo as after it. Also: commands that read or fail are not steps, direct changes are, another scene starts anew, a component whose class is missing keeps its data, and the old scene object is destroyed.

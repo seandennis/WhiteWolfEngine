@@ -81,6 +81,8 @@ TEST_SUITE("FCommandRegistry")
 		CHECK(Description->Name == "Test.DoNothing");
 		CHECK(Description->Summary == "Does nothing.");
 		CHECK(Description->Parameters.empty());
+		// A command is taken to change the scene unless it says that it does not.
+		CHECK(Description->Effect == ECommandEffect::ChangesScene);
 		CHECK(Registry.Find("Test.DoSomething") == nullptr);
 		CHECK(Registry.Find("test.donothing") == nullptr);
 		CHECK(Registry.Find("") == nullptr);

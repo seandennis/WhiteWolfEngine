@@ -157,10 +157,12 @@ Editor/                   The editor module (WhiteWolfEditorCore.dll): everythin
     Editor.h              FEditor: the scene being edited and the commands that change it
     Commands/             The command system: CommandRegistry.h (FCommandRegistry, FCommandFunction),
                           CommandDescription.h, CommandParameter.h, CommandArgumentType.h (ECommandArgumentType),
-                          CommandArguments.h (FCommandArguments), CommandResult.h (FCommandResult)
+                          CommandEffect.h (ECommandEffect), CommandArguments.h (FCommandArguments),
+                          CommandResult.h (FCommandResult)
+    History/              UndoHistory.h (FUndoHistory: the states a scene has been in, for undo and redo)
   Private/
     Commands/             The editor's own commands, one class per area (FSceneCommands, FEntityCommands,
-                          FComponentCommands, FPropertyCommands, FEditorCommands), and what they share
+                          FComponentCommands, FPropertyCommands, FEditCommands, FEditorCommands), and what they share
   Tests/                  Unit tests (EditorTests executable)
     TestEditorObjects.h   Component classes for the tests, FScopedEditorTest, JSON written as text
 Tools/
@@ -358,9 +360,11 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 ## The editor and its commands
 
 - **Everything the editor does is a command.** A command has a name (`Entity.Create`), typed parameters and a function, and is registered in the editor's `FCommandRegistry` (D-040). The user interface, the tests and the agent interface all act through `Editor.ExecuteCommand(Name, Arguments)` and nothing else: never give the user interface a way to change the scene that is not a command.
-- **`FEditor` is the editor without its windows:** the scene being edited (`GetScene()`; there always is one) and the commands. It needs no window or graphics card. Only the editor replaces or destroys its scene (`SetScene`).
+- **`FEditor` is the editor without its windows:** the scene being edited (`GetScene()`; there always is one), the commands, and the history of the scene (`Undo()`, `Redo()`, `GetHistory()`). It needs no window or graphics card. Only the editor replaces or destroys its scene (`SetScene`).
 - **Adding a command.** Write a function `FCommandResult MyCommand(FEditor& Editor, const FCommandArguments& Arguments)` in the anonymous namespace of the area's file in `Editor/Private/Commands/` (`EntityCommands.cpp` for `Entity.*`) and register it in that file's `Register` function, with a summary and a description for every parameter: those sentences are all an agent knows about the command. A new area is a new `F<Area>Commands` class, registered in `FEditor`'s constructor. Add the command's name to the list in `Editor/Tests/EditorTests.cpp`.
 - **Arguments are checked before the command runs.** The registry refuses a call with a missing argument, an argument of the wrong type or an argument that has no parameter. In the function, read arguments with `GetString`, `GetInteger`, `GetNumber`, `GetBoolean` and `GetJson` without checking them again, and ask `Has` first for an optional one.
+- **Undo and redo need nothing from a command.** After every command the editor writes the whole scene down as the text of a scene file, and a difference from the last state is a step of the history (`FUndoHistory`, D-041); `Edit.Undo` and `Edit.Redo` load a state. What a command changes must therefore be something a scene file holds. A command that cannot change the scene says so in its description with `ECommandEffect::LeavesScene`, which spares the editor the writing-down; add it to the second list in `Editor/Tests/EditorTests.cpp`.
+- **Do not keep a pointer into the scene from one command to the next.** Undo, redo, `Scene.New` and `Scene.Open` replace the scene object, with all its entities and components. They keep their identifiers: keep those, and ask `Editor.GetScene()` again.
 - **Failures are results.** Whatever can go wrong because of what was asked (no such entity, a class that is not a component, a file that cannot be read) returns `FCommandResult::Failure` with a sentence that says what is wrong, and leaves the editor as it was. Check before changing anything. `WW_CHECK` is for mistakes in the code only.
 - **Refer to entities and components by identifier,** in arguments, in results and in property values. `FCommandTargets` (`Private/Commands/CommandTargets.h`) finds them and words the failure.
 - **Properties go through reflection.** `Object.GetProperty` and `Object.SetProperty` work for every `WPROPERTY()` that is not `Transient`, of any class, so a new component needs no command of its own for its data.
