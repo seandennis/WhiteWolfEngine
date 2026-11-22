@@ -1,6 +1,7 @@
 #include "Rendering/RenderContext.h"
 
 #include "Rendering/RenderDevice.h"
+#include "Rendering/VulkanInstance.h"
 
 #include <nvrhi/validation.h>
 
@@ -16,8 +17,6 @@ constinit FLogCategory LogRendering("LogRendering", ELogVerbosity::Log);
 
 namespace
 {
-	/** The Vulkan version the renderer needs: NVRHI uses dynamic rendering and synchronization2, both core in 1.3. */
-	constexpr uint32 RequiredApiVersion = VK_API_VERSION_1_3;
 
 	/** True while a render context exists. There can be only one; see FRenderContext. */
 	bool bContextExists = false;
@@ -25,11 +24,6 @@ namespace
 	vk::detail::DispatchLoaderDynamic& GetFunctions()
 	{
 		return VULKAN_HPP_DEFAULT_DISPATCHER;
-	}
-
-	std::string FormatVersion(uint32 Version)
-	{
-		return std::format("{}.{}", VK_API_VERSION_MAJOR(Version), VK_API_VERSION_MINOR(Version));
 	}
 
 	/** Higher is better: a dedicated graphics card, then one built into the processor, then software. */
@@ -138,13 +132,10 @@ FRenderContext::~FRenderContext()
 	ImmediateCommandList = nullptr;
 	Device = nullptr;
 
+	// The instance is the process's and stays; see FVulkanInstance.
 	if (LogicalDevice != VK_NULL_HANDLE)
 	{
 		GetFunctions().vkDestroyDevice(LogicalDevice, nullptr);
-	}
-	if (Instance != VK_NULL_HANDLE)
-	{
-		GetFunctions().vkDestroyInstance(Instance, nullptr);
 	}
 
 	if (bOwnsFunctionTable)
@@ -155,57 +146,21 @@ FRenderContext::~FRenderContext()
 
 bool FRenderContext::Initialize(const FRenderDeviceDescription& Description, std::string& OutError)
 {
-	if (!Library.Load(OutError))
+	if (!FVulkanInstance::Initialize(OutError))
 	{
 		return false;
 	}
+	Instance = FVulkanInstance::GetHandle();
 
-	// The functions that exist before there is an instance, such as vkCreateInstance.
-	GetFunctions().init(Library.GetInstanceProcAddr());
+	// The functions that exist before there is an instance, and then the ones that belong to the instance, such
+	// as vkEnumeratePhysicalDevices. A context before this one left the table filled with the functions of its
+	// device, which is gone.
+	GetFunctions().init(FVulkanInstance::GetInstanceProcAddr());
+	GetFunctions().init(vk::Instance(Instance));
 
-	return CreateInstance(OutError) && SelectPhysicalDevice(OutError) && CreateLogicalDevice(OutError) &&
+	return SelectPhysicalDevice(OutError) && CreateLogicalDevice(OutError) &&
 		CreateRenderInterface(Description, OutError);
 }
-
-bool FRenderContext::CreateInstance(std::string& OutError)
-{
-	// vkEnumerateInstanceVersion does not exist in Vulkan 1.0, which is how 1.0 is recognised.
-	uint32 LoaderVersion = VK_API_VERSION_1_0;
-	if (GetFunctions().vkEnumerateInstanceVersion != nullptr)
-	{
-		GetFunctions().vkEnumerateInstanceVersion(&LoaderVersion);
-	}
-	if (LoaderVersion < RequiredApiVersion)
-	{
-		OutError = std::format("the installed Vulkan is version {}, but version {} or later is needed",
-			FormatVersion(LoaderVersion),
-			FormatVersion(RequiredApiVersion));
-		return false;
-	}
-
-	VkApplicationInfo ApplicationInfo{};
-	ApplicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	ApplicationInfo.pApplicationName = "White Wolf Engine";
-	ApplicationInfo.pEngineName = "White Wolf Engine";
-	ApplicationInfo.apiVersion = RequiredApiVersion;
-
-	VkInstanceCreateInfo CreateInfo{};
-	CreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	CreateInfo.pApplicationInfo = &ApplicationInfo;
-
-	const VkResult Result = GetFunctions().vkCreateInstance(&CreateInfo, nullptr, &Instance);
-	if (Result != VK_SUCCESS)
-	{
-		Instance = VK_NULL_HANDLE;
-		OutError = std::format("Vulkan could not be started: {}", nvrhi::vulkan::resultToString(Result));
-		return false;
-	}
-
-	// The functions that belong to the instance, such as vkEnumeratePhysicalDevices.
-	GetFunctions().init(vk::Instance(Instance));
-	return true;
-}
-
 bool FRenderContext::SelectPhysicalDevice(std::string& OutError)
 {
 	uint32 DeviceCount = 0;
@@ -225,10 +180,11 @@ bool FRenderContext::SelectPhysicalDevice(std::string& OutError)
 		VkPhysicalDeviceProperties Properties{};
 		GetFunctions().vkGetPhysicalDeviceProperties(Candidate, &Properties);
 
-		if (Properties.apiVersion < RequiredApiVersion)
+		if (Properties.apiVersion < FVulkanInstance::RequiredApiVersion)
 		{
-			Rejections += std::format(
-				" {} supports only Vulkan {}.", Properties.deviceName, FormatVersion(Properties.apiVersion));
+			Rejections += std::format(" {} supports only Vulkan {}.",
+				Properties.deviceName,
+				FVulkanInstance::FormatVersion(Properties.apiVersion));
 			continue;
 		}
 

@@ -390,7 +390,7 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 
 - **NVRHI** (commit `bf0bbd9b666a7297492beb1999a4ddc0dfded143`, the main branch on 2026-11-21; MIT licence), as the specification requires, with only its Vulkan backend and its validation layer built. NVRHI publishes no release tags, so the pin is a commit of its main branch, with the date noted.
 - **Vulkan-Headers** v1.4.352 (commit `015e25c3c91b70eb1a754d36fb14c4ba6ad9b0b9`; Apache-2.0 OR MIT), the version NVRHI asks for. NVRHI would fetch it itself, by tag; the engine declares it first so that it is pinned to a commit like every other dependency.
-- Both are linked privately into the engine DLL. Neither the Vulkan SDK nor a Vulkan library is needed to build: the Vulkan loader (`vulkan-1.dll`), which comes with graphics drivers, is opened at run time, and a machine without it gets an error message, not a failure to start.
+- Both are linked privately into the engine DLL. Neither the Vulkan SDK nor a Vulkan library is needed to build: the Vulkan loader (`vulkan-1.dll`), which comes with graphics drivers, is opened at run time, and a machine without it gets an error message, not a failure to start. (Since D-044 it is opened once for the process and stays open.)
 
 **Decision.**
 
@@ -732,3 +732,31 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 **Limits.** Assets cannot be changed and saved: a material of a glTF file is what the file says, and the editor has no file of its own for a material yet. A file that changes on disk is not loaded again while its assets are in use. Names are compared letter for letter, which a file system that ignores case does not do. Loading happens on the main thread, when the asset is asked for.
 
 **Testing.** Asset paths: every way text can fail to be one. The manager, with files written into a temporary content directory: each kind of file, the keys of a glTF file and of its textures, that a file is loaded once while it is in use and again after it was collected, every reason a load fails, another content directory, and the mapping between asset paths and file-system paths. Scene files: references are saved as paths and loaded as the same shared objects, the text is the same after a round trip, and an asset that is missing, of the wrong class or not a path is a warning. The importer: a file in the content directory gives components assets with paths, a scene with it saves and loads, two imports share, and a file elsewhere behaves as before.
+
+## D-044: Vulkan is loaded once for the process and stays loaded
+
+**Status:** Accepted. Changes how D-026 opens Vulkan.
+
+**Context.** Every render device loaded the Vulkan loader and created a Vulkan instance, and destroyed the instance and unloaded the loader when it was destroyed. Vulkan loads the graphics driver for an instance and unloads it with the instance, so a test run loaded and unloaded the driver once for every test that draws.
+
+The sanitizer build failed now and then with a LeakSanitizer report from `EngineTests`: some hundreds of small allocations, on five runs in two days, one of them of a commit that changed only documentation. When the annotations of CI began to show the stacks of the report, every one was the same: an allocation made in a module that was no longer loaded when the report was written, on a thread that this module had started. The engine starts no threads. This is memory of the driver, Lavapipe in CI, allocated on one of its worker threads.
+
+A leak check finds memory by following pointers from what is loaded. Memory that only a driver's own variables point to cannot be found once the driver has been unloaded, whether the driver has done with it or not, and whether a driver is really gone from the process when it has been told to unload depends on what its threads are doing at that moment. That fits a report that comes and goes.
+
+**Decision.**
+
+- **The loader is loaded and one instance created when a render device first needs them, and both are kept until the process ends** (`FVulkanInstance`). Every render device of the process uses that instance. A render device still creates and destroys its own Vulkan device.
+- **Nothing releases them at the end.** Destroying the instance while the process ends would unload the driver before the leak check runs, which is the situation this decision removes. The operating system takes back what a process holds.
+- **The instance is the same for every render device:** it enables no layers and no extensions. Validation is NVRHI's, which belongs to the device (D-026).
+
+**Consequences.**
+
+- The driver is loaded once in a process instead of once for each render device. One Vulkan instance for an application is also what Vulkan intends. The engine's tests, most of which draw, run in about 25 seconds instead of 40 in a Debug build with MSVC and a graphics card, and in 20 instead of 37 in a Release build.
+- A leak check now sees the driver's memory as memory the driver still holds. Should the driver lose track of memory itself, the report will name the driver's functions, because the driver is still loaded when the report is written.
+- When the editor shows a window, the extensions an instance needs for that have to be enabled for the one instance, whether or not a given render device presents to a window.
+
+**Alternatives considered.** Telling LeakSanitizer to ignore the driver is not possible for a module that is unloaded, which has no name in the report, and would hide a leak of the engine's that happened to be reported with it. Switching leak detection off for the tests that draw gives up the check for the largest part of the engine. Keeping an instance per render device and holding a second one for the process, only to keep the driver loaded, is this decision by a detour.
+
+**Limits.** The report was intermittent, so one run without it shows little. This entry is to be amended with what CI shows over the runs that follow: either that the report has not come back, or the stack it now names.
+
+**Testing.** The render device's tests create and destroy a render device many times in one process, which now exercises a second and later device on an instance that already exists, with NVRHI's validation on; nothing new is observable from outside. The sanitizer job of CI is the test of what this was for.

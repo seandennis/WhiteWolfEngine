@@ -4,7 +4,6 @@
 
 #include "Rendering/RenderDeviceDescription.h"
 #include "Rendering/VulkanApi.h"
-#include "Rendering/VulkanLibrary.h"
 
 #include <nvrhi/nvrhi.h>
 #include <nvrhi/vulkan.h>
@@ -13,9 +12,9 @@
 #include <string>
 
 /**
- * The graphics card and everything needed to use it: the Vulkan instance and device and the NVRHI device built on
- * them. Internal to the Engine module; FRenderDevice and every resource created from it share one context, which
- * is released with the last of them.
+ * The graphics card and everything needed to use it: the Vulkan device and the NVRHI device built on it. Internal
+ * to the Engine module; FRenderDevice and every resource created from it share one context, which is released with
+ * the last of them. The Vulkan instance the device belongs to is the process's (FVulkanInstance) and outlives it.
  *
  * Only one context can exist at a time, because NVRHI reaches Vulkan through one global table of functions that
  * belongs to one Vulkan device.
@@ -71,14 +70,11 @@ private:
 	};
 
 	bool Initialize(const FRenderDeviceDescription& Description, std::string& OutError);
-	bool CreateInstance(std::string& OutError);
 	bool SelectPhysicalDevice(std::string& OutError);
 	bool CreateLogicalDevice(std::string& OutError);
 	bool CreateRenderInterface(const FRenderDeviceDescription& Description, std::string& OutError);
 
-	// Declared first so that it is destroyed last: everything below calls into the library.
-	FVulkanLibrary Library;
-
+	/** The process's instance. Not this context's to destroy. */
 	VkInstance Instance = VK_NULL_HANDLE;
 	VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE;
 	VkDevice LogicalDevice = VK_NULL_HANDLE;

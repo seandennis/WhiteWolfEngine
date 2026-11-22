@@ -74,6 +74,7 @@ New source files are picked up automatically; no CMake edit or reconfigure is ne
 | `Detected memory leaks!` only when a test uses the render device | A `thread_local` object with a destructor exists in the test executable or the engine. Graphics drivers start threads that never exit cleanly, and each gets its own copy that is never destroyed. Remove the `thread_local`; see D-026. |
 | `CodeStyle.ClangFormat` fails | Run `cmake -P Tools/Format.cmake`, review the changes, rebuild. |
 | A sanitizer report under `linux-sanitize` | A real memory, leak or undefined-behaviour bug. Fix it; never suppress it. |
+| A LeakSanitizer report whose stack frames are in `(<unknown module>)` | The memory was allocated by a shared library that had been unloaded by the time the report was written, which hides the library's name and makes its memory look leaked. Do not unload such a library while the process goes on; this is why Vulkan stays loaded (D-044). The annotations of the failed CI job show the first frames of each stack. |
 | `RendererTestSceneTests.cpp` fails with a difference from the reference image | Open `Build/<preset>/TestOutput/RendererTestScene.png` and compare it with `Engine/Tests/Rendering/ReferenceImages/RendererTestScene.png`. Fix the renderer if the new picture is wrong. Only if the change was meant to alter the picture, copy the new one over the reference and commit both together. |
 | Stale or confusing build state | Delete `Build/<configure preset>/` and run the workflow preset again. |
 
