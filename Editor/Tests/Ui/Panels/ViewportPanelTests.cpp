@@ -64,6 +64,23 @@ namespace
 		}
 		return Count;
 	}
+
+	/**
+	 * Returns how many pixels of one row of the viewport's picture are that orange: of the row that is so far from
+	 * the top of the surface. A row through the middle of a thing crosses the line around it on either side, so
+	 * this is some twice the width of the line, whatever size the thing is in the picture.
+	 */
+	int32 CountOrangePixelsInRow(const FEditorUiTest& Test, double FromTop)
+	{
+		const FUiRectangle Picture = Test.RequireItem("Viewport");
+		const FImage Image = Test.ReadPicture();
+		int32 Count = 0;
+		for (int32 X = static_cast<int32>(Picture.Left); X < static_cast<int32>(Picture.Right); ++X)
+		{
+			Count += IsOrange(Image.GetPixel(X, static_cast<int32>(FromTop))) ? 1 : 0;
+		}
+		return Count;
+	}
 }
 
 TEST_SUITE("FViewportPanel")
@@ -630,13 +647,18 @@ TEST_SUITE("FViewportPanel")
 		Test.Editor.SetSelection({Crate, Elsewhere->GetId()});
 		Test.DrawFrame();
 		REQUIRE_FALSE(Test.HasItem("Viewport/Gizmo"));
-		const int32 AtScaleOne = CountOrangePixels(Test, 0.0, 1.0e9);
-		REQUIRE(AtScaleOne > 100);
 
-		// Twice the scale is twice the width, around a box that the larger panels leave about as large.
+		// Along a row through the middle of the crate, the line is crossed on the crate's left and on its right.
+		const int32 AtScaleOne = CountOrangePixelsInRow(Test, FindInViewport(Test, Camera.GetFocusPoint()).y);
+		REQUIRE(AtScaleOne >= 4);
+
+		// Twice the scale is twice the width, whatever the larger panels leave of the picture and so of the crate
+		// in it.
 		Test.Ui->SetScale(2.0f);
 		Test.DrawFrames(3);
 
-		CHECK(CountOrangePixels(Test, 0.0, 1.0e9) > AtScaleOne * 3 / 2);
+		const int32 AtScaleTwo = CountOrangePixelsInRow(Test, FindInViewport(Test, Camera.GetFocusPoint()).y);
+		CHECK(AtScaleTwo >= AtScaleOne * 2 - 2);
+		CHECK(AtScaleTwo <= AtScaleOne * 2 + 4);
 	}
 }

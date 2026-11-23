@@ -63,6 +63,17 @@ namespace
 		return Test.Editor.GetViewportCamera().GetPixelSizeAtFocus(PictureHeight);
 	}
 
+	/**
+	 * Returns a place on the viewport's picture that is well below its middle, where a gizmo in the middle of the
+	 * picture has no handle.
+	 */
+	FVector2D FindPlaceBesideGizmo(const FEditorUiTest& Test)
+	{
+		constexpr double PartOfHeight = 0.35;
+		const FUiRectangle Picture = Test.RequireItem("Viewport");
+		return Picture.GetCenter() + FVector2D(0.0, static_cast<double>(Picture.GetHeight()) * PartOfHeight);
+	}
+
 	/** Returns how long the axes of the gizmo are in the picture, in pixels. */
 	double GetAxisLength(const FEditorUiTest& Test)
 	{
@@ -259,7 +270,7 @@ TEST_SUITE("FViewportGizmo")
 		Release(Test, EMouseButton::Left);
 
 		// With the mouse elsewhere, no handle is.
-		Test.MoveMouse(Test.RequireItem("Viewport").GetCenter() + FVector2D(0.0, 200.0));
+		Test.MoveMouse(FindPlaceBesideGizmo(Test));
 		CHECK(IsRed(ReadMiddle(Test, Handle("X"))));
 		CHECK(CountLoggedProblems(Test.Capture) == 0);
 	}
@@ -686,7 +697,7 @@ TEST_SUITE("FViewportGizmo")
 		Test.Editor.SetViewportCamera(Camera);
 		Test.DrawFrame();
 		Test.SetKeyDown(EKey::LeftAlt, true);
-		PressAt(Test, Test.RequireItem("Viewport").GetCenter() + FVector2D(0.0, 200.0), EMouseButton::Left);
+		PressAt(Test, FindPlaceBesideGizmo(Test), EMouseButton::Left);
 		MoveBy(Test, FVector2D(50.0, 0.0));
 		Release(Test, EMouseButton::Left);
 		Test.SetKeyDown(EKey::LeftAlt, false);

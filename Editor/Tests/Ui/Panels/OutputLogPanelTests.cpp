@@ -1,0 +1,350 @@
+#include "Assets/TestAssets.h"
+#include "Logging/Log.h"
+#include "Logging/MemoryLogSink.h"
+#include "Math/Color.h"
+#include "Rendering/Image.h"
+#include "Ui/TestEditorUi.h"
+
+#include <doctest/doctest.h>
+
+#include <format>
+#include <initializer_list>
+#include <ostream>
+#include <string>
+#include <string_view>
+
+// The Output Log is used here as a person uses it, through FEditorUi. Which messages a filter wants is tested with
+// FLogFilter; these tests are about the panel showing the messages that the editor keeps, and its widgets choosing
+// among them. What a line says cannot be read off the surface, so the tests count the lines and look at their
+// colours.
+
+namespace
+{
+	// A surface high enough for the panel to show more than a dozen lines at once: the lines of the few messages
+	// that most of these tests log are then all in sight, and can be counted.
+	constexpr int32 SurfaceWidth = 1280;
+	constexpr int32 SurfaceHeight = 1400;
+
+	/** Returns the name of the line that shows a message: the first, the second, and so on, of those that are shown. */
+	std::string Line(int32 Index)
+	{
+		return std::format("OutputLog/Line/{}", Index);
+	}
+
+	/** Returns how many lines the panel shows, counted from the first, which has to be in sight. */
+	int32 CountLines(const FEditorUiTest& Test)
+	{
+		int32 Count = 0;
+		while (Test.HasItem(Line(Count)))
+		{
+			++Count;
+		}
+		return Count;
+	}
+
+	/** An editor with its user interface, and a log that holds nothing yet. */
+	struct FLogTest : FEditorUiTest
+	{
+		FLogTest()
+			: FEditorUiTest(SurfaceWidth, SurfaceHeight)
+		{
+			Editor.ClearLog();
+			DrawFrame();
+		}
+	};
+
+	/** Chooses an entry of one of the two lists above the messages. */
+	void Choose(FEditorUiTest& Test, std::string_view List, std::string_view Entry)
+	{
+		Test.Click(std::format("OutputLog/{}", List));
+		Test.Click(std::format("OutputLog/{}/{}", List, Entry));
+	}
+
+	/** Returns how many pixels of an item are of a colour that a test of pixels says. */
+	template <typename PixelTestType>
+	int32 CountPixels(const FEditorUiTest& Test, const std::string& ItemName, PixelTestType IsWanted)
+	{
+		const FUiRectangle Rectangle = Test.RequireItem(ItemName);
+		const FImage Picture = Test.ReadPicture();
+		int32 Count = 0;
+		for (int32 Y = static_cast<int32>(Rectangle.Top); Y < static_cast<int32>(Rectangle.Bottom); ++Y)
+		{
+			for (int32 X = static_cast<int32>(Rectangle.Left); X < static_cast<int32>(Rectangle.Right); ++X)
+			{
+				Count += IsWanted(Picture.GetPixel(X, Y)) ? 1 : 0;
+			}
+		}
+		return Count;
+	}
+
+	// The colours that errors and warnings are written in: a red, and a yellow.
+
+	bool IsRed(FColor Pixel)
+	{
+		return Pixel.R > 200 && Pixel.G < 130 && Pixel.B < 130;
+	}
+
+	bool IsYellow(FColor Pixel)
+	{
+		return Pixel.R > 200 && Pixel.G > 160 && Pixel.B < 110;
+	}
+}
+
+TEST_SUITE("FOutputLogPanel")
+{
+	TEST_CASE("The Output Log is below the viewport, with what chooses among its messages above them")
+	{
+		FLogTest Test;
+		const FUiRectangle Viewport = Test.RequireItem("Viewport");
+
+		for (const char* const Name : {"Verbosity", "Category", "Search", "Clear"})
+		{
+			CAPTURE(Name);
+			const FUiRectangle Item = Test.RequireItem(std::format("OutputLog/{}", Name));
+			CHECK(Item.Top > Viewport.Bottom);
+			CHECK(Item.Right <= Viewport.Right);
+		}
+		CHECK(CountLines(Test) == 0);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("Every message that is logged is a line, the newest last")
+	{
+		FLogTest Test;
+
+		WW_LOG(LogEditor, Log, "The first thing");
+		Test.DrawFrame();
+		CHECK(CountLines(Test) == 1);
+
+		WW_LOG(LogCore, Display, "The second thing");
+		WW_LOG(LogEditor, Log, "The third thing");
+		Test.DrawFrame();
+
+		REQUIRE(CountLines(Test) == 3);
+		const FUiRectangle First = Test.RequireItem(Line(0));
+		const FUiRectangle Second = Test.RequireItem(Line(1));
+		const FUiRectangle Third = Test.RequireItem(Line(2));
+		CHECK(Second.Top >= First.Bottom);
+		CHECK(Third.Top >= Second.Bottom);
+		// Below what chooses among them.
+		CHECK(First.Top >= Test.RequireItem("OutputLog/Search").Bottom);
+	}
+
+	TEST_CASE("A message of several lines is shown on one")
+	{
+		FLogTest Test;
+		WW_LOG(LogEditor, Log, "One line");
+		WW_LOG(LogEditor, Log, "Three\nlines\r\nof text");
+		WW_LOG(LogEditor, Log, "One line again");
+		Test.DrawFrame();
+
+		REQUIRE(CountLines(Test) == 3);
+		CHECK(Test.RequireItem(Line(1)).GetHeight() == Test.RequireItem(Line(0)).GetHeight());
+		// What follows it follows as closely as it follows what was before it.
+		CHECK(Test.RequireItem(Line(2)).Top - Test.RequireItem(Line(1)).Top ==
+			doctest::Approx(Test.RequireItem(Line(1)).Top - Test.RequireItem(Line(0)).Top));
+	}
+
+	TEST_CASE("Why a command failed is a line of the log")
+	{
+		FLogTest Test;
+		REQUIRE(Test.Editor.ExecuteCommand("Entity.Create", ParseTestJson(R"({"Name": "Player"})")).HasSucceeded());
+		Test.DrawFrame();
+		CHECK(CountLines(Test) == 0);
+
+		REQUIRE_FALSE(Test.Editor.ExecuteCommand("Entity.Delete", ParseTestJson(R"({"Entity": 99})")).HasSucceeded());
+		Test.DrawFrame();
+
+		CHECK(CountLines(Test) == 1);
+	}
+
+	TEST_CASE("Warnings are yellow and errors red, and other messages neither")
+	{
+		FLogTest Test;
+		WW_LOG(LogEditor, Log, "Something happened");
+		WW_LOG(LogEditor, Warning, "Something is odd");
+		WW_LOG(LogEditor, Error, "Something failed");
+		Test.DrawFrame();
+		REQUIRE(CountLines(Test) == 3);
+
+		CHECK(CountPixels(Test, Line(0), IsRed) == 0);
+		CHECK(CountPixels(Test, Line(0), IsYellow) == 0);
+		CHECK(CountPixels(Test, Line(1), IsYellow) > 20);
+		CHECK(CountPixels(Test, Line(1), IsRed) == 0);
+		CHECK(CountPixels(Test, Line(2), IsRed) > 20);
+		CHECK(CountPixels(Test, Line(2), IsYellow) == 0);
+	}
+
+	TEST_CASE("The first list chooses how important a message has to be")
+	{
+		FLogTest Test;
+		WW_LOG(LogEditor, Log, "Something happened");
+		WW_LOG(LogEditor, Display, "Something to see");
+		WW_LOG(LogEditor, Warning, "Something is odd");
+		WW_LOG(LogEditor, Error, "Something failed");
+		Test.DrawFrame();
+		REQUIRE(CountLines(Test) == 4);
+
+		Choose(Test, "Verbosity", "Warnings and errors");
+		REQUIRE(CountLines(Test) == 2);
+		CHECK(CountPixels(Test, Line(0), IsYellow) > 20);
+		CHECK(CountPixels(Test, Line(1), IsRed) > 20);
+
+		Choose(Test, "Verbosity", "Errors");
+		REQUIRE(CountLines(Test) == 1);
+		CHECK(CountPixels(Test, Line(0), IsRed) > 20);
+
+		// What is logged while the list is set so is chosen among in the same way.
+		WW_LOG(LogEditor, Warning, "Something else is odd");
+		WW_LOG(LogEditor, Error, "Something else failed");
+		Test.DrawFrame();
+		CHECK(CountLines(Test) == 2);
+
+		Choose(Test, "Verbosity", "All messages");
+		CHECK(CountLines(Test) == 6);
+	}
+
+	TEST_CASE("The second list offers the categories that have messages, and chooses one of them")
+	{
+		FLogTest Test;
+		CHECK_FALSE(Test.HasItem("OutputLog/Category/LogCore"));
+		WW_LOG(LogEditor, Log, "From the editor");
+		WW_LOG(LogCore, Log, "From the engine");
+		WW_LOG(LogEditor, Log, "From the editor again");
+		Test.DrawFrames(2);
+
+		Test.Click("OutputLog/Category");
+		REQUIRE(Test.HasItem("OutputLog/Category/All categories"));
+		REQUIRE(Test.HasItem("OutputLog/Category/LogCore"));
+		REQUIRE(Test.HasItem("OutputLog/Category/LogEditor"));
+		// In the order of the alphabet, below the entry for all of them.
+		CHECK(Test.RequireItem("OutputLog/Category/LogCore").Top >
+			Test.RequireItem("OutputLog/Category/All categories").Top);
+		CHECK(
+			Test.RequireItem("OutputLog/Category/LogEditor").Top > Test.RequireItem("OutputLog/Category/LogCore").Top);
+		Test.Click("OutputLog/Category/LogEditor");
+		CHECK(CountLines(Test) == 2);
+
+		Choose(Test, "Category", "LogCore");
+		CHECK(CountLines(Test) == 1);
+
+		Choose(Test, "Category", "All categories");
+		CHECK(CountLines(Test) == 3);
+	}
+
+	TEST_CASE("The field shows the messages that have what is typed into it")
+	{
+		FLogTest Test;
+		WW_LOG(LogEditor, Log, "The Crate was moved");
+		WW_LOG(LogCore, Log, "A file was read");
+		WW_LOG(LogCore, Warning, "The crate has no mesh");
+		Test.DrawFrame();
+		REQUIRE(CountLines(Test) == 3);
+
+		Test.Click("OutputLog/Search");
+		Test.Type("crate");
+		CHECK(CountLines(Test) == 2);
+
+		// With the lists, it narrows what is shown further.
+		Choose(Test, "Verbosity", "Warnings and errors");
+		CHECK(CountLines(Test) == 1);
+
+		// The name of a category is looked through as the text is.
+		Choose(Test, "Verbosity", "All messages");
+		Test.Click("OutputLog/Search");
+		Test.PressKey(EKey::A, {EKey::LeftControl});
+		Test.Type("logcore");
+		CHECK(CountLines(Test) == 2);
+
+		Test.PressKey(EKey::A, {EKey::LeftControl});
+		Test.Type("nothing says this");
+		CHECK(CountLines(Test) == 0);
+	}
+
+	TEST_CASE("Clear forgets the messages, and what is logged afterwards is shown")
+	{
+		FLogTest Test;
+		WW_LOG(LogEditor, Log, "Before");
+		WW_LOG(LogEditor, Warning, "Also before");
+		Test.DrawFrame();
+		REQUIRE(CountLines(Test) == 2);
+
+		Test.Click("OutputLog/Clear");
+
+		CHECK(CountLines(Test) == 0);
+		CHECK(Test.Editor.GetLog().GetMessages().empty());
+
+		WW_LOG(LogEditor, Log, "After");
+		Test.DrawFrame();
+		CHECK(CountLines(Test) == 1);
+	}
+
+	TEST_CASE("Of many messages the newest are in sight, and go on being so as more are logged")
+	{
+		FLogTest Test;
+		for (int32 Index = 0; Index < 200; ++Index)
+		{
+			WW_LOG(LogEditor, Log, "Message {}", Index);
+		}
+		Test.DrawFrames(3);
+
+		CHECK(Test.HasItem(Line(199)));
+		CHECK_FALSE(Test.HasItem(Line(0)));
+		// The last of them is on the surface, above its bottom edge.
+		CHECK(Test.RequireItem(Line(199)).Bottom <= static_cast<float>(SurfaceHeight));
+
+		for (int32 Index = 200; Index < 260; ++Index)
+		{
+			WW_LOG(LogEditor, Log, "Message {}", Index);
+		}
+		Test.DrawFrames(3);
+
+		CHECK(Test.HasItem(Line(259)));
+		CHECK_FALSE(Test.HasItem(Line(199)));
+	}
+
+	TEST_CASE("The wheel goes back through the messages, and the place that was gone to is kept")
+	{
+		FLogTest Test;
+		for (int32 Index = 0; Index < 200; ++Index)
+		{
+			WW_LOG(LogEditor, Log, "Message {}", Index);
+		}
+		Test.DrawFrames(3);
+		REQUIRE(Test.HasItem(Line(199)));
+
+		Test.MoveMouse(Test.RequireItem(Line(197)).GetCenter());
+		Test.Input.HandleScroll(FVector2D(0.0, 5.0));
+		Test.DrawFrames(3);
+		CHECK_FALSE(Test.HasItem(Line(199)));
+
+		// Whoever reads older messages is not taken away from them by new ones.
+		WW_LOG(LogEditor, Log, "One more");
+		Test.DrawFrames(3);
+		CHECK_FALSE(Test.HasItem(Line(200)));
+		CHECK_FALSE(Test.HasItem(Line(199)));
+	}
+
+	TEST_CASE("Output Log in the Window menu closes the panel and opens it again, with what was logged meanwhile")
+	{
+		FLogTest Test;
+		WW_LOG(LogEditor, Log, "While it was open");
+		Test.DrawFrame();
+		REQUIRE(CountLines(Test) == 1);
+		const float ViewportBottom = Test.RequireItem("Viewport").Bottom;
+
+		Test.Click("Menu/Window");
+		Test.Click("Menu/Window/Output Log");
+		CHECK_FALSE(Test.HasItem("OutputLog/Search"));
+		CHECK(CountLines(Test) == 0);
+		// The viewport has the room that the panel had.
+		CHECK(Test.RequireItem("Viewport").Bottom > ViewportBottom + 50.0f);
+
+		WW_LOG(LogEditor, Log, "While it was closed");
+		Test.Click("Menu/Window");
+		Test.Click("Menu/Window/Output Log");
+
+		CHECK(Test.HasItem("OutputLog/Search"));
+		CHECK(CountLines(Test) == 2);
+	}
+}

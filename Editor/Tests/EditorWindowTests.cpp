@@ -137,9 +137,19 @@ TEST_SUITE("FEditorWindow")
 		REQUIRE(Test.Window->GetPicture() != nullptr);
 		CHECK(Test.Window->GetPicture()->GetWidth() == 1024);
 		CHECK(Test.Window->GetPicture()->GetHeight() == 500);
+		// The panels are laid out for the new size: the outliner reaches its right edge, and the log, which is
+		// below the viewport, its bottom.
 		const std::optional<FUiRectangle> Viewport = Test.Window->GetUi().FindItem("Viewport");
+		const std::optional<FUiRectangle> Outliner = Test.Window->GetUi().FindItem("Outliner/Search");
+		const std::optional<FUiRectangle> Log = Test.Window->GetUi().FindItem("OutputLog/Search");
 		REQUIRE(Viewport.has_value());
-		CHECK(Viewport->Bottom > 490.0f);
+		REQUIRE(Outliner.has_value());
+		REQUIRE(Log.has_value());
+		CHECK(Outliner->Right > 1000.0f);
+		CHECK(Outliner->Right <= 1024.0f);
+		CHECK(Viewport->Bottom > 300.0f);
+		CHECK(Log->Top > Viewport->Bottom);
+		CHECK(Log->Bottom <= 500.0f);
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 

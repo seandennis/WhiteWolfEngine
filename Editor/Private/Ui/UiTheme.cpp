@@ -44,6 +44,9 @@ namespace
 	/** What says that something went wrong: a red that can be read on the grey of a panel. */
 	constexpr FColor ErrorColor(236, 96, 88);
 
+	/** What says that something is not as it should be: a yellow, as warnings are everywhere. */
+	constexpr FColor WarningColor(228, 188, 72);
+
 	/** The line around what is selected in the viewport, and how wide it is at a scale of one, in pixels. */
 	constexpr FColor SelectionOutlineColor(240, 144, 16);
 	constexpr float SelectionOutlineWidth = 2.0f;
@@ -178,6 +181,11 @@ FColor FUiTheme::GetPartColor(int32 PartIndex)
 FColor FUiTheme::GetErrorColor()
 {
 	return ErrorColor;
+}
+
+FColor FUiTheme::GetWarningColor()
+{
+	return WarningColor;
 }
 
 FLinearColor FUiTheme::GetSelectionOutlineColor()

@@ -1368,3 +1368,24 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** What was logged before the editor was made is not kept, and of more than 4096 messages the oldest are gone. Messages of the kinds that a category does not let through, which are the details of debugging unless a category is set otherwise, were never logged at all.
 
 **Testing.** `FMemoryLogSink`: that its revision is another number after a message, after one that pushes the oldest out, and after it is emptied, and the same after it is read. `FLogFilter`: a new one, every kind of message against each least importance, a category written exactly and nearly, a text in the message and in the name of the category in any case, all three at once, and equality. `FEditor`: what is logged before and while it exists, by the editor and the engine; what a category does not let through; emptying; two editors at once, and one that is gone; a command that fails and one that does not. The commands: messages in their order with all their fields and a time of the right form; an empty log; each least importance; a category, a text, and both with an importance; fewer messages than were asked for, more, and the hundred that are returned unasked; a kind of message that there is not, in two spellings, and counts of none and less; arguments of the wrong type and one that there is not; the reason of a failed command; clearing; and that the history is as it was.
+
+## D-074: The Output Log is a panel below the viewport
+
+**Status:** Accepted.
+
+**Context.** Since D-073 the editor keeps what is logged. The user had still nowhere to read it.
+
+**Decision.**
+
+- **`FOutputLogPanel` shows the messages that the editor keeps,** one to a line, as its category and its text, the newest last. A message that was logged as several lines is shown on one. Warnings are yellow and errors red.
+- **It is below the viewport in the default layout,** where it has the last quarter of the height, and where the specification has it beside the content browser.
+- **Above the messages is what chooses among them** (`FLogFilter`): a list of how important a message has to be (all, warnings and errors, or errors), a list of the categories that the log has messages of, and a field for a text. A button forgets the messages.
+- **The newest message stays in sight** while the user has not gone back to older ones, and whoever has is left there when more are logged.
+- **Only the lines in sight are laid out,** and the messages are copied out of the log only when the log has changed or another choice was made. A log of thousands of messages costs a frame nothing while nothing is logged.
+- **Lines have no times.** The time is in what `Log.Read` returns; in the window it would be the time of Greenwich, or the engine would have to know the time zone of the user.
+
+**Alternatives considered.** A bar of the newest warning at the bottom of the window says that something went wrong and not what came before it; the status bar that the specification asks for can be that, beside this panel. Selecting lines and copying them needs the clipboard, which the user interface has no access to yet. Wrapping long messages into several lines makes the height of a line depend on the width of the panel, and laying out only the lines in sight depends on all lines being as high.
+
+**Limits.** A message that is longer than the panel is wide is read by scrolling sideways. Nothing can be copied out of the panel. The lists and the field are as they were when the editor starts again.
+
+**Testing.** In the user interface, with the log emptied first: where the panel and its widgets are; one message and three, in their order; a message of several lines; a command that fails and one that does not; the colours of an ordinary message, a warning and an error; each choice of the first list, also for what is logged after it was made; the categories on offer, in their order, and each chosen; a text, with the first list, in the name of a category, and one that nothing has; the button that forgets; two hundred messages, of which the last are in sight, and sixty more; the wheel, after which new messages do not take the user to the end; and the panel closed and opened from the Window menu, with what was logged in between. The reference image of the default layout has the panel. Three tests that took the viewport to reach the bottom of the window look at the panel below it instead. The test that measures the line around what is selected measures it along a row now, whatever the size of the picture, and two tests of the gizmo that put the mouse two hundred pixels below the middle of the picture put it a part of the picture's height below.

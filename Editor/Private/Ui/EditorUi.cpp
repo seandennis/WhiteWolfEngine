@@ -12,6 +12,7 @@
 #include "Ui/MainToolbar.h"
 #include "Ui/Panels/DetailsPanel.h"
 #include "Ui/Panels/OutlinerPanel.h"
+#include "Ui/Panels/OutputLogPanel.h"
 #include "Ui/Panels/ViewportPanel.h"
 #include "Ui/UiDrawData.h"
 #include "Ui/UiFrame.h"
@@ -33,6 +34,9 @@ namespace
 
 	/** The part of that column's height that the Details panel has, below the outliner. */
 	constexpr float DetailsFraction = 0.6f;
+
+	/** The part of the height left of that column that the panels below the viewport have. */
+	constexpr float BottomFraction = 0.25f;
 
 	/** The least width and height that a layout of panels is built for, in pixels. */
 	constexpr float MinLayoutSize = 1.0f;
@@ -81,9 +85,13 @@ struct FEditorUi::FImplementation
 		ImGuiID OutlinerId = RightId;
 		const ImGuiID DetailsId =
 			ImGui::DockBuilderSplitNode(OutlinerId, ImGuiDir_Down, DetailsFraction, nullptr, &OutlinerId);
+		// Below the viewport is what is read while working in it: for now, the log.
+		const ImGuiID BottomId =
+			ImGui::DockBuilderSplitNode(MiddleId, ImGuiDir_Down, BottomFraction, nullptr, &MiddleId);
 		ImGui::DockBuilderDockWindow(FViewportPanel::Title, MiddleId);
 		ImGui::DockBuilderDockWindow(FOutlinerPanel::Title, OutlinerId);
 		ImGui::DockBuilderDockWindow(FDetailsPanel::Title, DetailsId);
+		ImGui::DockBuilderDockWindow(FOutputLogPanel::Title, BottomId);
 		ImGui::DockBuilderFinish(DockSpaceId);
 	}
 
@@ -121,6 +129,7 @@ struct FEditorUi::FImplementation
 		Details.Draw(Frame);
 		const bool bViewportSucceeded = Viewport.Draw(Frame, Device, OutError);
 		Outliner.Draw(Frame);
+		OutputLog.Draw(Frame);
 		return bViewportSucceeded;
 	}
 
@@ -146,6 +155,7 @@ struct FEditorUi::FImplementation
 	FViewportPanel Viewport;
 	FOutlinerPanel Outliner;
 	FDetailsPanel Details;
+	FOutputLogPanel OutputLog;
 
 	/** The triangles of the frame being drawn. Kept between frames so that its memory is used again. */
 	FUiDrawList DrawList;

@@ -8,6 +8,7 @@ struct FUiWorkspace
 	bool bShowViewport = true;
 	bool bShowOutliner = true;
 	bool bShowDetails = true;
+	bool bShowOutputLog = true;
 
 	/**
 	 * True when the panels are to be put where they are in the default layout, as they are when the editor starts

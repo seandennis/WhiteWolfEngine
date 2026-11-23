@@ -201,10 +201,13 @@ TEST_SUITE("FEditorUi")
 		CHECK(MenuAfter.GetHeight() == doctest::Approx(2.0f * MenuBefore.GetHeight()).epsilon(0.1));
 		CHECK(MenuAfter.GetWidth() == doctest::Approx(2.0f * MenuBefore.GetWidth()).epsilon(0.1));
 
-		// The panels are where they were: the outliner to the right of the viewport, which reaches the bottom.
+		// The panels are where they were: the outliner to the right of the viewport, and the log below it, on
+		// the surface still.
 		const FUiRectangle Viewport = Test.RequireItem("Viewport");
+		const FUiRectangle Log = Test.RequireItem("OutputLog/Search");
 		CHECK(Viewport.Right < SearchAfter.Left);
-		CHECK(Viewport.Bottom >= static_cast<float>(FEditorUiTest::DefaultHeight) - 2.0f);
+		CHECK(Log.Top > Viewport.Bottom);
+		CHECK(Log.Bottom <= static_cast<float>(FEditorUiTest::DefaultHeight));
 		CHECK(SearchAfter.Right <= static_cast<float>(FEditorUiTest::DefaultWidth));
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
@@ -291,15 +294,18 @@ TEST_SUITE("FEditorUi")
 
 		const FUiRectangle Viewport = Test.RequireItem("Viewport");
 
-		// To the left of the outliner, below the menu bar, the toolbar and the row of tabs, down to the bottom of
-		// the surface.
+		// To the left of the outliner, below the menu bar, the toolbar and the row of tabs, down to the panel
+		// that is below it, which has the last quarter of the height.
 		const float ToolbarBottom = Test.RequireItem("Toolbar/Add").Bottom;
+		const FUiRectangle Log = Test.RequireItem("OutputLog/Search");
 		CHECK(Viewport.Left <= 2.0f);
 		CHECK(Viewport.Top > ToolbarBottom);
 		CHECK(Viewport.Top < ToolbarBottom + 45.0f);
 		CHECK(Viewport.Right > 900.0f);
 		CHECK(Viewport.Right < Test.RequireItem("Outliner/Search").Left);
-		CHECK(Viewport.Bottom >= static_cast<float>(FEditorUiTest::DefaultHeight) - 2.0f);
+		CHECK(Viewport.Bottom > static_cast<float>(FEditorUiTest::DefaultHeight) * 0.7f);
+		CHECK(Viewport.Bottom < Log.Top);
+		CHECK(Log.Top < Viewport.Bottom + 60.0f);
 	}
 
 	TEST_CASE("The outliner lists the entities of the scene, the children of an entity below it")

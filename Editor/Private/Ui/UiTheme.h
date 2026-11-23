@@ -35,6 +35,9 @@ public:
 	/** Returns the colour of text that says that something went wrong. */
 	static FColor GetErrorColor();
 
+	/** Returns the colour of text that says that something is not as it should be, and was dealt with. */
+	static FColor GetWarningColor();
+
 	/**
 	 * Returns the colour of the line that the viewport draws around what is selected: an orange, which stands out
 	 * from most of what a scene shows. As an amount of light, which is how the renderer takes colours.
