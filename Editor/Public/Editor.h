@@ -9,6 +9,7 @@
 #include "Project/Project.h"
 #include "Rendering/SceneViewMode.h"
 #include "Settings/EditorSettings.h"
+#include "Viewport/GizmoSettings.h"
 #include "Viewport/ViewportCamera.h"
 
 #include <filesystem>
@@ -32,9 +33,10 @@ extern EDITOR_API FLogCategory LogEditor;
  *
  * An editor always has a scene: an empty one called "Untitled" to begin with. The editor keeps its scene alive.
  * It may have a project (FProject), which is where the assets that scenes refer to are. It knows which entities
- * of the scene are selected, the ones that the user is working on, and from where the scene is looked at: the
- * camera of the viewport, which is the user's eye and not something in the scene. And it remembers which projects
- * were opened last (FEditorSettings), from one run to the next if it is given a file to keep that in.
+ * of the scene are selected, the ones that the user is working on. It knows from where the scene is looked at:
+ * the camera of the viewport, which is the user's eye and not something in the scene. It knows how the gizmo is
+ * set that things are moved with in the viewport. And it remembers which projects were opened last
+ * (FEditorSettings), from one run to the next if it is given a file to keep that in.
  *
  * Every change to the scene can be undone. After each command that can change the scene (ECommandEffect), the
  * editor writes the scene down, and if it differs from what it was, that is a step of the history; Undo and Redo
@@ -197,6 +199,20 @@ public:
 		ViewMode = NewViewMode;
 	}
 
+	/** Returns how the gizmo of the viewport is set: what dragging it does, along which axes, and in what steps. */
+	const FGizmoSettings& GetGizmoSettings() const
+	{
+		return GizmoSettings;
+	}
+
+	/**
+	 * Sets the gizmo of the viewport. Like the camera, this is how the user works and not part of the scene: it is
+	 * not a step of the history, and it stays as it is when another scene is opened.
+	 *
+	 * @param NewSettings Valid settings (FGizmoSettings::IsValid). Anything else is a fatal error.
+	 */
+	EDITOR_API void SetGizmoSettings(const FGizmoSettings& NewSettings);
+
 	/** Returns the project being worked on, or null while none is open. */
 	const FProject* GetProject() const
 	{
@@ -294,6 +310,8 @@ private:
 	FViewportCamera ViewportCamera;
 
 	ESceneViewMode ViewMode = ESceneViewMode::Lit;
+
+	FGizmoSettings GizmoSettings;
 
 	std::optional<FProject> Project;
 

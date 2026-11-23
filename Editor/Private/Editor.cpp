@@ -223,6 +223,12 @@ void FEditor::SetViewportCamera(const FViewportCamera& NewCamera)
 	ViewportCamera = NewCamera;
 }
 
+void FEditor::SetGizmoSettings(const FGizmoSettings& NewSettings)
+{
+	WW_CHECKF(NewSettings.IsValid(), "The gizmo of the viewport was given a step that is no number or out of range");
+	GizmoSettings = NewSettings;
+}
+
 std::filesystem::path FEditor::ResolveFilePath(const std::filesystem::path& Path) const
 {
 	if (Project.has_value() && !Path.empty() && Path.is_relative())
