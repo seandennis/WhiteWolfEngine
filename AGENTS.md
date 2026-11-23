@@ -59,6 +59,8 @@ Development cross-checks on Linux use the same pattern with these presets:
 
 Build output goes to `Build/<configure preset>/`. Executables and DLLs are in `Build/<configure preset>/Binaries/<Config>/`. Nothing under `Build/` is committed.
 
+The editor is `Build\windows\Binaries\Debug\WhiteWolfEditor.exe` (or `Release`). Started without an option it opens its window. `WhiteWolfEditor --screenshot Editor.png` draws the same window without opening one, on a machine with or without a display, and saves the picture: use it to look at what the editor shows.
+
 CMake options:
 
 | Option | Default | Meaning |
@@ -176,6 +178,8 @@ Editor/                   The editor module (WhiteWolfEditorCore.dll): everythin
     Ui/                   EditorUi.h (FEditorUi: the user interface, laid out for a surface and drawn onto it),
                           UiRectangle.h (FUiRectangle)
     Agent/                AgentServer.h (FAgentServer: the commands as tools of a Model Context Protocol server)
+    EditorWindow.h        FEditorWindow: the editor's main window, with the user interface drawn into it every frame;
+                          EditorWindowDescription.h
     EditorApplication.h   FEditorApplication: what the executable does, given a command line and streams
   Private/
     Commands/             The editor's own commands, one class per area (FSceneCommands, FEntityCommands,
@@ -405,6 +409,7 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 ## The editor's user interface
 
 - **`FEditorUi` is the user interface, and it does not know about windows.** `Ui->Draw(Target, Input, DeltaSeconds, Error)` takes in a frame of input from an `FInputState`, lays the menus and panels out for the size of a render target and draws them onto it (D-049). The executable gives it what a window shows; a test gives it a render target and input that the test makes up.
+- **`FEditorWindow` is the editor's main window:** an `FWindow`, the render device, an `FSwapChain` and the `FEditorUi`, with `RunFrame(DeltaSeconds, Error)` drawing the user interface at the window's size and showing it (D-051). It works the same in the platform layer's headless mode, where the window exists in memory only and `GetPicture()` is what would be shown; that is how `Tests/EditorWindowTests.cpp` runs it. The executable's loop is `FPlatform::PollEvents()`, `Window->RunFrame(...)`, `FGarbageCollector::Tick(...)` until the window is closed (`FEditorApplication`). A window on the desktop cannot be opened in the test run: after changing how the editor starts or shows itself, start it by hand as well.
 - **It is laid out with Dear ImGui and drawn by the engine.** No Dear ImGui type or header appears outside `Editor/Private/Ui/`. Include `Ui/ImGuiLibrary.h` there, never `<imgui.h>`. The library has no access to the graphics card, a window, files or the clipboard: `FUiInput` gives it input, `FUiTextures` keeps its textures as `WTexture` objects, and `FUiDrawData` turns what it laid out into an `FUiDrawList` for `FUiRenderer`. A failed assertion of the library is a fatal error in every build configuration, like a failed `WW_CHECK`.
 - **A widget changes the scene by giving a command, and in no other way.** The functions of `FUiCommands` build the arguments and call `FEditor::ExecuteCommand`; add one for each command a widget needs. The editor logs a command that fails, so a widget does not have to report it. Reading is direct: a panel looks at `Frame.Editor.GetScene()` in every frame and keeps no copy of it, which is why undo, redo and an agent's commands show up without anything telling the panel. Moving the viewport's camera is not a change to the scene and is set on the editor directly (D-048).
 - **Do not change the scene while going through it.** A command that destroys or moves entities changes the lists a panel is in the middle of. Note what was asked for and give the command once the rows are laid out, as `FOutlinerPanel` does with a click.

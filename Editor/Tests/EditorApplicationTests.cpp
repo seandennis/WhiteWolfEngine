@@ -2,6 +2,11 @@
 
 #include "Core/FileHelper.h"
 #include "Editor.h"
+#include "EditorWindowDescription.h"
+#include "Math/Color.h"
+#include "Platform/Platform.h"
+#include "Rendering/Image.h"
+#include "Rendering/ImageFile.h"
 #include "TestEditorObjects.h"
 #include "TestSupport/ScopedTempDirectory.h"
 
@@ -95,18 +100,56 @@ TEST_SUITE("FEditorApplication")
 
 		CHECK(Run.ExitCode == 0);
 		CHECK(Run.Output.str().find("--mcp") != std::string::npos);
+		CHECK(Run.Output.str().find("--screenshot") != std::string::npos);
 		CHECK(Run.Output.str().find("--help") != std::string::npos);
 		CHECK(Run.ErrorOutput.str().empty());
 	}
 
-	TEST_CASE("Without an option the editor says that it has no windows yet, as an error")
+	TEST_CASE("--screenshot draws the editor without a window and saves the picture")
 	{
-		const FEditorApplicationRun Run({}, "");
+		const FScopedTempDirectory Directory;
+		const std::filesystem::path Path = Directory.GetPath() / "Editor.png";
 
-		CHECK(Run.ExitCode == 2);
+		const FEditorApplicationRun Run({"--screenshot", FFileHelper::PathToUtf8(Path)}, "");
+
+		INFO("Errors: ", Run.ErrorOutput.str());
+		CHECK(Run.ExitCode == 0);
 		CHECK(Run.Output.str().empty());
-		CHECK(Run.ErrorOutput.str().starts_with("The editor's windows are not built yet"));
-		CHECK(Run.ErrorOutput.str().find("--mcp") != std::string::npos);
+		CHECK(Run.ErrorOutput.str().empty());
+
+		// The picture has the size the editor's window opens with, and is a picture of something.
+		FImage Picture;
+		std::string Error;
+		REQUIRE(FImageFile::Load(Path, Picture, Error));
+		CHECK(Picture.GetWidth() == FEditorWindowDescription().Width);
+		CHECK(Picture.GetHeight() == FEditorWindowDescription().Height);
+		const std::vector<FColor>& Pixels = Picture.GetPixels();
+		std::vector<FColor> DistinctColors;
+		for (const FColor& Pixel : Pixels)
+		{
+			if (DistinctColors.size() < 8 && std::ranges::find(DistinctColors, Pixel) == DistinctColors.end())
+			{
+				DistinctColors.push_back(Pixel);
+			}
+		}
+		CHECK(DistinctColors.size() == 8);
+
+		// The platform layer was shut down again.
+		CHECK_FALSE(FPlatform::IsInitialized());
+	}
+
+	TEST_CASE("--screenshot says why when the picture cannot be saved")
+	{
+		const FScopedTempDirectory Directory;
+		// A directory is where the file should be.
+		const std::filesystem::path Path = Directory.GetPath();
+
+		const FEditorApplicationRun Run({"--screenshot", FFileHelper::PathToUtf8(Path)}, "");
+
+		CHECK(Run.ExitCode == 1);
+		CHECK(Run.Output.str().empty());
+		CHECK(Run.ErrorOutput.str().starts_with("The picture of the editor was not saved: "));
+		CHECK_FALSE(FPlatform::IsInitialized());
 	}
 
 	TEST_CASE("A command line the editor does not understand is an error, and nothing is served")
@@ -124,6 +167,14 @@ TEST_SUITE("FEditorApplication")
 		SUBCASE("An option in other letters")
 		{
 			Arguments = {"--MCP"};
+		}
+		SUBCASE("A screenshot without a file to save it in")
+		{
+			Arguments = {"--screenshot"};
+		}
+		SUBCASE("A screenshot with two files")
+		{
+			Arguments = {"--screenshot", "One.png", "Two.png"};
 		}
 
 		const FEditorApplicationRun Run(Arguments, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n");

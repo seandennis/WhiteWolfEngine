@@ -14,7 +14,7 @@ The engine is built in the milestones defined by the specification. Each one mus
 | 2 | Core: logging, math, window, input, reflection, `WObject` garbage collection, ECS, scene serialization | Complete |
 | 3 | Renderer: Vulkan via NVRHI, camera-relative rendering, reversed-Z, glTF, PBR, HDR, screenshot tests | Complete |
 | 4 | Renderer: image-based lighting, soft shadows, SSAO | Complete |
-| 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | In progress. Done: the `Editor` module with the command system (named commands with typed arguments and structured results) and the commands for scenes, entities, components and reflected properties; undo and redo of every change to the scene; the agent interface, a Model Context Protocol server in the editor's executable; assets that scenes refer to by path, so that a scene with imported models can be saved; a game project with a content directory, and commands that import assets into it and place models in the scene; the selection of entities, and the camera and view mode of the viewport; the editor's user interface, drawn without a window so far, with a menu bar, the viewport and the outliner in a layout of dockable panels. Still to do: a window to show it in, the other panels (details, content browser, output log), the toolbar and status bar, navigation in the viewport and the gizmo, and the commands for play mode, screenshots and the log |
+| 5 | Editor: viewport, hierarchy, property panels, gizmo, command system, agent interface | In progress. Done: the `Editor` module with the command system (named commands with typed arguments and structured results) and the commands for scenes, entities, components and reflected properties; undo and redo of every change to the scene; the agent interface, a Model Context Protocol server in the editor's executable; assets that scenes refer to by path, so that a scene with imported models can be saved; a game project with a content directory, and commands that import assets into it and place models in the scene; the selection of entities, and the camera and view mode of the viewport; the editor's window, with a menu bar, the viewport and the outliner in a layout of dockable panels. Still to do: the other panels (details, content browser, output log), the toolbar and status bar, navigation in the viewport and the gizmo, and the commands for play mode, screenshots and the log |
 | 6 | Plugin system, ChronoPhysics plugin, audio components | Not started |
 | 7 | C++ scripting module with hot reload, prefabs, full test scene | Not started |
 | 8 | Game export, and the Tetris acceptance test through the agent interface | Not started |
@@ -42,6 +42,18 @@ cmake --workflow --preset windows-debug
 That one command configures the project, builds it and runs every test. Use `windows-release` for an optimised build.
 
 To work in Visual Studio, open the solution in `Build/windows/` after the first configure: `WhiteWolfEngine.slnx` with Visual Studio 2026, `WhiteWolfEngine.sln` with Visual Studio 2022. Everything else (individual steps, running single tests, the Linux cross-check presets) is described in [`AGENTS.md`](AGENTS.md).
+
+## Starting the editor
+
+After a build, the editor is `Build\windows\Binaries\Release\WhiteWolfEditor.exe` (or `Debug`):
+
+```
+Build\windows\Binaries\Release\WhiteWolfEditor.exe
+```
+
+It opens a window with the scene being edited in the viewport and its entities in the outliner. A click in the outliner selects an entity, Ctrl+Z and Ctrl+Y undo and redo, and Window > Load Default Layout puts the panels back where they were. The editor is being built (see the status above): what it cannot do with the mouse yet, an agent can do through its commands.
+
+`WhiteWolfEditor --screenshot Editor.png` draws the same window without opening one and saves the picture, which needs no display.
 
 ## Giving the editor commands from an AI agent
 
