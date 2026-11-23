@@ -49,6 +49,15 @@ namespace
 	constexpr float SelectionOutlineWidth = 2.0f;
 
 	constexpr float MaxChannel = 255.0f;
+
+	// The gizmo of the viewport, at a scale of one, in pixels: how long its axes are, how near the mouse has to
+	// be to a handle to have it, and how thick its lines are.
+	constexpr float GizmoAxisLength = 84.0f;
+	constexpr float GizmoReach = 7.0f;
+	constexpr float GizmoLineWidth = 2.5f;
+
+	/** The handle of the gizmo that the mouse is on, in the yellow that such a handle has in other editors. */
+	constexpr FColor GizmoHighlightColor(255, 214, 64);
 }
 
 void FUiTheme::AddFonts()
@@ -179,6 +188,26 @@ FLinearColor FUiTheme::GetSelectionOutlineColor()
 float FUiTheme::GetSelectionOutlineWidth()
 {
 	return SelectionOutlineWidth * ImGui::GetStyle().FontScaleDpi;
+}
+
+float FUiTheme::GetGizmoAxisLength()
+{
+	return GizmoAxisLength * ImGui::GetStyle().FontScaleDpi;
+}
+
+float FUiTheme::GetGizmoReach()
+{
+	return GizmoReach * ImGui::GetStyle().FontScaleDpi;
+}
+
+float FUiTheme::GetGizmoLineWidth()
+{
+	return GizmoLineWidth * ImGui::GetStyle().FontScaleDpi;
+}
+
+FColor FUiTheme::GetGizmoHighlightColor()
+{
+	return GizmoHighlightColor;
 }
 
 void FUiTheme::PushHeadingColors()

@@ -1,17 +1,15 @@
 #include "Assets/TestAssets.h"
 #include "Object/ObjectGlobals.h"
-#include "Rendering/CameraView.h"
-#include "Rendering/MeshShapes.h"
 #include "Rendering/StaticMesh.h"
 #include "Rendering/StaticMeshComponent.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
+#include "Ui/Panels/TestViewport.h"
 #include "Ui/TestEditorUi.h"
 #include "Viewport/ViewportCamera.h"
 
 #include <doctest/doctest.h>
 #include <glm/geometric.hpp>
-#include <glm/vec4.hpp>
 
 #include <cmath>
 #include <cstddef>
@@ -32,47 +30,11 @@ namespace
 		return glm::length(Actual - Expected) <= PositionTolerance;
 	}
 
-	/** Puts the mouse on the middle of the viewport and holds a button down there. */
-	void PressOnViewport(FEditorUiTest& Test, EMouseButton Button)
-	{
-		Test.MoveMouse(Test.RequireItem("Viewport").GetCenter());
-		Test.Input.HandleMouseButtonEvent(Button, EInputEvent::Pressed);
-		Test.DrawFrame();
-	}
-
-	void Release(FEditorUiTest& Test, EMouseButton Button)
-	{
-		Test.Input.HandleMouseButtonEvent(Button, EInputEvent::Released);
-		Test.DrawFrame();
-	}
-
-	/** Moves the mouse from where it is, by a distance in pixels. */
-	void MoveBy(FEditorUiTest& Test, const FVector2D& Distance)
-	{
-		Test.MoveMouse(Test.Input.GetMousePosition() + Distance);
-	}
-
 	/** Turns the wheel of the mouse by a number of notches, away from the user if positive. */
 	void TurnWheel(FEditorUiTest& Test, double Notches)
 	{
 		Test.Input.HandleScroll(FVector2D(0.0, Notches));
 		Test.DrawFrame();
-	}
-
-	/** Returns where on the surface a point of the world is drawn, as the viewport's camera sees it now. */
-	FVector2D FindInViewport(const FEditorUiTest& Test, const FVector& WorldPoint)
-	{
-		const FUiRectangle Picture = Test.RequireItem("Viewport");
-		const FCameraView View = Test.Editor.GetViewportCamera().GetView();
-		const float AspectRatio = Picture.GetWidth() / Picture.GetHeight();
-		const glm::vec4 Clip = View.GetProjectionMatrix(AspectRatio) * View.GetViewMatrix() *
-			glm::vec4(FVector3f(WorldPoint - View.Location), 1.0f);
-		REQUIRE(Clip.w > 0.0f);
-
-		// The camera counts from the middle of the picture and upwards, the surface from its top left corner.
-		const float FromLeft = (Clip.x / Clip.w + 1.0f) * 0.5f * Picture.GetWidth();
-		const float FromTop = (1.0f - Clip.y / Clip.w) * 0.5f * Picture.GetHeight();
-		return FVector2D(static_cast<double>(Picture.Left + FromLeft), static_cast<double>(Picture.Top + FromTop));
 	}
 
 	/** Returns true for the orange of the line around what is selected: much red, some green and hardly any blue. */
@@ -99,18 +61,6 @@ namespace
 			}
 		}
 		return Count;
-	}
-
-	/** Adds an entity that shows a box of one metre, at a place in the world, and returns its identifier. */
-	int64 AddBox(FEditorUiTest& Test, const char* Name, const FVector& Location)
-	{
-		WEntity* const Entity = Test.Editor.GetScene().CreateEntity(Name);
-		REQUIRE(Entity != nullptr);
-		Entity->SetWorldLocation(Location);
-		WStaticMeshComponent* const Component = Entity->AddComponent<WStaticMeshComponent>();
-		REQUIRE(Component != nullptr);
-		Component->Mesh = FMeshShapes::CreateBox(FVector3f(1.0f));
-		return Entity->GetId();
 	}
 }
 
@@ -468,10 +418,12 @@ TEST_SUITE("FViewportPanel")
 		Test.Click("Viewport");
 		CHECK(Test.Editor.GetSelection() == std::vector<int64>{InFront});
 
-		// A mesh that is not drawn is clicked through.
+		// A mesh that is not drawn is clicked through. Nothing is selected for that click: what is selected has
+		// the gizmo on it, and a press on the gizmo is no click on what is behind it.
 		WEntity* const FrontEntity = Test.Editor.GetScene().FindEntityById(InFront);
 		REQUIRE(FrontEntity != nullptr);
 		FrontEntity->FindComponent<WStaticMeshComponent>()->bVisible = false;
+		Test.Editor.SetSelection({});
 		Test.DrawFrame();
 
 		Test.Click("Viewport");
@@ -613,9 +565,17 @@ TEST_SUITE("FViewportPanel")
 	TEST_CASE("The line around what is selected is wider where the user interface is larger")
 	{
 		FEditorUiTest Test;
-		const int64 Crate = AddBox(Test, "Crate", Test.Editor.GetViewportCamera().GetFocusPoint());
-		Test.Editor.SetSelection({Crate});
+		const FViewportCamera Camera = Test.Editor.GetViewportCamera();
+		const int64 Crate = AddBox(Test, "Crate", Camera.GetFocusPoint());
+
+		// The gizmo is on what was selected last. Here that is an entity behind the camera, so that no gizmo lies
+		// over the line around the crate, a larger one over more of it.
+		WEntity* const Elsewhere = Test.Editor.GetScene().CreateEntity("Elsewhere");
+		REQUIRE(Elsewhere != nullptr);
+		Elsewhere->SetWorldLocation(Camera.Location - FVector(Camera.GetForward()) * 10.0);
+		Test.Editor.SetSelection({Crate, Elsewhere->GetId()});
 		Test.DrawFrame();
+		REQUIRE_FALSE(Test.HasItem("Viewport/Gizmo"));
 		const int32 AtScaleOne = CountOrangePixels(Test, 0.0, 1.0e9);
 		REQUIRE(AtScaleOne > 100);
 

@@ -47,6 +47,18 @@ public:
 	 */
 	static float GetSelectionOutlineWidth();
 
+	/** Returns how long the axes of the viewport's gizmo are, in pixels of the surface. */
+	static float GetGizmoAxisLength();
+
+	/** Returns how near to a handle of the gizmo the mouse has to be to have it, in pixels of the surface. */
+	static float GetGizmoReach();
+
+	/** Returns how thick the lines of the gizmo are, in pixels of the surface. */
+	static float GetGizmoLineWidth();
+
+	/** Returns the colour of the handle of the gizmo that the mouse is on, or is dragging: a yellow. */
+	static FColor GetGizmoHighlightColor();
+
 	/**
 	 * Makes the headings that are laid out next bands of grey: a heading that opens and closes what is under it
 	 * is not something that is selected, which is what the accent means. PopHeadingColors follows the headings.

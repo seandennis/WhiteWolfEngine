@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 
 #include "Math/Vector.h"
+#include "Ui/Panels/ViewportGizmo.h"
 
 #include <memory>
 #include <string>
@@ -27,7 +28,8 @@ struct FUiFrame;
  *
  * A click with the left button selects the entity whose mesh is seen under the mouse, and a click on nothing
  * selects nothing. With Ctrl held, a click adds the entity to what is selected or takes it out. What is selected
- * has an orange line around it in the picture.
+ * has an orange line around it in the picture, and the gizmo on it (FViewportGizmo), whose handles the left button
+ * drags to move, turn and size it.
  */
 class FViewportPanel
 {
@@ -100,6 +102,9 @@ private:
 
 	/** How the camera is being steered, as of the frame that was laid out last. */
 	ENavigation Navigation = ENavigation::None;
+
+	/** The handles on what is selected, and the drag of one of them that is under way. */
+	FViewportGizmo Gizmo;
 
 	/** The surface the scene is drawn onto. Null until the panel is first shown. */
 	std::unique_ptr<FRenderTarget> Target;

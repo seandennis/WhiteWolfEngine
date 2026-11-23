@@ -64,6 +64,7 @@ bool FViewportPanel::Draw(FUiFrame& Frame, FRenderDevice& Device, std::string& O
 	Navigation = ENavigation::None;
 	if (!Frame.Workspace.bShowViewport)
 	{
+		Gizmo.LetGo(Frame);
 		return true;
 	}
 
@@ -106,12 +107,26 @@ bool FViewportPanel::Draw(FUiFrame& Frame, FRenderDevice& Device, std::string& O
 				ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight |
 					ImGuiButtonFlags_MouseButtonMiddle);
 			Frame.Items.NameLastItem("Viewport");
-			Navigate(Frame, Height, Continued);
-			SelectClicked(
-				Frame, FVector2f(PictureCorner.x, PictureCorner.y), FVector2f(PictureSize.x, PictureSize.y), Continued);
+
+			// The gizmo comes first: a press that takes one of its handles neither steers the camera nor is a
+			// click on what is behind the gizmo.
+			const FVector2f Corner(PictureCorner.x, PictureCorner.y);
+			const FVector2f Size(PictureSize.x, PictureSize.y);
+			Gizmo.Draw(Frame, Corner, Size);
+			if (!Gizmo.HadMouse())
+			{
+				Navigate(Frame, Height, Continued);
+				SelectClicked(Frame, Corner, Size, Continued);
+			}
 		}
 	}
 	ImGui::End();
+
+	// Like the steering of the camera, a drag of the gizmo ends with the first frame that has no picture.
+	if (!bIsPictureShown)
+	{
+		Gizmo.LetGo(Frame);
+	}
 	return bSucceeded;
 }
 

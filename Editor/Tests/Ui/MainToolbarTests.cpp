@@ -205,7 +205,10 @@ TEST_SUITE("FMainToolbar")
 
 		Add(Test, "Cube");
 
-		// The camera looks at where the cube was put.
+		// The camera looks at where the cube was put. What is selected has the gizmo on it, which lies over the
+		// middle of the cube; with nothing selected, the cube is what is seen there.
+		Test.Editor.SetSelection({});
+		Test.DrawFrame();
 		CHECK(Test.ReadPicture().GetPixel(static_cast<int32>(Middle.x), static_cast<int32>(Middle.y)) == White);
 	}
 

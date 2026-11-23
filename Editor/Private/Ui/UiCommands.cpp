@@ -95,32 +95,28 @@ namespace
 			Result.GetError());
 		return Result.GetValue();
 	}
+}
 
-	/**
-	 * Returns those of the entities that exist and are not below another of them, in the order they were given: the
-	 * ones to act on when what is done to an entity is done to everything below it.
-	 */
-	std::vector<int64> GetTopmostEntities(const FEditor& Editor, const std::vector<int64>& EntityIds)
+std::vector<int64> FUiCommands::GetTopmostEntities(const FEditor& Editor, const std::vector<int64>& EntityIds)
+{
+	const WScene& Scene = Editor.GetScene();
+	std::vector<int64> Topmost;
+	for (const int64 EntityId : EntityIds)
 	{
-		const WScene& Scene = Editor.GetScene();
-		std::vector<int64> Topmost;
-		for (const int64 EntityId : EntityIds)
+		const WEntity* const Entity = Scene.FindEntityById(EntityId);
+		if (Entity == nullptr)
 		{
-			const WEntity* const Entity = Scene.FindEntityById(EntityId);
-			if (Entity == nullptr)
-			{
-				continue;
-			}
-
-			const bool bIsBelowAnother = std::ranges::any_of(EntityIds,
-				[&Scene, Entity](int64 OtherId) { return Entity->IsDescendantOf(Scene.FindEntityById(OtherId)); });
-			if (!bIsBelowAnother)
-			{
-				Topmost.push_back(EntityId);
-			}
+			continue;
 		}
-		return Topmost;
+
+		const bool bIsBelowAnother = std::ranges::any_of(EntityIds,
+			[&Scene, Entity](int64 OtherId) { return Entity->IsDescendantOf(Scene.FindEntityById(OtherId)); });
+		if (!bIsBelowAnother)
+		{
+			Topmost.push_back(EntityId);
+		}
 	}
+	return Topmost;
 }
 
 FCommandResult FUiCommands::NewProject(FEditor& Editor, const std::string& Directory, const std::string& Name)
@@ -401,4 +397,10 @@ void FUiCommands::EndChange(FEditor& Editor)
 void FUiCommands::SetProperty(FEditor& Editor, int64 ObjectId, const std::string& PropertyName, const FJsonValue& Value)
 {
 	Editor.ExecuteCommand("Object.SetProperty", MakePropertyArguments(ObjectId, PropertyName, Value));
+}
+
+void FUiCommands::SetEntityTransform(FEditor& Editor, int64 EntityId, const FTransform& Transform)
+{
+	Editor.ExecuteCommand("Object.SetProperty",
+		MakePropertyArguments(EntityId, EntityTransformProperty, TPropertyValueTraits<FTransform>::ToJson(Transform)));
 }

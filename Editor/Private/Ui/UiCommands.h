@@ -10,6 +10,7 @@
 
 class FEditor;
 class FJsonValue;
+struct FTransform;
 struct FUiNewEntity;
 
 /**
@@ -58,6 +59,12 @@ public:
 
 	/** Edit.Redo: redoes the step that was undone last, if there is one. */
 	static void Redo(FEditor& Editor);
+
+	/**
+	 * Returns those of the entities that exist and are not below another of them, in the order they were given:
+	 * the ones to act on when what is done to an entity is done to everything below it, as moving it is.
+	 */
+	static std::vector<int64> GetTopmostEntities(const FEditor& Editor, const std::vector<int64>& EntityIds);
 
 	/** Selection.Set: selects the entities with the given identifiers and no others. */
 	static void SetSelection(FEditor& Editor, const std::vector<int64>& EntityIds);
@@ -139,4 +146,10 @@ public:
 	 * @param Value The value, in the form the command takes it.
 	 */
 	static void SetProperty(FEditor& Editor, int64 ObjectId, const std::string& PropertyName, const FJsonValue& Value);
+
+	/**
+	 * Object.SetProperty: puts an entity where a transform says, relative to its parent. During a change
+	 * (BeginChange) it is part of that change, and a step by itself otherwise.
+	 */
+	static void SetEntityTransform(FEditor& Editor, int64 EntityId, const FTransform& Transform);
 };
