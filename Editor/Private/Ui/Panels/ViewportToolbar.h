@@ -16,7 +16,8 @@ struct FUiFrame;
  * (FEditor::SetGizmoSettings, SetViewportCamera and SetViewMode), as steering the camera does.
  *
  * The buttons are in groups, which stay on one row while the picture is wide enough for them and go on in further
- * rows where it is not.
+ * rows where it is not. A group is never broken: in a picture that is narrower than the widest of them, or lower
+ * than the rows that they take, what does not fit is cut off at the picture's edge.
  */
 class FViewportToolbar
 {
@@ -32,7 +33,7 @@ public:
 
 private:
 	/** How many groups of buttons the toolbar has. */
-	static constexpr int32 GroupCount = 5;
+	static constexpr int32 GroupCount = 7;
 
 	/**
 	 * How wide each group was when it was last laid out, in pixels: what says whether a group still fits on the

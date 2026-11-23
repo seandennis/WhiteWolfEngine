@@ -1,6 +1,8 @@
 #include "Assets/TestAssets.h"
+#include "Math/Color.h"
 #include "Math/Transform.h"
 #include "Math/Vector.h"
+#include "Rendering/Image.h"
 #include "Rendering/SceneViewMode.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
@@ -73,6 +75,36 @@ namespace
 		"ScaleSnap",
 		"CameraSpeed",
 		"ViewMode"};
+
+	/**
+	 * Checks that an item is whole within the picture of the viewport. What FEditorUi::FindItem gives is the part of
+	 * an item that can be seen, so an item that the picture cuts off is found ending exactly at the picture's edge
+	 * and never beyond it. The toolbar keeps away from the edges: only an item that ends short of them is whole.
+	 */
+	void CheckIsWholeWithin(const FUiRectangle& Item, const FUiRectangle& Picture)
+	{
+		CHECK(Item.Left > Picture.Left);
+		CHECK(Item.Top > Picture.Top);
+		CHECK(Item.Right < Picture.Right);
+		CHECK(Item.Bottom < Picture.Bottom);
+	}
+
+	/** Returns the pixel of the surface on the ground of a button: beside its letters, at half its height. */
+	FColor ReadGround(const FEditorUiTest& Test, const std::string& ItemName)
+	{
+		// The letters begin farther in from the left edge than this, and the corners are rounded by no more.
+		constexpr float FromLeft = 3.0f;
+		const FUiRectangle Item = Test.RequireItem(ItemName);
+		return Test.ReadPicture().GetPixel(
+			static_cast<int32>(Item.Left + FromLeft), static_cast<int32>(Item.GetCenter().y));
+	}
+
+	/** The accent that the button of what is in force has, with the mouse on it or not: a blue, and none of the greys.
+	 */
+	bool IsAccent(FColor Pixel)
+	{
+		return Pixel.B > 200 && Pixel.R < 40;
+	}
 }
 
 TEST_SUITE("FViewportToolbar")
@@ -87,9 +119,7 @@ TEST_SUITE("FViewportToolbar")
 		{
 			CAPTURE(Name);
 			const FUiRectangle Item = Test.RequireItem(Tool(Name));
-			CHECK(Item.Left >= Picture.Left);
-			CHECK(Item.Right <= Picture.Right);
-			CHECK(Item.Top >= Picture.Top);
+			CheckIsWholeWithin(Item, Picture);
 			// On the row of the first of them, near the top of the picture.
 			CHECK(Item.Top == doctest::Approx(First.Top));
 			CHECK(Item.Top < Picture.Top + 40.0f);
@@ -104,13 +134,11 @@ TEST_SUITE("FViewportToolbar")
 		const FUiRectangle First = Test.RequireItem(Tool("Move"));
 		const FUiRectangle Last = Test.RequireItem(Tool("ViewMode"));
 
-		// Everything is still there, and within the picture.
+		// Everything is still there, and whole.
 		for (const std::string& Name : ToolNames)
 		{
 			CAPTURE(Name);
-			const FUiRectangle Item = Test.RequireItem(Tool(Name));
-			CHECK(Item.Left >= Picture.Left);
-			CHECK(Item.Right <= Picture.Right);
+			CheckIsWholeWithin(Test.RequireItem(Tool(Name)), Picture);
 		}
 		CHECK(Last.Top >= First.Bottom);
 
@@ -118,6 +146,29 @@ TEST_SUITE("FViewportToolbar")
 		Test.Click(Tool("ViewMode"));
 		Test.Click(Tool("ViewMode/Unlit"));
 		CHECK(Test.Editor.GetViewMode() == ESceneViewMode::Unlit);
+	}
+
+	TEST_CASE("Where the picture is narrower than the three pairs of steps, they go on in rows of their own")
+	{
+		// The viewport has some three quarters of the surface's width: less than the three pairs take side by side.
+		FEditorUiTest Test(300, 600);
+		const FUiRectangle Picture = Test.RequireItem("Viewport");
+		REQUIRE(Picture.GetWidth() < 250.0f);
+
+		for (const std::string& Name : ToolNames)
+		{
+			CAPTURE(Name);
+			CheckIsWholeWithin(Test.RequireItem(Tool(Name)), Picture);
+		}
+		CHECK(Test.RequireItem(Tool("SnapScale")).Top >= Test.RequireItem(Tool("SnapLocation")).Bottom);
+
+		// What is in the last of the rows works.
+		Test.Click(Tool("ViewMode"));
+		Test.Click(Tool("ViewMode/Unlit"));
+		CHECK(Test.Editor.GetViewMode() == ESceneViewMode::Unlit);
+		Test.Click(Tool("SnapScale"));
+		CHECK(GetSettings(Test).bSnapScale);
+		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 
 	TEST_CASE("The first buttons choose what dragging the gizmo does")
@@ -570,8 +621,19 @@ TEST_SUITE("FViewportToolbar")
 	TEST_CASE("The toolbar shows what was set elsewhere: by a key, or by the code")
 	{
 		FEditorUiTest Test;
+		REQUIRE(IsAccent(ReadGround(Test, Tool("Move"))));
+		REQUIRE_FALSE(IsAccent(ReadGround(Test, Tool("Rotate"))));
+		REQUIRE_FALSE(IsAccent(ReadGround(Test, Tool("SnapRotation"))));
 
-		// A step that the lists do not offer is shown, and is left alone by the toolbar.
+		// By a key: the button of turning is the one in the accent now.
+		Test.PressKey(EKey::E);
+		CHECK_FALSE(IsAccent(ReadGround(Test, Tool("Move"))));
+		CHECK(IsAccent(ReadGround(Test, Tool("Rotate"))));
+		CHECK_FALSE(IsAccent(ReadGround(Test, Tool("Scale"))));
+
+		// By the code, with steps that the lists do not offer.
+		const FUiRectangle LocationBefore = Test.RequireItem(Tool("SnapLocation"));
+		const FUiRectangle RotationBefore = Test.RequireItem(Tool("SnapRotation"));
 		FGizmoSettings Settings;
 		Settings.Mode = EGizmoMode::Scale;
 		Settings.LocationSnap = 0.3;
@@ -580,12 +642,28 @@ TEST_SUITE("FViewportToolbar")
 		Settings.bSnapRotation = true;
 		Test.Editor.SetGizmoSettings(Settings);
 		Test.DrawFrames(3);
-		CHECK(GetSettings(Test) == Settings);
 
-		// Its buttons are where they were, and work on from what is set.
+		// The toolbar leaves them alone,
+		CHECK(GetSettings(Test) == Settings);
+		// and shows them: sizing and the steps of a turn are in the accent, and nothing else is.
+		CHECK(IsAccent(ReadGround(Test, Tool("Scale"))));
+		CHECK_FALSE(IsAccent(ReadGround(Test, Tool("Move"))));
+		CHECK_FALSE(IsAccent(ReadGround(Test, Tool("Rotate"))));
+		CHECK(IsAccent(ReadGround(Test, Tool("SnapRotation"))));
+		CHECK_FALSE(IsAccent(ReadGround(Test, Tool("SnapLocation"))));
+		CHECK_FALSE(IsAccent(ReadGround(Test, Tool("SnapScale"))));
+		// "22.5 deg" is longer than every angle of the list: the button that shows it has grown for it. What is
+		// before it is where it was.
+		const FUiRectangle RotationAfter = Test.RequireItem(Tool("SnapRotation"));
+		CHECK(RotationAfter.GetWidth() > RotationBefore.GetWidth());
+		CHECK(RotationAfter.Left == RotationBefore.Left);
+		CHECK(Test.RequireItem(Tool("SnapLocation")) == LocationBefore);
+
+		// The buttons work on from what is set.
 		Test.Click(Tool("SnapRotation"));
 		Settings.bSnapRotation = false;
 		CHECK(GetSettings(Test) == Settings);
+		CHECK_FALSE(IsAccent(ReadGround(Test, Tool("SnapRotation"))));
 		Test.Click(Tool("Space"));
 		Settings.Space = EGizmoSpace::Local;
 		CHECK(GetSettings(Test) == Settings);

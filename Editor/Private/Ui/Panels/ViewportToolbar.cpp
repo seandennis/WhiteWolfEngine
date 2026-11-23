@@ -312,16 +312,17 @@ void FViewportToolbar::Draw(FUiFrame& Frame, const FVector2f& PictureCorner, con
 
 	if (bIsVisible)
 	{
-		// A group goes on the row of the one before it if it was narrow enough for that when it was last laid out.
+		// A group goes on the row of the one before it if it was narrow enough for that when it was last laid out,
+		// so many pixels after it.
 		int32 GroupIndex = 0;
-		const auto BeginGroup = [this, &GroupIndex, GroupSpacing, RowEnd]()
+		const auto BeginGroup = [this, &GroupIndex, RowEnd](float Spacing)
 		{
 			WW_CHECKF(
 				GroupIndex < GroupCount, "The viewport's toolbar has more groups than the {} it counts", GroupCount);
 			const float Width = GroupWidths[static_cast<std::size_t>(GroupIndex)];
-			if (GroupIndex > 0 && ImGui::GetItemRectMax().x + GroupSpacing + Width <= RowEnd)
+			if (GroupIndex > 0 && ImGui::GetItemRectMax().x + Spacing + Width <= RowEnd)
 			{
-				ImGui::SameLine(0.0f, GroupSpacing);
+				ImGui::SameLine(0.0f, Spacing);
 			}
 			ImGui::BeginGroup();
 		};
@@ -334,27 +335,35 @@ void FViewportToolbar::Draw(FUiFrame& Frame, const FVector2f& PictureCorner, con
 
 		FGizmoSettings Settings = Editor.GetGizmoSettings();
 
-		BeginGroup();
+		BeginGroup(GroupSpacing);
 		DrawModes(Frame, Settings);
 		EndGroup();
 
-		BeginGroup();
+		BeginGroup(GroupSpacing);
 		DrawSpace(Frame, Settings);
 		EndGroup();
 
-		BeginGroup();
+		// Each pair of buttons for steps is a group of its own, so that a picture that is too narrow for the three
+		// of them side by side still shows them all. They belong together, and are as close to one another as the
+		// buttons of one group are.
+		const float PairSpacing = Style.ItemSpacing.x;
+		BeginGroup(GroupSpacing);
 		DrawSnap(Frame, LocationSnapLabels, Settings.bSnapLocation, Settings.LocationSnap, LocationSnaps, FormatLength);
-		ImGui::SameLine();
+		EndGroup();
+
+		BeginGroup(PairSpacing);
 		DrawSnap(Frame, RotationSnapLabels, Settings.bSnapRotation, Settings.RotationSnap, RotationSnaps, FormatAngle);
-		ImGui::SameLine();
+		EndGroup();
+
+		BeginGroup(PairSpacing);
 		DrawSnap(Frame, ScaleSnapLabels, Settings.bSnapScale, Settings.ScaleSnap, ScaleSnaps, FormatPart);
 		EndGroup();
 
-		BeginGroup();
+		BeginGroup(GroupSpacing);
 		DrawCameraSpeed(Frame);
 		EndGroup();
 
-		BeginGroup();
+		BeginGroup(GroupSpacing);
 		DrawViewMode(Frame);
 		EndGroup();
 

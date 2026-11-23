@@ -80,7 +80,9 @@ public:
 
 	/**
 	 * Returns where an item of the user interface was drawn in the last frame, or nothing if it was not drawn or
-	 * is out of sight. The items that tests and tools point the mouse at have names: "Viewport" is the picture of
+	 * is out of sight. Of an item that is partly out of sight, it is the part that can be seen: an item that is
+	 * cut off by an edge is found ending at that edge, never beyond it. The items that tests and tools point the
+	 * mouse at have names: "Viewport" is the picture of
 	 * the scene, "Outliner/7" the row of the entity with the identifier 7, "Menu/File" a menu of the menu bar and
 	 * "Menu/File/New Scene" an entry of that menu while it is open.
 	 */

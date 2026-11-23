@@ -115,11 +115,15 @@ TEST_SUITE("FEditorWindow")
 		CHECK(Picture->GetWidth() == 800);
 		CHECK(Picture->GetHeight() == 600);
 
-		// The panels are there, inside the picture, and the picture is of more than one colour.
+		// The panels are there, laid out for a surface of this size and of no other: the viewport has most of
+		// the picture and ends inside it. An item that reached beyond the picture would be found ending at its
+		// edge. The picture is of more than one colour.
 		const std::optional<FUiRectangle> Viewport = Test.Window->GetUi().FindItem("Viewport");
 		REQUIRE(Viewport.has_value());
-		CHECK(Viewport->Right <= 800.0f);
-		CHECK(Viewport->Bottom <= 600.0f);
+		CHECK(Viewport->Right > 500.0f);
+		CHECK(Viewport->Right < 800.0f);
+		CHECK(Viewport->Bottom > 300.0f);
+		CHECK(Viewport->Bottom < 600.0f);
 		const FImage Image = ReadTestTarget(*Picture);
 		const std::vector<FColor>& Pixels = Image.GetPixels();
 		CHECK(std::ranges::any_of(Pixels, [&Pixels](const FColor& Pixel) { return Pixel != Pixels.front(); }));
