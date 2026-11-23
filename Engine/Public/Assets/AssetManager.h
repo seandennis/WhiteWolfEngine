@@ -55,6 +55,12 @@ public:
 	static constexpr std::string_view PlaneShape = "Engine/Shapes#Plane";
 
 	/**
+	 * The key under which a picture is a data texture, as in "Textures/Bumps.png#Linear". Without a key, a picture
+	 * is a colour texture.
+	 */
+	static constexpr std::string_view LinearTextureKey = "Linear";
+
+	/**
 	 * Says which directory asset paths are relative to, and forgets which of its files are loaded: assets that are
 	 * still referred to stay as they are, but asking for them again loads them anew. An empty path means there is
 	 * no content directory, and nothing but the built-in assets can be loaded.
@@ -103,6 +109,23 @@ public:
 
 	/** Returns true if the name is that of a file of assets that the engine has built in, such as ShapesFile. */
 	ENGINE_API static bool IsBuiltInFile(std::string_view File);
+
+	/**
+	 * Returns true if a file with this name can hold an asset that something which asks for a class can be given:
+	 * an asset of that class or of one that derives from it. The file is not looked into. A picture is a texture,
+	 * an environment an environment map, a model has meshes, materials and textures, and the built-in shapes are
+	 * meshes; a file that is of no kind that can be loaded holds nothing.
+	 *
+	 * This is what to ask before a file is loaded only to see whether it has anything of use: a model may be
+	 * large, and may have no material at all.
+	 */
+	ENGINE_API static bool CanHoldAssetsOfClass(std::string_view File, const WClass& Class);
+
+	/**
+	 * Returns true if a file with this name is one asset by itself, whose asset path is the name of the file: a
+	 * picture or an environment. A model, and a file that the engine has built in, hold several, each under a key.
+	 */
+	ENGINE_API static bool IsOneAsset(std::string_view File);
 
 	/** Returns the names of the files of assets that the engine has built in, in the order of the names. */
 	ENGINE_API static std::vector<std::string> GetBuiltInFiles();

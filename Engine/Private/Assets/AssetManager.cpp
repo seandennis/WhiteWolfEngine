@@ -11,6 +11,7 @@
 #include "Rendering/HdrImage.h"
 #include "Rendering/Image.h"
 #include "Rendering/ImageFile.h"
+#include "Rendering/Material.h"
 #include "Rendering/MeshShapes.h"
 #include "Rendering/StaticMesh.h"
 #include "Rendering/Texture.h"
@@ -27,8 +28,6 @@ constinit FLogCategory LogAssets("LogAssets", ELogVerbosity::Log);
 
 namespace
 {
-	/** The key of the data texture of a picture; the colour texture has no key. */
-	constexpr std::string_view LinearTextureKey = "Linear";
 
 	/** What the manager remembers between calls. */
 	struct FAssetManagerState
@@ -223,6 +222,43 @@ bool FAssetManager::IsBuiltInFile(std::string_view File)
 std::vector<std::string> FAssetManager::GetBuiltInFiles()
 {
 	return {std::string(ShapesFile)};
+}
+
+bool FAssetManager::CanHoldAssetsOfClass(std::string_view File, const WClass& Class)
+{
+	// An asset can be given to whatever asks for its own class or for one that its class derives from.
+	const auto CanBeGiven = [&Class](const WClass* HeldClass)
+	{
+		return HeldClass->IsChildOf(&Class);
+	};
+	if (IsBuiltInFile(File))
+	{
+		return CanBeGiven(WStaticMesh::StaticClass());
+	}
+
+	switch (GetFileKind(FFileHelper::PathFromUtf8(File)))
+	{
+		case EAssetFileKind::Gltf:
+			return CanBeGiven(WStaticMesh::StaticClass()) || CanBeGiven(WMaterial::StaticClass()) ||
+				CanBeGiven(WTexture::StaticClass());
+		case EAssetFileKind::Picture:
+			return CanBeGiven(WTexture::StaticClass());
+		case EAssetFileKind::Environment:
+			return CanBeGiven(WEnvironmentMap::StaticClass());
+		case EAssetFileKind::Unknown:
+		default:
+			return false;
+	}
+}
+
+bool FAssetManager::IsOneAsset(std::string_view File)
+{
+	if (IsBuiltInFile(File))
+	{
+		return false;
+	}
+	const EAssetFileKind Kind = GetFileKind(FFileHelper::PathFromUtf8(File));
+	return Kind == EAssetFileKind::Picture || Kind == EAssetFileKind::Environment;
 }
 
 std::optional<std::string> FAssetManager::GetAssetFileOfPath(const std::filesystem::path& Path)

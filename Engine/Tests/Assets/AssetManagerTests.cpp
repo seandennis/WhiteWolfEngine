@@ -16,6 +16,7 @@
 #include <doctest/doctest.h>
 
 #include <filesystem>
+#include <initializer_list>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -446,6 +447,63 @@ TEST_SUITE("FAssetManager")
 		CHECK_FALSE(FAssetManager::IsAssetFile("Level.json"));
 		CHECK_FALSE(FAssetManager::IsAssetFile("png"));
 		CHECK_FALSE(FAssetManager::IsAssetFile(""));
+	}
+
+	TEST_CASE("What a file can hold is known from its name, without the file")
+	{
+		const WClass& Mesh = *WStaticMesh::StaticClass();
+		const WClass& Material = *WMaterial::StaticClass();
+		const WClass& Texture = *WTexture::StaticClass();
+		const WClass& Environment = *WEnvironmentMap::StaticClass();
+
+		// A model has meshes, materials and textures.
+		CHECK(FAssetManager::CanHoldAssetsOfClass("Models/Crate.glb", Mesh));
+		CHECK(FAssetManager::CanHoldAssetsOfClass("Models/Crate.GLTF", Material));
+		CHECK(FAssetManager::CanHoldAssetsOfClass("Crate.gltf", Texture));
+		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Models/Crate.glb", Environment));
+
+		// A picture is a texture, and an environment an environment map.
+		CHECK(FAssetManager::CanHoldAssetsOfClass("Textures/Wood.png", Texture));
+		CHECK(FAssetManager::CanHoldAssetsOfClass("Wood.JPG", Texture));
+		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Textures/Wood.png", Mesh));
+		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Textures/Wood.png", Environment));
+		CHECK(FAssetManager::CanHoldAssetsOfClass("Skies/Noon.hdr", Environment));
+		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Skies/Noon.hdr", Texture));
+
+		// The built-in shapes are meshes.
+		CHECK(FAssetManager::CanHoldAssetsOfClass(FAssetManager::ShapesFile, Mesh));
+		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass(FAssetManager::ShapesFile, Material));
+
+		// What is of no kind that can be loaded holds nothing.
+		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Notes.txt", Texture));
+		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("", Mesh));
+	}
+
+	TEST_CASE("Whatever asks for any asset, or for any object, can be given something of every file")
+	{
+		for (const WClass* const Class : {WAsset::StaticClass(), WObject::StaticClass()})
+		{
+			CHECK(FAssetManager::CanHoldAssetsOfClass("Models/Crate.glb", *Class));
+			CHECK(FAssetManager::CanHoldAssetsOfClass("Textures/Wood.png", *Class));
+			CHECK(FAssetManager::CanHoldAssetsOfClass("Skies/Noon.hdr", *Class));
+			CHECK(FAssetManager::CanHoldAssetsOfClass(FAssetManager::ShapesFile, *Class));
+			CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Notes.txt", *Class));
+		}
+
+		// What asks for something that no file has is given nothing.
+		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Models/Crate.glb", *WAssetPackage::StaticClass()));
+	}
+
+	TEST_CASE("A picture and an environment are one asset each, and a model and the shapes are several")
+	{
+		CHECK(FAssetManager::IsOneAsset("Textures/Wood.png"));
+		CHECK(FAssetManager::IsOneAsset("Wood.JPEG"));
+		CHECK(FAssetManager::IsOneAsset("Skies/Noon.hdr"));
+		CHECK_FALSE(FAssetManager::IsOneAsset("Models/Crate.glb"));
+		CHECK_FALSE(FAssetManager::IsOneAsset("Models/Crate.gltf"));
+		CHECK_FALSE(FAssetManager::IsOneAsset(FAssetManager::ShapesFile));
+		CHECK_FALSE(FAssetManager::IsOneAsset("Notes.txt"));
+		CHECK_FALSE(FAssetManager::IsOneAsset(""));
 	}
 
 	TEST_CASE("GetAssetFileOfPath gives the asset path of a file inside the content directory")

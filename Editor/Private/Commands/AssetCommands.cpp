@@ -29,9 +29,6 @@
 
 namespace
 {
-	/** The key under which a picture is a data texture; see FAssetManager. */
-	constexpr std::string_view LinearTextureKey = "Linear";
-
 	constexpr std::string_view NoProjectError = "No project is open, and assets belong to a project. Create one with "
 												"Project.New or open one with Project.Open.";
 
@@ -82,9 +79,10 @@ namespace
 		}
 		// A picture can also be had as a data texture, which exists only once it has been asked for.
 		const bool bIsPicture = Cast<WTexture>(Package->FindAsset("")) != nullptr;
-		if (bIsPicture && Package->FindAsset(LinearTextureKey) == nullptr)
+		if (bIsPicture && Package->FindAsset(FAssetManager::LinearTextureKey) == nullptr)
 		{
-			AddAsset(FAssetPath{File, std::string(LinearTextureKey)}.ToString(), WTexture::StaticClass()->GetName());
+			AddAsset(FAssetPath{File, std::string(FAssetManager::LinearTextureKey)}.ToString(),
+				WTexture::StaticClass()->GetName());
 		}
 
 		OutValue = FJsonValue::MakeObject();
