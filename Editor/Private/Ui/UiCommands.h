@@ -11,6 +11,7 @@
 class FEditor;
 class FJsonValue;
 struct FTransform;
+struct FUiAsset;
 struct FUiNewEntity;
 
 /**
@@ -53,6 +54,21 @@ public:
 
 	/** Scene.List: returns the scene files of the project, or none if no project is open. */
 	static std::vector<std::string> ListScenes(FEditor& Editor);
+
+	/**
+	 * Asset.List: returns the asset files of the project, and the files of assets that the engine has built in,
+	 * in the order of their names.
+	 */
+	static std::vector<std::string> ListAssetFiles(FEditor& Editor);
+
+	/**
+	 * Asset.Describe: returns the assets of a file, which is loaded for it if it is not loaded.
+	 *
+	 * @param OutError Receives the reason if the file cannot be loaded.
+	 * @return The assets, or nothing if the file cannot be loaded.
+	 */
+	static std::optional<std::vector<FUiAsset>> DescribeAssetFile(
+		FEditor& Editor, const std::string& File, std::string& OutError);
 
 	/** Edit.Undo: undoes the last step of the history, if there is one. */
 	static void Undo(FEditor& Editor);

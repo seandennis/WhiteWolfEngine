@@ -4,6 +4,7 @@
 
 #include "Math/Rotator.h"
 #include "Math/Transform.h"
+#include "Ui/AssetPicker.h"
 #include "Ui/ImGuiLibrary.h"
 #include "Ui/PropertyChange.h"
 
@@ -165,13 +166,16 @@ private:
 
 	/**
 	 * Lays out a reference to an object of a class: a list of the scene's entities or components to choose from,
-	 * or the path of an asset to type.
+	 * or the path of an asset to type, with a button that opens the list of the assets there are to choose from.
 	 */
 	FValueEdit EditReference(FUiFrame& Frame,
 		const WClass& ReferencedClass,
 		const WObject* Referenced,
 		const std::string& ItemName,
 		float Width);
+
+	/** The list of assets that a reference to one is chosen from. */
+	FAssetPicker AssetPicker;
 
 	/** The field that is being typed into, when it was last laid out, and what has been typed; see EditText. */
 	ImGuiID TypedItemId = 0;

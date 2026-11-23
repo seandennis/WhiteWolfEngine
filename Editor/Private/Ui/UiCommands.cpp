@@ -11,6 +11,7 @@
 #include "Scene/Entity.h"
 #include "Scene/MissingComponent.h"
 #include "Scene/Scene.h"
+#include "Ui/UiAsset.h"
 #include "Ui/UiNewEntity.h"
 #include "Ui/UiText.h"
 #include "Viewport/ViewportCamera.h"
@@ -176,6 +177,40 @@ std::vector<std::string> FUiCommands::ListScenes(FEditor& Editor)
 		}
 	}
 	return Scenes;
+}
+
+std::vector<std::string> FUiCommands::ListAssetFiles(FEditor& Editor)
+{
+	std::vector<std::string> Files;
+	const FCommandResult Result = Editor.ExecuteCommand("Asset.List", FJsonValue());
+	if (Result.HasSucceeded())
+	{
+		for (const FJsonValue& File : Result.GetValue().GetElements())
+		{
+			Files.push_back(File.GetString());
+		}
+	}
+	return Files;
+}
+
+std::optional<std::vector<FUiAsset>> FUiCommands::DescribeAssetFile(
+	FEditor& Editor, const std::string& File, std::string& OutError)
+{
+	FJsonValue Arguments = FJsonValue::MakeObject();
+	Arguments.SetMember("File", File);
+	const FCommandResult Result = Editor.ExecuteCommand("Asset.Describe", Arguments);
+	if (!Result.HasSucceeded())
+	{
+		OutError = Result.GetError();
+		return std::nullopt;
+	}
+
+	std::vector<FUiAsset> Assets;
+	for (const FJsonValue& Asset : Result.GetValue().FindMember("Assets")->GetElements())
+	{
+		Assets.push_back({Asset.FindMember("Path")->GetString(), Asset.FindMember("Class")->GetString()});
+	}
+	return Assets;
 }
 
 void FUiCommands::Undo(FEditor& Editor)
