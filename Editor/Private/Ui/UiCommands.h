@@ -63,6 +63,12 @@ public:
 	static void SetSelection(FEditor& Editor, const std::vector<int64>& EntityIds);
 
 	/**
+	 * Selection.Set: adds an entity to what is selected, as the last of it, or takes it out if it is selected
+	 * already. What a click on an entity does while Ctrl is held.
+	 */
+	static void ToggleSelection(FEditor& Editor, int64 EntityId);
+
+	/**
 	 * Entity.Create: creates an entity and selects it.
 	 *
 	 * @param ParentId The entity it is attached to; at the root of the scene if not given.

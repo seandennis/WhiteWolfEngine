@@ -306,26 +306,14 @@ void FOutlinerPanel::CarryOut(FUiFrame& Frame)
 	if (Pending.ClickedEntityId.has_value())
 	{
 		// With Ctrl held, a click adds an entity to what is selected or takes it out; without, it selects it alone.
-		const int64 ClickedEntityId = *Pending.ClickedEntityId;
-		std::vector<int64> Selection;
 		if (ImGui::GetIO().KeyCtrl)
 		{
-			Selection = Editor.GetSelection();
-			const auto Selected = std::ranges::find(Selection, ClickedEntityId);
-			if (Selected == Selection.end())
-			{
-				Selection.push_back(ClickedEntityId);
-			}
-			else
-			{
-				Selection.erase(Selected);
-			}
+			FUiCommands::ToggleSelection(Editor, *Pending.ClickedEntityId);
 		}
 		else
 		{
-			Selection.push_back(ClickedEntityId);
+			FUiCommands::SetSelection(Editor, {*Pending.ClickedEntityId});
 		}
-		FUiCommands::SetSelection(Editor, Selection);
 	}
 	else
 	{

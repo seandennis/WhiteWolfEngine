@@ -205,6 +205,21 @@ void FUiCommands::SetSelection(FEditor& Editor, const std::vector<int64>& Entity
 	Editor.ExecuteCommand("Selection.Set", Arguments);
 }
 
+void FUiCommands::ToggleSelection(FEditor& Editor, int64 EntityId)
+{
+	std::vector<int64> Selection = Editor.GetSelection();
+	const auto Selected = std::ranges::find(Selection, EntityId);
+	if (Selected == Selection.end())
+	{
+		Selection.push_back(EntityId);
+	}
+	else
+	{
+		Selection.erase(Selected);
+	}
+	SetSelection(Editor, Selection);
+}
+
 std::optional<int64> FUiCommands::CreateEntity(FEditor& Editor, const std::string& Name, std::optional<int64> ParentId)
 {
 	FJsonValue Arguments = FJsonValue::MakeObject();

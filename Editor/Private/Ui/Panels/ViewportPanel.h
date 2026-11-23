@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 
+#include "Math/Vector.h"
+
 #include <memory>
 #include <string>
 
@@ -22,6 +24,9 @@ struct FUiFrame;
  * and E fly, at a speed that the wheel changes; with Alt, the left button takes the camera around what it looks
  * at and the right one moves it closer or away; the middle button moves it sideways and up; and the wheel by
  * itself moves it closer or away in steps.
+ *
+ * A click with the left button selects the entity whose mesh is seen under the mouse, and a click on nothing
+ * selects nothing. With Ctrl held, a click adds the entity to what is selected or takes it out.
  */
 class FViewportPanel
 {
@@ -80,6 +85,17 @@ private:
 	 * @param Continued How the camera was steered in the last frame, which goes on while the button stays down.
 	 */
 	void Navigate(FUiFrame& Frame, int32 PictureHeight, ENavigation Continued);
+
+	/**
+	 * Selects what the user has clicked on in the picture, which is the item that was laid out last, if the left
+	 * mouse button has just come up from a click on it.
+	 *
+	 * @param PictureCorner Where the top left corner of the picture is on the surface, in pixels.
+	 * @param PictureSize The width and the height of the picture, in pixels.
+	 * @param Continued How the camera was steered in the last frame: a press that steered it was no click.
+	 */
+	void SelectClicked(
+		FUiFrame& Frame, const FVector2f& PictureCorner, const FVector2f& PictureSize, ENavigation Continued);
 
 	/** How the camera is being steered, as of the frame that was laid out last. */
 	ENavigation Navigation = ENavigation::None;

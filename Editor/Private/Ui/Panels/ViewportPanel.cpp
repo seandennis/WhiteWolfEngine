@@ -2,12 +2,20 @@
 
 #include "Editor.h"
 #include "Math/LinearColor.h"
+#include "Math/Ray.h"
+#include "Rendering/CameraView.h"
 #include "Rendering/RenderDevice.h"
 #include "Rendering/RenderTarget.h"
+#include "Rendering/SceneRayCast.h"
+#include "Rendering/SceneRayHit.h"
 #include "Rendering/SceneRenderer.h"
 #include "Rendering/SceneViewMode.h"
+#include "Rendering/StaticMeshComponent.h"
+#include "Scene/Entity.h"
+#include "Scene/Scene.h"
 #include "Ui/ImGuiLibrary.h"
 #include "Ui/Panels/UiPanel.h"
+#include "Ui/UiCommands.h"
 #include "Ui/UiFrame.h"
 #include "Ui/UiItems.h"
 #include "Ui/UiTextures.h"
@@ -16,6 +24,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <utility>
 
 namespace
@@ -97,6 +106,8 @@ bool FViewportPanel::Draw(FUiFrame& Frame, FRenderDevice& Device, std::string& O
 					ImGuiButtonFlags_MouseButtonMiddle);
 			Frame.Items.NameLastItem("Viewport");
 			Navigate(Frame, Height, Continued);
+			SelectClicked(
+				Frame, FVector2f(PictureCorner.x, PictureCorner.y), FVector2f(PictureSize.x, PictureSize.y), Continued);
 		}
 	}
 	ImGui::End();
@@ -187,6 +198,49 @@ void FViewportPanel::Navigate(FUiFrame& Frame, int32 PictureHeight, ENavigation 
 	if (!(Camera == Frame.Editor.GetViewportCamera()))
 	{
 		Frame.Editor.SetViewportCamera(Camera);
+	}
+}
+
+void FViewportPanel::SelectClicked(
+	FUiFrame& Frame, const FVector2f& PictureCorner, const FVector2f& PictureSize, ENavigation Continued)
+{
+	// A click is the left button going down on the picture and coming up again without the mouse having gone
+	// anywhere in between. A press that steered the camera, as one with Alt held does, was no click on anything.
+	const ImGuiIO& Io = ImGui::GetIO();
+	const bool bWasDragged =
+		Io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] >= Io.MouseDragThreshold * Io.MouseDragThreshold;
+	const bool bWasClicked = ImGui::IsItemDeactivated() && ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
+		!bWasDragged && Continued == ENavigation::None;
+	if (!bWasClicked)
+	{
+		return;
+	}
+
+	// What is seen under the mouse is what the ray through that point of the picture meets first. The picture
+	// counts from its top left corner and downwards; the camera from the middle, and upwards.
+	const FVector2f FromCorner = (FVector2f(Io.MousePos.x, Io.MousePos.y) - PictureCorner) / PictureSize;
+	const FVector2f PicturePoint(FromCorner.x * 2.0f - 1.0f, 1.0f - FromCorner.y * 2.0f);
+	FEditor& Editor = Frame.Editor;
+	const FRay Ray = Editor.GetViewportCamera().GetView().GetRay(PicturePoint, PictureSize.x / PictureSize.y);
+	const std::optional<FSceneRayHit> Hit = FSceneRayCast::FindFirstHit(Editor.GetScene(), Ray);
+	const WEntity* const Entity = Hit.has_value() ? Hit->Component->GetOwner() : nullptr;
+
+	// With Ctrl held, a click adds an entity to what is selected or takes it out, and a click on nothing changes
+	// nothing. Without, it selects the entity alone, or nothing.
+	if (Io.KeyCtrl)
+	{
+		if (Entity != nullptr)
+		{
+			FUiCommands::ToggleSelection(Editor, Entity->GetId());
+		}
+	}
+	else if (Entity != nullptr)
+	{
+		FUiCommands::SetSelection(Editor, {Entity->GetId()});
+	}
+	else if (!Editor.GetSelection().empty())
+	{
+		FUiCommands::SetSelection(Editor, {});
 	}
 }
 

@@ -1218,3 +1218,22 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** Lights, and entities that show no mesh, are met by nothing. Every triangle of a mesh whose box the ray meets is looked at: this is not for many rays in every frame. A mesh that is scaled to nothing along an axis is not met. The renderer has no materials yet that are see-through or cut out, so nothing has to be seen through.
 
 **Testing.** `FRay`: a point along it, also far from the origin of the world. `FIntersection`: a triangle met squarely and at a slant, with directions of other lengths, outside each edge, on its edges and corners, from behind, along its plane, behind where the ray begins and on it, without an area and with a corner that is no number; a box met, passed, pointed away from, begun inside, touched, without thickness and empty. `FTransform`: a difference of positions taken back, a scale of zero, what can be undone. `WStaticMesh`: the distance in multiples of the direction, a miss and a hit from behind, the nearest of several sheets whatever their order, the inside of a closed box, no geometry. `WStaticMeshComponent`: where the entity puts the mesh, scaled, turned, below a parent, a million kilometres out, mirrored, and when it shows nothing. `FSceneRayCast`: an empty scene, the nearest of several meshes whichever was made first, a mesh behind the ray, one that is not visible, one below a parent, two on one entity. `FCameraView`: the ray through the middle and through the edges, that what lies along a ray is drawn at its point of the picture, with the projection, far from the origin, and an aspect ratio that is none.
+
+## D-067: A click in the viewport selects what is seen under the mouse
+
+**Status:** Accepted.
+
+**Context.** Entities could be selected only by their rows in the outliner. To work on a thing that is seen in the viewport, the user had to know what it is called.
+
+**Decision.**
+
+- **A click with the left mouse button on the picture selects the entity whose mesh is seen there:** the one that the ray through that point meets first (D-066). A click on nothing selects nothing. With Ctrl held, a click adds the entity to what is selected or takes it out, and a click on nothing changes nothing: the same as in the outliner, and through the same function (`FUiCommands::ToggleSelection`).
+- **A click is the button going down and coming up without the mouse having gone anywhere.** A press that drags is none, and neither is one that steers the camera: the right and the middle button, and the left one with Alt (D-059).
+- **The entity that shows the mesh is the one that is selected,** not an entity above it.
+- **It selects by the command there is,** `Selection.Set`, and is no step of the history, as selecting is none anywhere (D-047).
+
+**Alternatives considered.** Selecting the topmost entity above the mesh first, and what is below it with further clicks, is what suits a model that was imported as a tree of entities; it needs to know which trees belong together, which prefabs will say (milestone 7). A command that returns what is seen at a point of the viewport would let an agent click; an agent has the identifiers of the entities already, and what the viewport's size is belongs to the window.
+
+**Limits.** Lights and entities without a mesh cannot be clicked on: nothing of them is drawn yet. There is no rectangle to drag around several things. What is selected is not marked in the picture yet; the outline around it is to come.
+
+**Testing.** In the user interface, with boxes where the viewport's camera looks: a click on a box and beside it, with the history and the camera as they were; two boxes behind one another, and the nearer one made invisible; a box below another entity; Ctrl with a click on a second box, on the first again and on nothing; presses that drag from nothing onto a box, from a box onto nothing and from one box onto another; the right button, the middle button and the left one with Alt held.

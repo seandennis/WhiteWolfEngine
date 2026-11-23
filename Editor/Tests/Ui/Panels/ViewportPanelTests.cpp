@@ -1,5 +1,6 @@
 #include "Assets/TestAssets.h"
 #include "Object/ObjectGlobals.h"
+#include "Rendering/CameraView.h"
 #include "Rendering/MeshShapes.h"
 #include "Rendering/StaticMesh.h"
 #include "Rendering/StaticMeshComponent.h"
@@ -10,10 +11,13 @@
 
 #include <doctest/doctest.h>
 #include <glm/geometric.hpp>
+#include <glm/vec4.hpp>
 
 #include <cmath>
+#include <cstddef>
 #include <ostream>
 #include <string>
+#include <vector>
 
 // The viewport's camera is steered here as a person steers it: with the mouse on the picture of the scene and the
 // keyboard, through FEditorUi. What the camera then does with what it is told is tested with FViewportCamera.
@@ -53,6 +57,22 @@ namespace
 	{
 		Test.Input.HandleScroll(FVector2D(0.0, Notches));
 		Test.DrawFrame();
+	}
+
+	/** Returns where on the surface a point of the world is drawn, as the viewport's camera sees it now. */
+	FVector2D FindInViewport(const FEditorUiTest& Test, const FVector& WorldPoint)
+	{
+		const FUiRectangle Picture = Test.RequireItem("Viewport");
+		const FCameraView View = Test.Editor.GetViewportCamera().GetView();
+		const float AspectRatio = Picture.GetWidth() / Picture.GetHeight();
+		const glm::vec4 Clip = View.GetProjectionMatrix(AspectRatio) * View.GetViewMatrix() *
+			glm::vec4(FVector3f(WorldPoint - View.Location), 1.0f);
+		REQUIRE(Clip.w > 0.0f);
+
+		// The camera counts from the middle of the picture and upwards, the surface from its top left corner.
+		const float FromLeft = (Clip.x / Clip.w + 1.0f) * 0.5f * Picture.GetWidth();
+		const float FromTop = (1.0f - Clip.y / Clip.w) * 0.5f * Picture.GetHeight();
+		return FVector2D(static_cast<double>(Picture.Left + FromLeft), static_cast<double>(Picture.Top + FromTop));
 	}
 
 	/** Adds an entity that shows a box of one metre, at a place in the world, and returns its identifier. */
@@ -381,5 +401,147 @@ TEST_SUITE("FViewportPanel")
 		Test.Click("Menu/Edit/Focus");
 
 		CHECK(IsSamePosition(Test.Editor.GetViewportCamera().GetFocusPoint(), FVector(-15.0, 0.0, 8.0)));
+	}
+
+	TEST_CASE("A click on a mesh in the viewport selects its entity, and a click beside it selects nothing")
+	{
+		FEditorUiTest Test;
+		const FViewportCamera Camera = Test.Editor.GetViewportCamera();
+		const int64 Crate = AddBox(Test, "Crate", Camera.GetFocusPoint());
+		Test.DrawFrame();
+		const std::size_t StepCount = Test.Editor.GetHistory().GetUndoStepNames().size();
+		REQUIRE(Test.Editor.GetSelection().empty());
+
+		// What the camera looks at is in the middle of the picture.
+		Test.Click("Viewport");
+
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Crate});
+		// What is selected shows where it does for a click in the outliner.
+		CHECK(Test.HasItem("Details/Name"));
+
+		// Three metres to the side there is nothing.
+		Test.ClickAt(FindInViewport(Test, Camera.GetFocusPoint() + FVector(Camera.GetRight()) * 3.0));
+
+		CHECK(Test.Editor.GetSelection().empty());
+		// Selecting is no change to the scene, and so no step of its history. Nor does it move the camera.
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames().size() == StepCount);
+		CHECK(Test.Editor.GetViewportCamera() == Camera);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("Of two meshes behind one another, a click selects the one that is seen")
+	{
+		FEditorUiTest Test;
+		const FViewportCamera Camera = Test.Editor.GetViewportCamera();
+		const FVector Ahead = FVector(Camera.GetForward());
+		// The one that is hidden is made first: the order of the entities is not what decides.
+		const int64 Behind = AddBox(Test, "Behind", Camera.GetFocusPoint() + Ahead * 3.0);
+		const int64 InFront = AddBox(Test, "In Front", Camera.GetFocusPoint());
+		Test.DrawFrame();
+
+		Test.Click("Viewport");
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{InFront});
+
+		// A mesh that is not drawn is clicked through.
+		WEntity* const FrontEntity = Test.Editor.GetScene().FindEntityById(InFront);
+		REQUIRE(FrontEntity != nullptr);
+		FrontEntity->FindComponent<WStaticMeshComponent>()->bVisible = false;
+		Test.DrawFrame();
+
+		Test.Click("Viewport");
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Behind});
+	}
+
+	TEST_CASE("A click selects the entity that shows the mesh, not the one above it")
+	{
+		FEditorUiTest Test;
+		const FViewportCamera Camera = Test.Editor.GetViewportCamera();
+		WEntity* const Cart = Test.Editor.GetScene().CreateEntity("Cart");
+		REQUIRE(Cart != nullptr);
+		const int64 Wheel = AddBox(Test, "Wheel", Camera.GetFocusPoint());
+		REQUIRE(Test.Editor.GetScene().FindEntityById(Wheel)->SetParent(Cart));
+		Test.DrawFrame();
+
+		Test.Click("Viewport");
+
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Wheel});
+	}
+
+	TEST_CASE("With Ctrl held, a click adds an entity to what is selected or takes it out")
+	{
+		FEditorUiTest Test;
+		const FViewportCamera Camera = Test.Editor.GetViewportCamera();
+		const FVector Right = FVector(Camera.GetRight());
+		const int64 Left = AddBox(Test, "Left", Camera.GetFocusPoint() - Right * 1.5);
+		const int64 Middle = AddBox(Test, "Middle", Camera.GetFocusPoint());
+		Test.DrawFrame();
+		const FVector2D OnLeft = FindInViewport(Test, Camera.GetFocusPoint() - Right * 1.5);
+		const FVector2D OnMiddle = FindInViewport(Test, Camera.GetFocusPoint());
+		const FVector2D OnNothing = FindInViewport(Test, Camera.GetFocusPoint() + Right * 3.0);
+
+		Test.ClickAt(OnLeft);
+		REQUIRE(Test.Editor.GetSelection() == std::vector<int64>{Left});
+
+		Test.SetKeyDown(EKey::LeftControl, true);
+		Test.ClickAt(OnMiddle);
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Left, Middle});
+
+		Test.ClickAt(OnLeft);
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Middle});
+
+		// On nothing, it leaves what is selected as it is.
+		Test.ClickAt(OnNothing);
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Middle});
+		Test.SetKeyDown(EKey::LeftControl, false);
+
+		// Without Ctrl, a click selects what it is on and nothing else.
+		Test.ClickAt(OnLeft);
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Left});
+	}
+
+	TEST_CASE("A press that takes the mouse somewhere else is no click")
+	{
+		FEditorUiTest Test;
+		const FViewportCamera Camera = Test.Editor.GetViewportCamera();
+		const FVector Right = FVector(Camera.GetRight());
+		const int64 Left = AddBox(Test, "Left", Camera.GetFocusPoint() - Right * 1.5);
+		AddBox(Test, "Middle", Camera.GetFocusPoint());
+		Test.DrawFrame();
+		const FVector2D OnLeft = FindInViewport(Test, Camera.GetFocusPoint() - Right * 1.5);
+		const FVector2D OnMiddle = FindInViewport(Test, Camera.GetFocusPoint());
+		const FVector2D OnNothing = FindInViewport(Test, Camera.GetFocusPoint() + Right * 3.0);
+		Test.ClickAt(OnLeft);
+		REQUIRE(Test.Editor.GetSelection() == std::vector<int64>{Left});
+
+		// From nothing onto a mesh, from a mesh onto nothing, and from one mesh onto the other.
+		Test.DragBetween(OnNothing, OnMiddle);
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Left});
+		Test.DragBetween(OnMiddle, OnNothing);
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Left});
+		Test.DragBetween(OnLeft, OnMiddle);
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Left});
+	}
+
+	TEST_CASE("The buttons that steer the camera select nothing")
+	{
+		FEditorUiTest Test;
+		const FViewportCamera Camera = Test.Editor.GetViewportCamera();
+		const FVector Right = FVector(Camera.GetRight());
+		const int64 Left = AddBox(Test, "Left", Camera.GetFocusPoint() - Right * 1.5);
+		AddBox(Test, "Middle", Camera.GetFocusPoint());
+		Test.DrawFrame();
+		Test.ClickAt(FindInViewport(Test, Camera.GetFocusPoint() - Right * 1.5));
+		REQUIRE(Test.Editor.GetSelection() == std::vector<int64>{Left});
+
+		// On the mesh in the middle, without moving the mouse: the right button, the middle one, and the left one
+		// with Alt held, which is the beginning of going around what the camera looks at.
+		Test.Click("Viewport", EMouseButton::Right);
+		Test.Click("Viewport", EMouseButton::Middle);
+		Test.SetKeyDown(EKey::LeftAlt, true);
+		Test.Click("Viewport");
+		Test.SetKeyDown(EKey::LeftAlt, false);
+
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Left});
+		CHECK(Test.Editor.GetViewportCamera() == Camera);
 	}
 }
