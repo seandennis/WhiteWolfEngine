@@ -4,6 +4,7 @@
 #include "Json/JsonReader.h"
 #include "Json/JsonValue.h"
 #include "Json/JsonWriter.h"
+#include "Platform/UserDirectories.h"
 
 #include <algorithm>
 #include <format>
@@ -14,6 +15,9 @@
 namespace
 {
 	constexpr std::string_view FormatName = "WhiteWolfProject";
+
+	/** The directory, in a person's documents, that the editor suggests to keep projects in. */
+	constexpr const char* DefaultLocationName = "White Wolf Projects";
 
 	/** Returns true if a project may be called this: what is allowed in a file name everywhere, and not blank. */
 	bool IsValidName(std::string_view Name)
@@ -45,6 +49,12 @@ namespace
 		std::ranges::sort(Files);
 		return Files;
 	}
+}
+
+std::filesystem::path FProject::GetDefaultLocation()
+{
+	const std::filesystem::path Documents = FUserDirectories::GetDocumentsDirectory();
+	return Documents.empty() ? std::filesystem::path() : Documents / DefaultLocationName;
 }
 
 std::optional<FProject> FProject::Create(

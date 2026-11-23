@@ -2,12 +2,15 @@
 
 #include "Math/Color.h"
 #include "Ui/ImGuiLibrary.h"
+#include "Ui/UiText.h"
 #include "Ui/UiTheme.h"
+
+#include <string_view>
 
 namespace
 {
-	/** How wide a field is, in heights of a letter. */
-	constexpr float FieldWidthInLetters = 30.0f;
+	/** How wide a field is, in heights of a letter: room for the whole path of a file. */
+	constexpr float FieldWidthInLetters = 40.0f;
 
 	constexpr float MaxChannel = 255.0f;
 }
@@ -42,4 +45,11 @@ void FUiDialog::ShowError(const std::string& Error)
 float FUiDialog::GetFieldWidth()
 {
 	return ImGui::GetFontSize() * FieldWidthInLetters;
+}
+
+std::string FUiDialog::FitPath(const std::string& Path, float Width)
+{
+	return FUiText::FitEnd(Path,
+		Width,
+		[](std::string_view Text) { return ImGui::CalcTextSize(Text.data(), Text.data() + Text.size()).x; });
 }

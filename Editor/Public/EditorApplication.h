@@ -9,7 +9,8 @@
 /**
  * What the editor's executable does, as a function that tests can call with streams of their own.
  *
- * WhiteWolfEditor                      opens the editor's window and runs until the window is closed
+ * WhiteWolfEditor                      opens the editor's window, asks which project to work on and runs until
+ *                                      the window is closed
  * WhiteWolfEditor --mcp                serves an AI agent on standard input and output (FAgentServer) until the
  *                                      input ends, without a window
  * WhiteWolfEditor --screenshot <file>  draws the editor without a window or a display and saves the picture as a

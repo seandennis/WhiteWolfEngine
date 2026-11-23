@@ -18,4 +18,16 @@ struct FUiRequests
 	 * yet, to one that the user is then asked for. The menu bar, which has the windows that ask, does it.
 	 */
 	bool bSaveScene = false;
+
+	/**
+	 * True if the user is to be asked which project to work on, as the editor asks when it starts. The menu bar
+	 * opens the window for it.
+	 */
+	bool bOpenProject = false;
+
+	/**
+	 * True if the user is to be asked for the name and the place of a project to make, as the window that opens
+	 * projects asks for someone who has none yet. The menu bar opens the window for it.
+	 */
+	bool bNewProject = false;
 };

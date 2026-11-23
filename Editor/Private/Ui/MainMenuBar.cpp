@@ -124,6 +124,17 @@ void FMainMenuBar::Draw(FUiFrame& Frame)
 			{
 				FUiCommands::FocusSelection(Frame.Editor);
 			}
+
+			// The windows for projects are also asked for from outside the menu bar: the first when the editor
+			// starts, the second by the first, for someone who has no project to open yet.
+			if (Frame.Requests.bOpenProject)
+			{
+				OpenProjectDialog.Open(Frame.Editor);
+			}
+			if (Frame.Requests.bNewProject)
+			{
+				NewProjectDialog.Open(Frame.Editor);
+			}
 		}
 
 		DrawFileMenu(Frame);
@@ -134,8 +145,12 @@ void FMainMenuBar::Draw(FUiFrame& Frame)
 	}
 	// A request that came while a window had to be answered is dropped with it, not kept for later.
 	Frame.Requests.bSaveScene = false;
+	Frame.Requests.bOpenProject = false;
+	Frame.Requests.bNewProject = false;
 
 	DrawAboutWindow(Frame);
+	OpenProjectDialog.Draw(Frame);
+	NewProjectDialog.Draw(Frame);
 	SaveSceneDialog.Draw(Frame);
 	OpenSceneDialog.Draw(Frame);
 }
@@ -163,6 +178,15 @@ void FMainMenuBar::DrawFileMenu(FUiFrame& Frame)
 		return;
 	}
 
+	if (MenuEntry(Frame, "File", "New Project...", nullptr))
+	{
+		NewProjectDialog.Open(Frame.Editor);
+	}
+	if (MenuEntry(Frame, "File", "Open Project...", nullptr))
+	{
+		OpenProjectDialog.Open(Frame.Editor);
+	}
+	ImGui::Separator();
 	if (MenuEntry(Frame, "File", "New Scene", "Ctrl+N"))
 	{
 		FUiCommands::NewScene(Frame.Editor);

@@ -15,6 +15,7 @@
 #include "Rendering/ImageFile.h"
 #include "Rendering/RenderTarget.h"
 #include "Settings/EditorSettings.h"
+#include "Ui/EditorUi.h"
 
 #include <chrono>
 #include <filesystem>
@@ -33,12 +34,13 @@ namespace
 	constexpr std::string_view Usage =
 		"White Wolf Engine editor\n"
 		"\n"
-		"  WhiteWolfEditor                      Open the editor.\n"
+		"  WhiteWolfEditor                      Open the editor. It asks which project to work on.\n"
 		"  WhiteWolfEditor --mcp                Serve an AI agent: a Model Context Protocol server on standard\n"
 		"                                       input and output, in which every command of the editor is a tool.\n"
 		"                                       No window is opened.\n"
 		"  WhiteWolfEditor --screenshot <file>  Draw the editor without opening a window and save the picture as\n"
-		"                                       a PNG file. Needs no display.\n"
+		"                                       a PNG file: the editor before a project is opened. Needs no\n"
+		"                                       display.\n"
 		"  WhiteWolfEditor --help               Print this help.\n";
 
 	/** How many frames are drawn before a screenshot is taken: a new layout takes a few to settle. */
@@ -150,8 +152,9 @@ namespace
 				else
 				{
 					// The editor that a person works in remembers which projects were opened, from one run to the
-					// next. A picture of the editor is the same whoever has it taken.
+					// next, and begins by asking which one to work on: a game is made in a project.
 					Editor.SetSettingsFile(FEditorSettings::GetUserFile());
+					Window->GetUi().AskForProject();
 
 					const bool bSucceeded = RunFrames(*Window, std::nullopt, std::nullopt, ErrorOutput);
 					ExitCode = bSucceeded ? SuccessExitCode : FailureExitCode;

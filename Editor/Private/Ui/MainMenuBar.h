@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 
+#include "Ui/Dialogs/NewProjectDialog.h"
+#include "Ui/Dialogs/OpenProjectDialog.h"
 #include "Ui/Dialogs/OpenSceneDialog.h"
 #include "Ui/Dialogs/SaveSceneDialog.h"
 
@@ -33,6 +35,8 @@ private:
 	/** Set by Help > About: the window that says what the editor is opens in the same frame. */
 	bool bWantsAboutWindow = false;
 
+	FNewProjectDialog NewProjectDialog;
+	FOpenProjectDialog OpenProjectDialog;
 	FSaveSceneDialog SaveSceneDialog;
 	FOpenSceneDialog OpenSceneDialog;
 };

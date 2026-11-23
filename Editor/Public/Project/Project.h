@@ -29,6 +29,16 @@ public:
 	static constexpr int32 FormatVersion = 1;
 
 	/**
+	 * Returns the directory that the editor suggests for a person's first project, to make the project's own
+	 * directory in: one of the engine's in the documents of the person who is logged in
+	 * (FUserDirectories::GetDocumentsDirectory). Nothing is created.
+	 *
+	 * @return The directory, whether or not it exists, or an empty path if the system does not say where a
+	 * person's documents are.
+	 */
+	EDITOR_API static std::filesystem::path GetDefaultLocation();
+
+	/**
 	 * Creates a project: the directory, if it does not exist, the project file in it and the content directory.
 	 *
 	 * @param Directory Where the project is to be. It must not hold a project already.

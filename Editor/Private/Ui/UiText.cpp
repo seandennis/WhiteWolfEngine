@@ -29,6 +29,17 @@ namespace
 
 	/** The letters that names of types begin with: object classes, other types, enums, interfaces and templates. */
 	constexpr std::string_view TypePrefixes = "WFEIT";
+
+	/**
+	 * Returns true if a byte of UTF-8 text is the first of a character. A character may take several bytes, and
+	 * all of them but the first have 10 as their two highest bits.
+	 */
+	bool BeginsCharacter(char Byte)
+	{
+		constexpr uint8 HighestBits = 0xC0;
+		constexpr uint8 FollowingByteBits = 0x80;
+		return (static_cast<uint8>(Byte) & HighestBits) != FollowingByteBits;
+	}
 }
 
 std::string FUiText::SplitWords(std::string_view Name)
@@ -86,4 +97,27 @@ bool FUiText::ContainsIgnoringCase(std::string_view Text, std::string_view Part)
 		Part.end(),
 		[](char Left, char Right) { return ToLower(Left) == ToLower(Right); });
 	return Part.empty() || Found != Text.end();
+}
+
+std::string FUiText::FitEnd(std::string_view Text, float Width, const std::function<float(std::string_view)>& Measure)
+{
+	if (Measure(Text) <= Width)
+	{
+		return std::string(Text);
+	}
+
+	// Going from the left, the first end that fits is the longest one that does.
+	for (std::size_t Start = 1; Start < Text.size(); ++Start)
+	{
+		if (BeginsCharacter(Text[Start]))
+		{
+			std::string Shortened(Ellipsis);
+			Shortened += Text.substr(Start);
+			if (Measure(Shortened) <= Width)
+			{
+				return Shortened;
+			}
+		}
+	}
+	return std::string(Ellipsis);
 }

@@ -123,6 +123,21 @@ namespace
 	}
 }
 
+FCommandResult FUiCommands::NewProject(FEditor& Editor, const std::string& Directory, const std::string& Name)
+{
+	FJsonValue Arguments = FJsonValue::MakeObject();
+	Arguments.SetMember("Directory", Directory);
+	Arguments.SetMember("Name", Name);
+	return Editor.ExecuteCommand("Project.New", Arguments);
+}
+
+FCommandResult FUiCommands::OpenProject(FEditor& Editor, const std::string& Path)
+{
+	FJsonValue Arguments = FJsonValue::MakeObject();
+	Arguments.SetMember("Path", Path);
+	return Editor.ExecuteCommand("Project.Open", Arguments);
+}
+
 void FUiCommands::NewScene(FEditor& Editor)
 {
 	Editor.ExecuteCommand("Scene.New", FJsonValue());
@@ -316,6 +331,7 @@ void FUiCommands::AddEntity(FEditor& Editor, const FUiNewEntity& NewEntity)
 	}
 	SetSelection(Editor, {EntityId});
 }
+
 void FUiCommands::FocusSelection(FEditor& Editor)
 {
 	// With nothing selected there is nothing to look at, which the command would say by failing.

@@ -2,16 +2,20 @@
 
 #include "CoreMinimal.h"
 
+#include <functional>
 #include <string>
 #include <string_view>
 
 /**
- * How the user interface words what it shows: the names of the code as people read them, and the search for text
- * in text that its search fields do.
+ * How the user interface words what it shows: the names of the code as people read them, the search for text in
+ * text that its search fields do, and what to show of a text that is too long for its place.
  */
 class FUiText
 {
 public:
+	/** What FitEnd puts in the place of the beginning that it leaves out. */
+	static constexpr std::string_view Ellipsis = "...";
+
 	/**
 	 * Returns a name of the code with its words apart: "CastShadows" is "Cast Shadows", "HDRImage" is "HDR Image"
 	 * and "Level2Boss" is "Level 2 Boss". An underscore becomes a space. A name that already has spaces, or that
@@ -36,4 +40,18 @@ public:
 	 * contains the empty one.
 	 */
 	EDITOR_API static bool ContainsIgnoringCase(std::string_view Text, std::string_view Part);
+
+	/**
+	 * Returns a text as it is shown where it has only so much room: whole if it fits, and otherwise as much of
+	 * its end as fits after Ellipsis. That is how to shorten a path, whose end says which file or directory it is
+	 * and whose beginning only where the disk begins. What is left out is whole characters, never part of one.
+	 *
+	 * @param Text The text, in UTF-8.
+	 * @param Width How much room there is, in the unit that Measure answers in.
+	 * @param Measure Returns how wide a text is as it will be drawn.
+	 * @return What to show: Text, or the end of it after Ellipsis, or Ellipsis alone if not even one character
+	 * fits beside it.
+	 */
+	EDITOR_API static std::string FitEnd(
+		std::string_view Text, float Width, const std::function<float(std::string_view)>& Measure);
 };

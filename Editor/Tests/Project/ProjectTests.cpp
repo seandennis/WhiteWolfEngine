@@ -1,6 +1,7 @@
 #include "Project/Project.h"
 
 #include "Core/FileHelper.h"
+#include "Platform/UserDirectories.h"
 #include "TestSupport/ScopedTempDirectory.h"
 
 #include <doctest/doctest.h>
@@ -211,6 +212,23 @@ TEST_SUITE("FProject")
 
 		INFO("Error: ", Error);
 		CHECK(Error.find(ExpectedReason) != std::string::npos);
+	}
+
+	TEST_CASE("The place suggested for a first project is a directory of the engine's in the user's documents")
+	{
+		const std::filesystem::path Documents = FUserDirectories::GetDocumentsDirectory();
+
+		const std::filesystem::path Location = FProject::GetDefaultLocation();
+
+		if (Documents.empty())
+		{
+			// A system that does not say where a person's documents are has no place to suggest.
+			CHECK(Location.empty());
+		}
+		else
+		{
+			CHECK(Location == Documents / "White Wolf Projects");
+		}
 	}
 
 	TEST_CASE("The name of a project is what its file says, whatever the file is called")

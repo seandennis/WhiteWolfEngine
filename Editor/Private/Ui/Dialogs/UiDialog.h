@@ -25,4 +25,10 @@ public:
 
 	/** Returns how wide the fields and lists of such a window are, in pixels: room for a path. */
 	static float GetFieldWidth();
+
+	/**
+	 * Returns a path as it is shown where it has only so many pixels to itself, in the letters that are being
+	 * drawn with: whole if it fits, and otherwise its end, which says the most about it (FUiText::FitEnd).
+	 */
+	static std::string FitPath(const std::string& Path, float Width);
 };

@@ -24,6 +24,17 @@ struct FUiNewEntity;
 class FUiCommands
 {
 public:
+	/**
+	 * Project.New: makes a project and has the editor work on it.
+	 *
+	 * @param Directory The project's own directory, which is made if it is not there.
+	 * @param Name The project's name, which also names its file.
+	 */
+	static FCommandResult NewProject(FEditor& Editor, const std::string& Directory, const std::string& Name);
+
+	/** Project.Open: has the editor work on the project in a project file, or in a directory that holds one. */
+	static FCommandResult OpenProject(FEditor& Editor, const std::string& Path);
+
 	/** Scene.New: replaces the scene being edited with an empty one. */
 	static void NewScene(FEditor& Editor);
 

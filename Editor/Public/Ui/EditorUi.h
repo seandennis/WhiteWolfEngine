@@ -87,6 +87,14 @@ public:
 	EDITOR_API std::optional<FUiRectangle> FindItem(std::string_view Name) const;
 
 	/**
+	 * Has the window open, in the next frame, that asks which project to work on: the one that File > Open
+	 * Project opens, with the projects that were opened last to choose from and a way to make a new one. The
+	 * executable asks for it when it starts, because a game is made in a project. Does nothing while another
+	 * window is open that has to be answered first.
+	 */
+	EDITOR_API void AskForProject();
+
+	/**
 	 * Returns true if the last frame left the user in the middle of something that needs the mouse to itself and
 	 * free to move without end, as steering the viewport's camera with a button held down does. Whoever shows the
 	 * user interface in a window takes the mouse for that long (FWindow::CaptureMouse) and gives it back after.

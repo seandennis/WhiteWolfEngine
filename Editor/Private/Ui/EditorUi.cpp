@@ -254,6 +254,11 @@ std::optional<FUiRectangle> FEditorUi::FindItem(std::string_view Name) const
 	return Implementation->Items.Find(Name);
 }
 
+void FEditorUi::AskForProject()
+{
+	Implementation->Requests.bOpenProject = true;
+}
+
 bool FEditorUi::WantsMouseCaptured() const
 {
 	return Implementation->Viewport.IsNavigating();

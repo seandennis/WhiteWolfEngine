@@ -27,18 +27,19 @@
 #include <string_view>
 
 /**
- * Gives an editor a new project called "Game" in a directory, and returns the project's content directory.
- * Whatever the editor had in its scene is gone, as it is when a project is opened.
+ * Gives an editor a new project, in a directory of the project's name below the given one, and returns the
+ * project's content directory. Whatever the editor had in its scene is gone, as it is when a project is opened.
  */
-inline std::filesystem::path CreateTestProject(FEditor& Editor, const std::filesystem::path& Directory)
+inline std::filesystem::path CreateTestProject(
+	FEditor& Editor, const std::filesystem::path& Directory, const std::string& Name = "Game")
 {
 	FJsonValue Arguments = FJsonValue::MakeObject();
-	Arguments.SetMember("Directory", FFileHelper::PathToUtf8(Directory / "Game"));
-	Arguments.SetMember("Name", "Game");
+	Arguments.SetMember("Directory", FFileHelper::PathToUtf8(Directory / Name));
+	Arguments.SetMember("Name", Name);
 	const FCommandResult Result = Editor.ExecuteCommand("Project.New", Arguments);
 	INFO("Error: ", Result.GetError());
 	REQUIRE(Result.HasSucceeded());
-	return Directory / "Game" / "Content";
+	return Directory / Name / "Content";
 }
 
 /**
