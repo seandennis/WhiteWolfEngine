@@ -61,6 +61,13 @@ public:
 	/** Returns the registered class with the given name, or null if there is none. */
 	static WClass* FindByName(std::string_view ClassName);
 
+	/**
+	 * Returns every registered class, of every module that is loaded, in the order they were registered: a class
+	 * always comes after its base class. This is how to find the classes that derive from one, such as the
+	 * components there are, without naming them.
+	 */
+	static std::vector<WClass*> GetAllClasses();
+
 	/** Returns the class name, including its prefix. */
 	const std::string& GetName() const
 	{

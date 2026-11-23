@@ -8,9 +8,12 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <format>
 #include <ostream>
 #include <string>
+#include <string_view>
+#include <vector>
 
 TEST_SUITE("Component commands")
 {
@@ -72,6 +75,18 @@ TEST_SUITE("Component commands")
 			ExpectedError = "The class WEditorTestAbstractComponent is abstract: there can be no component of that "
 							"class itself.";
 		}
+		SUBCASE("The class that all components derive from")
+		{
+			ArgumentText = std::format(R"({{"Entity": {}, "Class": "WComponent"}})", Entity->GetId());
+			ExpectedError = "The class WComponent is what all components have in common and holds nothing by itself. "
+							"Add a component of one of the classes that Component.ListClasses returns.";
+		}
+		SUBCASE("The class that stands in for classes that are missing")
+		{
+			ArgumentText = std::format(R"({{"Entity": {}, "Class": "WMissingComponent"}})", Entity->GetId());
+			ExpectedError = "The class WMissingComponent stands in for the components of a scene file whose class is "
+							"not in this build. Loading a scene makes them; they cannot be added.";
+		}
 
 		const FCommandResult Result = Editor.ExecuteCommand("Component.Add", ParseTestJson(ArgumentText));
 
@@ -126,5 +141,55 @@ TEST_SUITE("Component commands")
 		CHECK(Result.GetError() == std::format("There is no component with the identifier {}.", MissingId));
 		CHECK(IsValid(Entity));
 		CHECK(Entity->GetComponents().size() == 1);
+	}
+
+	TEST_CASE("Component.ListClasses names the classes that Component.Add accepts, in the order of their names")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		const WEntity* const Entity = Editor.GetScene().CreateEntity("Player");
+		REQUIRE(Entity != nullptr);
+
+		const FCommandResult Result = Editor.ExecuteCommand("Component.ListClasses", FJsonValue());
+
+		REQUIRE(Result.HasSucceeded());
+		const FJsonValue* const Classes = Result.GetValue().FindMember("Classes");
+		REQUIRE(Classes != nullptr);
+		REQUIRE(Classes->IsArray());
+		std::vector<std::string> Names;
+		for (const FJsonValue& Class : Classes->GetElements())
+		{
+			Names.push_back(Class.GetString());
+		}
+
+		const auto IsListed = [&Names](std::string_view Name)
+		{
+			return std::ranges::find(Names, Name) != Names.end();
+		};
+		// The engine's components and those that another module, here the tests, has registered.
+		CHECK(IsListed("WStaticMeshComponent"));
+		CHECK(IsListed("WDirectionalLightComponent"));
+		CHECK(IsListed("WPointLightComponent"));
+		CHECK(IsListed("WSkyLightComponent"));
+		CHECK(IsListed("WEditorTestComponent"));
+		CHECK(IsListed("WEditorTestDerivedComponent"));
+		// Nothing that an entity cannot be given.
+		CHECK_FALSE(IsListed("WComponent"));
+		CHECK_FALSE(IsListed("WMissingComponent"));
+		CHECK_FALSE(IsListed("WEditorTestAbstractComponent"));
+		CHECK_FALSE(IsListed("WEntity"));
+		CHECK(std::ranges::is_sorted(Names));
+
+		// Listing changes nothing, and every class that is listed can be added.
+		CHECK(Entity->GetComponents().empty());
+		for (const std::string& Name : Names)
+		{
+			CAPTURE(Name);
+			CHECK(Editor
+					  .ExecuteCommand("Component.Add",
+						  ParseTestJson(std::format(R"({{"Entity": {}, "Class": "{}"}})", Entity->GetId(), Name)))
+					  .HasSucceeded());
+		}
+		CHECK(Entity->GetComponents().size() == Names.size());
 	}
 }

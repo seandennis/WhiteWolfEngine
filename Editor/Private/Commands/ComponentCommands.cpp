@@ -1,7 +1,9 @@
 #include "Commands/ComponentCommands.h"
 
+#include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
 #include "Commands/CommandTargets.h"
+#include "Commands/ComponentClasses.h"
 #include "Editor.h"
 #include "Json/JsonValue.h"
 #include "Object/Class.h"
@@ -29,14 +31,9 @@ namespace
 		{
 			return FCommandResult::Failure(std::format("There is no class \"{}\".", ClassName));
 		}
-		if (!Class->IsChildOf(WComponent::StaticClass()))
+		if (!FComponentClasses::CanBeAdded(*Class, Error))
 		{
-			return FCommandResult::Failure(std::format("The class {} is not a component class.", ClassName));
-		}
-		if (Class->IsAbstract())
-		{
-			return FCommandResult::Failure(
-				std::format("The class {} is abstract: there can be no component of that class itself.", ClassName));
+			return FCommandResult::Failure(std::move(Error));
 		}
 
 		const WComponent* const Component = Entity->AddComponent(Class);
@@ -62,6 +59,19 @@ namespace
 		Component->Destroy();
 		return FCommandResult::Success();
 	}
+
+	FCommandResult ListClasses(FEditor& /*Editor*/, const FCommandArguments& /*Arguments*/)
+	{
+		FJsonValue Classes = FJsonValue::MakeArray();
+		for (const WClass* const Class : FComponentClasses::GetAddable())
+		{
+			Classes.AddElement(Class->GetName());
+		}
+
+		FJsonValue Value = FJsonValue::MakeObject();
+		Value.SetMember("Classes", std::move(Classes));
+		return FCommandResult::Success(std::move(Value));
+	}
 }
 
 void FComponentCommands::Register(FCommandRegistry& Registry)
@@ -80,4 +90,13 @@ void FComponentCommands::Register(FCommandRegistry& Registry)
 						  {FCommandParameter::Required(
 							  "Component", ECommandArgumentType::Integer, "The identifier of the component.")}},
 		RemoveComponent);
+
+	Registry.Register(
+		{"Component.ListClasses",
+			"Returns the names of the classes of components that Component.Add can give an entity, those of plugins "
+			"that are loaded included, in the order of the names. What a component of a class holds is seen by "
+			"adding one and asking for its properties with Object.GetProperties.",
+			{},
+			ECommandEffect::LeavesScene},
+		ListClasses);
 }

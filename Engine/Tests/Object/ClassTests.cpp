@@ -11,6 +11,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -76,6 +77,39 @@ TEST_SUITE("WClass")
 	{
 		// Nothing in the tests calls WTestOwnerObject::StaticClass() before this lookup can run.
 		CHECK(WClass::FindByName("WTestOwnerObject") != nullptr);
+	}
+
+	TEST_CASE("GetAllClasses lists every registered class once, a class after its base class")
+	{
+		// The engine's own classes, and those that another module, the tests, registered.
+		const std::vector<const WClass*> ExpectedClasses = {WObject::StaticClass(),
+			WClass::StaticClass(),
+			WTestObject::StaticClass(),
+			WTestDerivedObject::StaticClass(),
+			WTestAbstractObject::StaticClass()};
+
+		const std::vector<WClass*> Classes = WClass::GetAllClasses();
+
+		const auto Find = [&Classes](const WClass* Class)
+		{
+			return std::ranges::find(Classes, Class);
+		};
+		for (const WClass* const Expected : ExpectedClasses)
+		{
+			CAPTURE(Expected->GetName());
+			CHECK(std::ranges::count(Classes, Expected) == 1);
+		}
+
+		for (const WClass* const Class : Classes)
+		{
+			REQUIRE(Class != nullptr);
+			CAPTURE(Class->GetName());
+			CHECK(WClass::FindByName(Class->GetName()) == Class);
+			if (Class->GetSuperClass() != nullptr)
+			{
+				CHECK(Find(Class->GetSuperClass()) < Find(Class));
+			}
+		}
 	}
 
 	TEST_CASE("A class with a pure virtual function is abstract")

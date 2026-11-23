@@ -55,6 +55,12 @@ public:
 	WClass* RegisterNativeClass(const FNativeClassDescription& Description);
 	WClass* FindClass(std::string_view Name) const;
 
+	/** Returns the registered classes, in registration order: a class always comes after its base class. */
+	const std::vector<WClass*>& GetClasses() const
+	{
+		return Classes;
+	}
+
 	/** Creates an instance of Class, which must not be null or abstract. */
 	WObject* CreateObject(WClass* Class);
 

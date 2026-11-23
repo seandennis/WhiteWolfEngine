@@ -21,6 +21,11 @@ WClass* WClass::FindByName(std::string_view ClassName)
 	return FObjectSystem::Get().FindClass(ClassName);
 }
 
+std::vector<WClass*> WClass::GetAllClasses()
+{
+	return FObjectSystem::Get().GetClasses();
+}
+
 bool WClass::IsChildOf(const WClass* Other) const
 {
 	for (const WClass* Current = this; Current != nullptr; Current = Current->SuperClass)

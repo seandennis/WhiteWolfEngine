@@ -1006,3 +1006,20 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Alternatives considered.** glm's own functions for angles use another order (roll around Z last), in which a yaw of a tilted object is not a turn around the up axis. Storing angles in the transform, as Unreal does with its rotator, makes typed angles come back as typed, but then every rotation that is calculated has to be turned into angles, which loses precision and has no single answer. An axis and an angle are exact but not how people think of the way an object faces.
 
 **Testing.** What each angle does to the forward, right and up directions; that yaw turns around the up axis whatever the other angles are; that angles in range come back as they went in; that angles out of range and arbitrary quaternions come back in range and as the same rotation; and both vertical cases, with the yaw taking over the roll.
+
+## D-057: The components that can be added are the classes that derive from WComponent
+
+**Status:** Accepted.
+
+**Context.** An agent could add a component only if it knew the name of its class, and the Details panel needs the list to offer. Plugins and game modules will bring classes of their own, so the list cannot be written down anywhere.
+
+**Decision.**
+
+- **`WClass::GetAllClasses` returns every registered class,** of every module that is loaded, a class after its base class. It is how anything finds the classes that derive from one.
+- **A class can be added if it derives from `WComponent`, is not abstract, is not `WComponent` itself and is not `WMissingComponent`.** The base class holds nothing and would only be a mistake in a scene. `WMissingComponent` stands in for a class that a scene file names and this build lacks (D-024); one that was added by hand would be saved under no class name at all. `FComponentClasses::CanBeAdded` is that rule, with a sentence for each refusal, and `Component.Add` refuses by it: before, it accepted both classes.
+- **`Component.ListClasses` returns the names of the classes that can be added,** in the order of the names. It is `FComponentClasses::GetAddable`, which the Details panel offers from too, so that what the panel lists is what the command accepts.
+- **What a class holds is not listed.** An agent adds a component and asks for its properties, which it has to do to work with it anyway.
+
+**Alternatives considered.** A specifier on `WCLASS()` that hides a class from the list is what a second class that must be hidden will justify; for two classes of the engine it is machinery in the header tool for nothing. A registry that component classes add themselves to is one more thing for every new class to remember, which reflection exists to avoid.
+
+**Testing.** That `GetAllClasses` lists every class once and after its base class, classes of the test module included; that `Component.ListClasses` lists the engine's components and the tests', sorted, without the base class, the stand-in, an abstract class and a class that is not a component, and that every class it lists can be added; and the sentences with which `Component.Add` refuses the base class and the stand-in.
