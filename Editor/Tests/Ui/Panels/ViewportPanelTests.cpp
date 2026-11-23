@@ -6,6 +6,8 @@
 #include "Scene/Scene.h"
 #include "Ui/Panels/TestViewport.h"
 #include "Ui/TestEditorUi.h"
+#include "Viewport/GizmoMode.h"
+#include "Viewport/GizmoSettings.h"
 #include "Viewport/ViewportCamera.h"
 
 #include <doctest/doctest.h>
@@ -326,6 +328,58 @@ TEST_SUITE("FViewportPanel")
 
 		CHECK_FALSE(Test.Ui->WantsMouseCaptured());
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
+	}
+
+	TEST_CASE("Letting go of Alt over the viewport leaves the keyboard where it was")
+	{
+		FEditorUiTest Test;
+		REQUIRE(Test.Editor.GetGizmoSettings().Mode == EGizmoMode::Translate);
+
+		// Alt by itself takes the keyboard to the menu bar, as in every program that has one. On the picture Alt
+		// is a key of the mouse, and must not: Space would then press a menu, and no longer go on to the next
+		// thing that the gizmo does.
+		SUBCASE("After the camera has gone around with Alt and the left button")
+		{
+			Test.SetKeyDown(EKey::LeftAlt, true);
+			PressOnViewport(Test, EMouseButton::Left);
+			MoveBy(Test, FVector2D(60.0, 10.0));
+			Release(Test, EMouseButton::Left);
+			Test.SetKeyDown(EKey::LeftAlt, false);
+		}
+		SUBCASE("After the camera has moved closer with Alt and the right button")
+		{
+			Test.SetKeyDown(EKey::LeftAlt, true);
+			PressOnViewport(Test, EMouseButton::Right);
+			MoveBy(Test, FVector2D(20.0, 0.0));
+			Release(Test, EMouseButton::Right);
+			Test.SetKeyDown(EKey::LeftAlt, false);
+		}
+		SUBCASE("With the mouse on the picture and no button held")
+		{
+			Test.MoveMouse(Test.RequireItem("Viewport").GetCenter());
+			Test.SetKeyDown(EKey::LeftAlt, true);
+			Test.SetKeyDown(EKey::LeftAlt, false);
+		}
+		Test.DrawFrames(3);
+
+		Test.PressKey(EKey::Space);
+
+		CHECK(Test.Editor.GetGizmoSettings().Mode == EGizmoMode::Rotate);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("Over another panel, Alt is the menu bar's key as before")
+	{
+		FEditorUiTest Test;
+
+		Test.MoveMouse(Test.RequireItem("Details/NothingSelected").GetCenter());
+		Test.SetKeyDown(EKey::LeftAlt, true);
+		Test.SetKeyDown(EKey::LeftAlt, false);
+		Test.DrawFrames(3);
+		Test.PressKey(EKey::Space);
+
+		// The keyboard is with the menu bar, and Space is not the gizmo's.
+		CHECK(Test.Editor.GetGizmoSettings().Mode == EGizmoMode::Translate);
 	}
 
 	TEST_CASE("F brings the camera to where it sees what is selected, without turning it")

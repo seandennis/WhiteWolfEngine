@@ -1311,3 +1311,20 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** The renderer has no wireframe view and no views of its shadow cascades yet, so the list has neither. What the toolbar sets is not remembered from one run of the editor to the next. The steps on offer are fixed; another step can be set by code only. The camera's speed has no list of speeds to choose from.
 
 **Testing.** In the user interface: every button of the toolbar in one row within the picture, and in two rows in a narrow window, where the second row is used; the three buttons of the mode, with the gizmo's handles changing and neither the history nor the selection; the button of the axes, in one place whichever word it shows; the buttons that switch steps on and off, each by itself; the lists, below their buttons, with every step on offer chosen once and taken by the gizmo; a drag of the gizmo in the steps that the toolbar set; the camera's speed dragged up, dragged to its least, typed, typed too large and too small, and typed as something that is no number; the view modes; a click, the right button and the wheel on the toolbar with a wall behind it that fills the picture; W, E, R and Space, with Ctrl, while a name is typed, while the right and the left button are held, and while a window has to be answered; the entries of the Edit menu; and settings made by code, which the toolbar shows and leaves alone. The reference image of the default layout has the toolbar, and the gizmo on the crate that is selected in it.
+
+## D-071: On the viewport, Alt is the viewport's key
+
+**Status:** Accepted.
+
+**Context.** On the viewport, Alt with a mouse button steers the camera (D-059). The library that lays the user interface out takes the keyboard to the menu bar when Alt is pressed and let go by itself, as every program with a menu bar does, and a mouse button that was pressed in between does not count for it. So after each time the camera had gone around something, the keyboard was the menu bar's: the arrow keys went through its menus, and Space pressed one of them, where it should have gone on to the next thing that the gizmo does (D-070).
+
+**Decision.**
+
+- **While the mouse is on the picture of the viewport, or a button is held down on it, Alt belongs to the picture** (`ImGui::SetItemKeyOwner`). The library does not take the keyboard anywhere for a key that has an owner.
+- **Over the rest of the window, Alt is the menu bar's key as before.**
+
+**Alternatives considered.** The library has no setting for what Alt by itself does: it is part of going through the user interface with the keyboard, which the menus need. Taking the key only while a button is held leaves out the press of Alt that comes before the button, and the one that is thought better of.
+
+**Limits.** With the mouse on the viewport, the keyboard alone does not reach the menu bar.
+
+**Testing.** In the user interface, where Space goes on to the next thing that the gizmo does only while the keyboard is not the menu bar's: after the camera has gone around with Alt and the left button, after it has moved closer with Alt and the right one, and after Alt by itself with the mouse on the picture, Space reaches the gizmo; after Alt by itself with the mouse on another panel, it does not. The first three fail without the key being the picture's.
