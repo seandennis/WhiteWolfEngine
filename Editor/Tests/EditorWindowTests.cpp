@@ -146,14 +146,18 @@ TEST_SUITE("FEditorWindow")
 		const std::optional<FUiRectangle> Viewport = Test.Window->GetUi().FindItem("Viewport");
 		const std::optional<FUiRectangle> Outliner = Test.Window->GetUi().FindItem("Outliner/Search");
 		const std::optional<FUiRectangle> Log = Test.Window->GetUi().FindItem("OutputLog/Search");
+		const std::optional<FUiRectangle> Messages = Test.Window->GetUi().FindItem("OutputLog/Messages");
 		REQUIRE(Viewport.has_value());
 		REQUIRE(Outliner.has_value());
 		REQUIRE(Log.has_value());
+		REQUIRE(Messages.has_value());
 		CHECK(Outliner->Right > 1000.0f);
-		CHECK(Outliner->Right <= 1024.0f);
+		CHECK(Outliner->Right < 1024.0f);
 		CHECK(Viewport->Bottom > 300.0f);
 		CHECK(Log->Top > Viewport->Bottom);
-		CHECK(Log->Bottom <= 500.0f);
+		// An item that reached beyond the picture would be found ending at its edge.
+		CHECK(Messages->Bottom > 480.0f);
+		CHECK(Messages->Bottom < 500.0f);
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 

@@ -33,20 +33,25 @@ private:
 	struct FLine
 	{
 		ELogVerbosity Verbosity = ELogVerbosity::Log;
-		std::string Category;
 
-		/** What the message says, on one line whatever it was logged as. */
+		/** What the line says: what the message is about and what it says, on one line whatever it was logged as. */
 		std::string Text;
+
+		/** The number that the message has among all that were ever logged (FMemoryLogSink::GetMessages). */
+		int64 Number = 0;
 	};
 
-	/** Fetches the messages again if the log has changed since they were fetched, or what is wanted of it has. */
+	/**
+	 * Fetches the messages again if the log has changed since they were fetched, or what is wanted of it has, and
+	 * measures them. Call it while the panel is being laid out: it asks how wide letters are.
+	 */
 	void Refresh(const FEditor& Editor);
 
 	/** Lays out what chooses among the messages, and the button that forgets them. */
 	void DrawFilter(FUiFrame& Frame);
 
 	/** Lays out the messages that are wanted, of which those in sight are drawn. */
-	void DrawLines(FUiFrame& Frame) const;
+	void DrawLines(FUiFrame& Frame);
 
 	/** Which messages the user wants to see. To begin with, all that the log keeps. */
 	FLogFilter Filter;
@@ -60,4 +65,14 @@ private:
 	/** What the log's revision was when the messages were fetched, and what was wanted of them then. */
 	int64 FetchedRevision = -1;
 	FLogFilter FetchedFilter;
+
+	/** How wide the widest of the lines is, in pixels, and the size of the letters that it was measured with. */
+	float WidestLine = 0.0f;
+	float MeasuredFontSize = 0.0f;
+
+	/**
+	 * How many of the lines that were shown have gone from the top of the list since the list was last laid out:
+	 * those of messages that a full log has discarded for newer ones.
+	 */
+	int32 GoneLineCount = 0;
 };

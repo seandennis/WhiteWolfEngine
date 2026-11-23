@@ -143,6 +143,35 @@ TEST_SUITE("FMemoryLogSink")
 		CHECK(AfterClear != Empty);
 	}
 
+	TEST_CASE("Messages are numbered through everything that was ever written, whatever has been discarded since")
+	{
+		FMemoryLogSink Sink(2);
+		int64 FirstNumber = -1;
+		CHECK(Sink.GetMessages(FirstNumber).empty());
+		CHECK(FirstNumber == 0);
+
+		Sink.Write(MakeMessage("0"));
+		Sink.Write(MakeMessage("1"));
+		REQUIRE(Sink.GetMessages(FirstNumber).size() == 2);
+		CHECK(FirstNumber == 0);
+
+		// The third pushes the first out: what is stored begins with the message that has the number one.
+		Sink.Write(MakeMessage("2"));
+		const std::vector<FLogMessage> Messages = Sink.GetMessages(FirstNumber);
+		REQUIRE(Messages.size() == 2);
+		CHECK(Messages[0].Text == "1");
+		CHECK(Messages[1].Text == "2");
+		CHECK(FirstNumber == 1);
+
+		// Emptied, the sink goes on counting where it was.
+		Sink.Clear();
+		CHECK(Sink.GetMessages(FirstNumber).empty());
+		CHECK(FirstNumber == 3);
+		Sink.Write(MakeMessage("3"));
+		REQUIRE(Sink.GetMessages(FirstNumber).size() == 1);
+		CHECK(FirstNumber == 3);
+	}
+
 	TEST_CASE("GetMessages returns a snapshot that later writes do not change")
 	{
 		FMemoryLogSink Sink;

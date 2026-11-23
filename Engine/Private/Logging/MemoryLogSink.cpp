@@ -20,12 +20,23 @@ void FMemoryLogSink::Write(const FLogMessage& Message)
 	}
 	Messages.push_back(Message);
 	++Revision;
+	++WrittenCount;
 }
 
 std::vector<FLogMessage> FMemoryLogSink::GetMessages() const
 {
 	const std::scoped_lock Lock(Mutex);
 
+	return std::vector<FLogMessage>(Messages.begin(), Messages.end());
+}
+
+std::vector<FLogMessage> FMemoryLogSink::GetMessages(int64& OutFirstNumber) const
+{
+	// The messages and their numbers are taken together: a message that another thread writes in between would
+	// make the numbers those of other messages.
+	const std::scoped_lock Lock(Mutex);
+
+	OutFirstNumber = WrittenCount - static_cast<int64>(Messages.size());
 	return std::vector<FLogMessage>(Messages.begin(), Messages.end());
 }
 

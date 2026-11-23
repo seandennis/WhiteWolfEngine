@@ -207,8 +207,10 @@ TEST_SUITE("FEditorUi")
 		const FUiRectangle Log = Test.RequireItem("OutputLog/Search");
 		CHECK(Viewport.Right < SearchAfter.Left);
 		CHECK(Log.Top > Viewport.Bottom);
-		CHECK(Log.Bottom <= static_cast<float>(FEditorUiTest::DefaultHeight));
-		CHECK(SearchAfter.Right <= static_cast<float>(FEditorUiTest::DefaultWidth));
+		// The list of messages reaches down to the bottom of the surface, but for the edge of its panel.
+		constexpr float PanelEdge = 40.0f;
+		CHECK(Test.RequireItem("OutputLog/Messages").Bottom >=
+			static_cast<float>(FEditorUiTest::DefaultHeight) - PanelEdge);
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 

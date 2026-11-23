@@ -32,6 +32,16 @@ public:
 	std::vector<FLogMessage> GetMessages() const;
 
 	/**
+	 * Returns a copy of the stored messages, oldest first, and says which they are of all that were ever written.
+	 *
+	 * @param OutFirstNumber The number of the first of them, counted from zero through everything that was ever
+	 * written to the sink; for a sink that stores nothing, the number that the next message will have. A message
+	 * keeps its number for as long as it is stored, and the one after it has the next. Whoever shows the messages
+	 * can so tell which of those that it showed before have been discarded since.
+	 */
+	std::vector<FLogMessage> GetMessages(int64& OutFirstNumber) const;
+
+	/**
 	 * Returns a number that is another one after every change to what is stored: a message that was written, and
 	 * the messages being discarded. Whoever shows the messages keeps the number that went with its copy of them,
 	 * and fetches them again only when the number is no longer that.
@@ -48,4 +58,7 @@ private:
 
 	/** How many times what is stored has changed. */
 	int64 Revision = 0;
+
+	/** How many messages were ever written to the sink, those that have been discarded included. */
+	int64 WrittenCount = 0;
 };

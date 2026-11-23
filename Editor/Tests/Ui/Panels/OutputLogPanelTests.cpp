@@ -42,6 +42,19 @@ namespace
 		return Count;
 	}
 
+	/** Returns the first of the lines that are in sight, or -1 if none is. */
+	int32 FindFirstLineInSight(const FEditorUiTest& Test, int32 LineCount)
+	{
+		for (int32 Index = 0; Index < LineCount; ++Index)
+		{
+			if (Test.HasItem(Line(Index)))
+			{
+				return Index;
+			}
+		}
+		return -1;
+	}
+
 	/** An editor with its user interface, and a log that holds nothing yet. */
 	struct FLogTest : FEditorUiTest
 	{
@@ -207,7 +220,15 @@ TEST_SUITE("FOutputLogPanel")
 	TEST_CASE("The second list offers the categories that have messages, and chooses one of them")
 	{
 		FLogTest Test;
+
+		// While nothing is logged there is nothing to choose but all of them.
+		Test.Click("OutputLog/Category");
+		REQUIRE(Test.HasItem("OutputLog/Category/All categories"));
 		CHECK_FALSE(Test.HasItem("OutputLog/Category/LogCore"));
+		CHECK_FALSE(Test.HasItem("OutputLog/Category/LogEditor"));
+		Test.PressKey(EKey::Escape);
+		REQUIRE_FALSE(Test.HasItem("OutputLog/Category/All categories"));
+
 		WW_LOG(LogEditor, Log, "From the editor");
 		WW_LOG(LogCore, Log, "From the engine");
 		WW_LOG(LogEditor, Log, "From the editor again");
@@ -230,6 +251,14 @@ TEST_SUITE("FOutputLogPanel")
 
 		Choose(Test, "Category", "All categories");
 		CHECK(CountLines(Test) == 3);
+
+		// A category whose messages the log has forgotten is no longer on offer.
+		Test.Click("OutputLog/Clear");
+		WW_LOG(LogEditor, Log, "After");
+		Test.DrawFrames(2);
+		Test.Click("OutputLog/Category");
+		REQUIRE(Test.HasItem("OutputLog/Category/LogEditor"));
+		CHECK_FALSE(Test.HasItem("OutputLog/Category/LogCore"));
 	}
 
 	TEST_CASE("The field shows the messages that have what is typed into it")
@@ -288,10 +317,13 @@ TEST_SUITE("FOutputLogPanel")
 		}
 		Test.DrawFrames(3);
 
-		CHECK(Test.HasItem(Line(199)));
 		CHECK_FALSE(Test.HasItem(Line(0)));
-		// The last of them is on the surface, above its bottom edge.
-		CHECK(Test.RequireItem(Line(199)).Bottom <= static_cast<float>(SurfaceHeight));
+		// The last of them is whole, as high as the line above it, and nothing is below it in the list. A line
+		// that is cut off by the list's edge is found as the part of it that can be seen.
+		const float ListBottom = Test.RequireItem("OutputLog/Messages").Bottom;
+		const FUiRectangle Last = Test.RequireItem(Line(199));
+		CHECK(Last.GetHeight() == doctest::Approx(Test.RequireItem(Line(198)).GetHeight()));
+		CHECK(Last.Bottom == doctest::Approx(ListBottom));
 
 		for (int32 Index = 200; Index < 260; ++Index)
 		{
@@ -299,8 +331,10 @@ TEST_SUITE("FOutputLogPanel")
 		}
 		Test.DrawFrames(3);
 
-		CHECK(Test.HasItem(Line(259)));
 		CHECK_FALSE(Test.HasItem(Line(199)));
+		const FUiRectangle Newest = Test.RequireItem(Line(259));
+		CHECK(Newest.GetHeight() == doctest::Approx(Test.RequireItem(Line(258)).GetHeight()));
+		CHECK(Newest.Bottom == doctest::Approx(ListBottom));
 	}
 
 	TEST_CASE("The wheel goes back through the messages, and the place that was gone to is kept")
@@ -318,11 +352,104 @@ TEST_SUITE("FOutputLogPanel")
 		Test.DrawFrames(3);
 		CHECK_FALSE(Test.HasItem(Line(199)));
 
-		// Whoever reads older messages is not taken away from them by new ones.
+		// A message in the middle of what is in sight, and where its line is.
+		const int32 Read = FindFirstLineInSight(Test, 200) + 3;
+		const float Top = Test.RequireItem(Line(Read)).Top;
+
+		// Whoever reads older messages is not taken away from them by new ones: the line is where it was.
 		WW_LOG(LogEditor, Log, "One more");
 		Test.DrawFrames(3);
 		CHECK_FALSE(Test.HasItem(Line(200)));
 		CHECK_FALSE(Test.HasItem(Line(199)));
+		CHECK(Test.RequireItem(Line(Read)).Top == doctest::Approx(Top));
+	}
+
+	TEST_CASE("Whoever reads older messages goes on reading them when the log is full and forgets its oldest")
+	{
+		FLogTest Test;
+		constexpr int32 Capacity = FMemoryLogSink::DefaultCapacity;
+		for (int32 Index = 0; Index < Capacity; ++Index)
+		{
+			WW_LOG(LogEditor, Log, "Message {}", Index);
+		}
+		Test.DrawFrames(3);
+		REQUIRE(Test.HasItem(Line(Capacity - 1)));
+
+		Test.MoveMouse(Test.RequireItem(Line(Capacity - 3)).GetCenter());
+		Test.Input.HandleScroll(FVector2D(0.0, 5.0));
+		Test.DrawFrames(3);
+		REQUIRE_FALSE(Test.HasItem(Line(Capacity - 1)));
+
+		// A message in the middle of what is in sight, and where its line is.
+		const int32 Read = FindFirstLineInSight(Test, Capacity) + 3;
+		const float Top = Test.RequireItem(Line(Read)).Top;
+
+		// Each further message pushes the oldest out: what was read is a line earlier in the list, and where it
+		// was on the surface, in the frame in which the list is fetched anew and in those that follow.
+		for (int32 Pushed = 1; Pushed <= 3; ++Pushed)
+		{
+			CAPTURE(Pushed);
+			WW_LOG(LogEditor, Log, "One more");
+			Test.DrawFrame();
+			REQUIRE(Test.Editor.GetLog().GetMessages().size() == static_cast<std::size_t>(Capacity));
+			CHECK(Test.RequireItem(Line(Read - Pushed)).Top == doctest::Approx(Top));
+			Test.DrawFrames(2);
+			CHECK(Test.RequireItem(Line(Read - Pushed)).Top == doctest::Approx(Top));
+		}
+		CHECK_FALSE(Test.HasItem(Line(Capacity - 1)));
+
+		// Another choice among the messages is another list, which begins where lists begin.
+		Choose(Test, "Verbosity", "Warnings and errors");
+		CHECK(CountLines(Test) == 0);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE(
+		"A message that is longer than the list is wide gives the list a bar to scroll sideways with, in sight or not")
+	{
+		FLogTest Test;
+		constexpr int32 LineCount = 200;
+		constexpr int32 SettlingFrameCount = 6;
+		// Far wider than the surface, whatever the letters, and short enough to be laid out as one text.
+		const std::string Long(600, 'W');
+		const auto LogLines = [&Long](int32 LongIndex)
+		{
+			for (int32 Index = 0; Index < LineCount; ++Index)
+			{
+				if (Index == LongIndex)
+				{
+					WW_LOG(LogEditor, Log, "{}", Long);
+				}
+				else
+				{
+					WW_LOG(LogEditor, Log, "Message {}", Index);
+				}
+			}
+		};
+
+		// Only short messages: the last line reaches the bottom of the list.
+		constexpr int32 NoLongLine = -1;
+		LogLines(NoLongLine);
+		Test.DrawFrames(SettlingFrameCount);
+		const float BottomWithoutBar = Test.RequireItem(Line(LineCount - 1)).Bottom;
+
+		// The long message last, where it is in sight: the bar lies below the last line.
+		Test.Editor.ClearLog();
+		LogLines(LineCount - 1);
+		Test.DrawFrames(SettlingFrameCount);
+		const float BottomWithBar = Test.RequireItem(Line(LineCount - 1)).Bottom;
+		CHECK(BottomWithBar < BottomWithoutBar);
+
+		// The same message far above what is in sight: the bar is there still, and stays from frame to frame.
+		Test.Editor.ClearLog();
+		LogLines(1);
+		Test.DrawFrames(SettlingFrameCount);
+		for (int32 Frame = 0; Frame < 8; ++Frame)
+		{
+			CAPTURE(Frame);
+			CHECK(Test.RequireItem(Line(LineCount - 1)).Bottom == BottomWithBar);
+			Test.DrawFrame();
+		}
 	}
 
 	TEST_CASE("Output Log in the Window menu closes the panel and opens it again, with what was logged meanwhile")

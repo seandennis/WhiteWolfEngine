@@ -94,17 +94,36 @@ void FOutputLogPanel::Draw(FUiFrame& Frame)
 void FOutputLogPanel::Refresh(const FEditor& Editor)
 {
 	// The messages are copied out of the log, which other threads write to. That is done when there is something
-	// new to copy, and not in every frame.
+	// new to copy, and not in every frame. How wide they are is measured then, and again when the letters have
+	// another size.
 	const FMemoryLogSink& Log = Editor.GetLog();
 	const int64 Revision = Log.GetRevision();
-	if (Revision == FetchedRevision && Filter == FetchedFilter)
+	const float FontSize = ImGui::GetFontSize();
+	if (Revision == FetchedRevision && Filter == FetchedFilter && FontSize == MeasuredFontSize)
 	{
 		return;
 	}
 
+	int64 FirstNumber = 0;
+	std::vector<FLogMessage> Messages = Log.GetMessages(FirstNumber);
+
+	// Lines whose messages the log has discarded since they were shown have gone from the top of the list. With
+	// another filter the lines are other lines, and none of them was shown before.
+	if (Filter == FetchedFilter)
+	{
+		GoneLineCount += static_cast<int32>(
+			std::ranges::count_if(Lines, [FirstNumber](const FLine& Line) { return Line.Number < FirstNumber; }));
+	}
+	else
+	{
+		GoneLineCount = 0;
+	}
+
 	Lines.clear();
 	Categories.clear();
-	for (FLogMessage& Message : Log.GetMessages())
+	WidestLine = 0.0f;
+	int64 Number = FirstNumber;
+	for (FLogMessage& Message : Messages)
 	{
 		if (std::ranges::find(Categories, Message.Category) == Categories.end())
 		{
@@ -112,12 +131,16 @@ void FOutputLogPanel::Refresh(const FEditor& Editor)
 		}
 		if (Filter.Matches(Message))
 		{
-			Lines.push_back({Message.Verbosity, std::move(Message.Category), MakeOneLine(std::move(Message.Text))});
+			std::string Text = std::format("{}: {}", Message.Category, MakeOneLine(std::move(Message.Text)));
+			WidestLine = std::max(WidestLine, ImGui::CalcTextSize(Text.c_str()).x);
+			Lines.push_back({Message.Verbosity, std::move(Text), Number});
 		}
+		++Number;
 	}
 	std::ranges::sort(Categories);
 	FetchedRevision = Revision;
 	FetchedFilter = Filter;
+	MeasuredFontSize = FontSize;
 }
 
 void FOutputLogPanel::DrawFilter(FUiFrame& Frame)
@@ -164,20 +187,13 @@ void FOutputLogPanel::DrawFilter(FUiFrame& Frame)
 		}
 		Frame.Items.NameLastItem(std::format("OutputLog/Category/{}", AnyCategoryLabel));
 
-		// The category that is chosen may be gone from the log, and with it from this list, while the list is
-		// gone through: what is chosen is noted, and taken once the list is laid out.
-		std::optional<std::string> Chosen;
 		for (const std::string& Category : Categories)
 		{
 			if (ImGui::Selectable(Category.c_str(), Category == Filter.Category))
 			{
-				Chosen = Category;
+				Filter.Category = Category;
 			}
 			Frame.Items.NameLastItem(std::format("OutputLog/Category/{}", Category));
-		}
-		if (Chosen.has_value())
-		{
-			Filter.Category = std::move(*Chosen);
 		}
 		ImGui::EndCombo();
 	}
@@ -198,13 +214,30 @@ void FOutputLogPanel::DrawFilter(FUiFrame& Frame)
 	Frame.Items.NameLastItem("OutputLog/Clear");
 }
 
-void FOutputLogPanel::DrawLines(FUiFrame& Frame) const
+void FOutputLogPanel::DrawLines(FUiFrame& Frame)
 {
-	// The messages have a part of the panel to themselves, which is scrolled through when they are many.
+	// The messages have a part of the panel to themselves, which is scrolled through when they are many, and
+	// sideways when one of them is longer than the panel is wide. How wide the widest of them is, is said here and
+	// not left to be found out: only the lines in sight are laid out, and a bar that came and went with them would
+	// move them up and down.
+	ImGui::SetNextWindowContentSize(ImVec2(WidestLine, 0.0f));
 	if (ImGui::BeginChild("##Messages", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
 	{
 		// Whoever is reading the newest message goes on reading the newest: the end stays in sight while it is.
 		const bool bWasAtEnd = ImGui::GetScrollY() >= ImGui::GetScrollMaxY();
+
+		// Whoever is reading older messages goes on reading those. Lines that have gone from the top of the list
+		// have taken every line below them up with them: from the next frame on the list is scrolled back by as
+		// much, and in this one it begins that much further down. The lines are there to begin it with: a place
+		// that nothing is laid out at fails a check of the library.
+		if (GoneLineCount > 0 && !bWasAtEnd && !Lines.empty())
+		{
+			const float GoneHeight = static_cast<float>(GoneLineCount) * ImGui::GetTextLineHeightWithSpacing();
+			const float KeptHeight = std::min(GoneHeight, ImGui::GetScrollY());
+			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + KeptHeight);
+			ImGui::SetScrollY(ImGui::GetScrollY() - KeptHeight);
+		}
+		GoneLineCount = 0;
 
 		// Only the lines that are in sight are laid out, however many there are.
 		ImGuiListClipper Clipper;
@@ -219,7 +252,7 @@ void FOutputLogPanel::DrawLines(FUiFrame& Frame) const
 				{
 					ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(Color->R, Color->G, Color->B, Color->A));
 				}
-				ImGui::TextUnformatted(std::format("{}: {}", Line.Category, Line.Text).c_str());
+				ImGui::TextUnformatted(Line.Text.c_str());
 				if (Color.has_value())
 				{
 					ImGui::PopStyleColor();
@@ -236,4 +269,5 @@ void FOutputLogPanel::DrawLines(FUiFrame& Frame) const
 		}
 	}
 	ImGui::EndChild();
+	Frame.Items.NameLastItem("OutputLog/Messages");
 }
