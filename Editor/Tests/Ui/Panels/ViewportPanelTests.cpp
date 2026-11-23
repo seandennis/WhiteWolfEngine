@@ -75,6 +75,32 @@ namespace
 		return FVector2D(static_cast<double>(Picture.Left + FromLeft), static_cast<double>(Picture.Top + FromTop));
 	}
 
+	/** Returns true for the orange of the line around what is selected: much red, some green and hardly any blue. */
+	bool IsOrange(FColor Pixel)
+	{
+		return Pixel.R > 200 && Pixel.G > 100 && Pixel.G < 190 && Pixel.B < 60;
+	}
+
+	/**
+	 * Returns how many pixels of the viewport's picture are that orange, among those whose distance from the left
+	 * edge of the surface is at least From and less than To.
+	 */
+	int32 CountOrangePixels(const FEditorUiTest& Test, double From, double To)
+	{
+		const FUiRectangle Picture = Test.RequireItem("Viewport");
+		const FImage Image = Test.ReadPicture();
+		int32 Count = 0;
+		for (int32 Y = static_cast<int32>(Picture.Top); Y < static_cast<int32>(Picture.Bottom); ++Y)
+		{
+			for (int32 X = static_cast<int32>(Picture.Left); X < static_cast<int32>(Picture.Right); ++X)
+			{
+				const bool bIsInRange = static_cast<double>(X) >= From && static_cast<double>(X) < To;
+				Count += bIsInRange && IsOrange(Image.GetPixel(X, Y)) ? 1 : 0;
+			}
+		}
+		return Count;
+	}
+
 	/** Adds an entity that shows a box of one metre, at a place in the world, and returns its identifier. */
 	int64 AddBox(FEditorUiTest& Test, const char* Name, const FVector& Location)
 	{
@@ -543,5 +569,60 @@ TEST_SUITE("FViewportPanel")
 
 		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Left});
 		CHECK(Test.Editor.GetViewportCamera() == Camera);
+	}
+
+	TEST_CASE("What is selected has an orange line around it in the viewport, and nothing else has")
+	{
+		FEditorUiTest Test;
+		const FViewportCamera Camera = Test.Editor.GetViewportCamera();
+		const FVector Right = FVector(Camera.GetRight());
+		const int64 Left = AddBox(Test, "Left", Camera.GetFocusPoint() - Right * 2.0);
+		const int64 Middle = AddBox(Test, "Middle", Camera.GetFocusPoint());
+		Test.DrawFrame();
+		const FVector2D OnLeft = FindInViewport(Test, Camera.GetFocusPoint() - Right * 2.0);
+		const FVector2D OnMiddle = FindInViewport(Test, Camera.GetFocusPoint());
+		const double Between = (OnLeft.x + OnMiddle.x) * 0.5;
+		REQUIRE(CountOrangePixels(Test, 0.0, 1.0e9) == 0);
+
+		// The line is around the one that is selected: on its side of the middle between the two.
+		Test.Editor.SetSelection({Middle});
+		Test.DrawFrame();
+		CHECK(CountOrangePixels(Test, Between, 1.0e9) > 100);
+		CHECK(CountOrangePixels(Test, 0.0, Between) == 0);
+		// It goes around the box, and is not on it.
+		CHECK_FALSE(
+			IsOrange(Test.ReadPicture().GetPixel(static_cast<int32>(OnMiddle.x), static_cast<int32>(OnMiddle.y))));
+
+		Test.Editor.SetSelection({Left});
+		Test.DrawFrame();
+		CHECK(CountOrangePixels(Test, 0.0, Between) > 100);
+		CHECK(CountOrangePixels(Test, Between, 1.0e9) == 0);
+
+		// Both, and then neither.
+		Test.Editor.SetSelection({Left, Middle});
+		Test.DrawFrame();
+		CHECK(CountOrangePixels(Test, 0.0, Between) > 100);
+		CHECK(CountOrangePixels(Test, Between, 1.0e9) > 100);
+
+		Test.Editor.SetSelection({});
+		Test.DrawFrame();
+		CHECK(CountOrangePixels(Test, 0.0, 1.0e9) == 0);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("The line around what is selected is wider where the user interface is larger")
+	{
+		FEditorUiTest Test;
+		const int64 Crate = AddBox(Test, "Crate", Test.Editor.GetViewportCamera().GetFocusPoint());
+		Test.Editor.SetSelection({Crate});
+		Test.DrawFrame();
+		const int32 AtScaleOne = CountOrangePixels(Test, 0.0, 1.0e9);
+		REQUIRE(AtScaleOne > 100);
+
+		// Twice the scale is twice the width, around a box that the larger panels leave about as large.
+		Test.Ui->SetScale(2.0f);
+		Test.DrawFrames(3);
+
+		CHECK(CountOrangePixels(Test, 0.0, 1.0e9) > AtScaleOne * 3 / 2);
 	}
 }

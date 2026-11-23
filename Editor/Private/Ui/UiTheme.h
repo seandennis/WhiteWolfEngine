@@ -3,10 +3,11 @@
 #include "CoreMinimal.h"
 
 #include "Math/Color.h"
+#include "Math/LinearColor.h"
 
 /**
- * How the editor looks: dark grey panels, light grey text and a blue accent for what is selected, in the manner of
- * the editors its users know.
+ * How the editor looks: dark grey panels, light grey text, a blue accent for what is selected in a panel and an
+ * orange line around what is selected in the viewport, in the manner of the editors its users know.
  */
 class FUiTheme
 {
@@ -33,6 +34,18 @@ public:
 
 	/** Returns the colour of text that says that something went wrong. */
 	static FColor GetErrorColor();
+
+	/**
+	 * Returns the colour of the line that the viewport draws around what is selected: an orange, which stands out
+	 * from most of what a scene shows. As an amount of light, which is how the renderer takes colours.
+	 */
+	static FLinearColor GetSelectionOutlineColor();
+
+	/**
+	 * Returns how wide that line is, in pixels of the surface: a size like the others of the user interface, which
+	 * is larger at a larger scale.
+	 */
+	static float GetSelectionOutlineWidth();
 
 	/**
 	 * Makes the headings that are laid out next bands of grey: a heading that opens and closes what is under it

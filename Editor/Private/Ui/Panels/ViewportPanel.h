@@ -26,7 +26,8 @@ struct FUiFrame;
  * itself moves it closer or away in steps.
  *
  * A click with the left button selects the entity whose mesh is seen under the mouse, and a click on nothing
- * selects nothing. With Ctrl held, a click adds the entity to what is selected or takes it out.
+ * selects nothing. With Ctrl held, a click adds the entity to what is selected or takes it out. What is selected
+ * has an orange line around it in the picture.
  */
 class FViewportPanel
 {

@@ -1,5 +1,6 @@
 #include "Ui/UiTheme.h"
 
+#include "Math/Srgb.h"
 #include "Ui/ImGuiLibrary.h"
 
 namespace
@@ -42,6 +43,12 @@ namespace
 
 	/** What says that something went wrong: a red that can be read on the grey of a panel. */
 	constexpr FColor ErrorColor(236, 96, 88);
+
+	/** The line around what is selected in the viewport, and how wide it is at a scale of one, in pixels. */
+	constexpr FColor SelectionOutlineColor(240, 144, 16);
+	constexpr float SelectionOutlineWidth = 2.0f;
+
+	constexpr float MaxChannel = 255.0f;
 }
 
 void FUiTheme::AddFonts()
@@ -159,6 +166,19 @@ FColor FUiTheme::GetPartColor(int32 PartIndex)
 FColor FUiTheme::GetErrorColor()
 {
 	return ErrorColor;
+}
+
+FLinearColor FUiTheme::GetSelectionOutlineColor()
+{
+	// The colours of the user interface are written as they are in a style sheet. The renderer takes light.
+	return FLinearColor(FSrgb::Decode(static_cast<float>(SelectionOutlineColor.R) / MaxChannel),
+		FSrgb::Decode(static_cast<float>(SelectionOutlineColor.G) / MaxChannel),
+		FSrgb::Decode(static_cast<float>(SelectionOutlineColor.B) / MaxChannel));
+}
+
+float FUiTheme::GetSelectionOutlineWidth()
+{
+	return SelectionOutlineWidth * ImGui::GetStyle().FontScaleDpi;
 }
 
 void FUiTheme::PushHeadingColors()

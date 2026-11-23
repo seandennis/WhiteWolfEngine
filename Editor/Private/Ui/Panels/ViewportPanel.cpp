@@ -19,6 +19,7 @@
 #include "Ui/UiFrame.h"
 #include "Ui/UiItems.h"
 #include "Ui/UiTextures.h"
+#include "Ui/UiTheme.h"
 #include "Ui/UiWorkspace.h"
 #include "Viewport/ViewportCamera.h"
 
@@ -253,5 +254,10 @@ bool FViewportPanel::RenderScene(FSceneRenderer& Renderer, const FEditor& Editor
 
 	Renderer.ViewMode = Editor.GetViewMode();
 	Renderer.BackgroundColor = Renderer.ViewMode == ESceneViewMode::Lit ? EmptySpaceLight : EmptySpaceColor;
+
+	// What is selected has a line around it, with everything below it.
+	Renderer.OutlinedEntities = Editor.GetSelection();
+	Renderer.OutlineColor = FUiTheme::GetSelectionOutlineColor();
+	Renderer.OutlineWidth = FUiTheme::GetSelectionOutlineWidth();
 	return Renderer.Render(Editor.GetScene(), Editor.GetViewportCamera().GetView(), *Target, OutError);
 }
