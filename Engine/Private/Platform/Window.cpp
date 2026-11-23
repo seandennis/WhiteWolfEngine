@@ -98,10 +98,16 @@ struct FWindow::FImplementation
 
 	static void HandleFocus(GLFWwindow* WindowHandle, int Focused)
 	{
-		// Keys released while another window has the focus are never reported to this one.
+		// Keys released while another window has the focus are never reported to this one, so losing the focus
+		// lets go of them all.
+		FInputState& Input = From(WindowHandle).Input;
 		if (Focused == GLFW_FALSE)
 		{
-			From(WindowHandle).Input.ReleaseAll();
+			Input.HandleFocusLost();
+		}
+		else
+		{
+			Input.HandleFocusGained();
 		}
 	}
 };

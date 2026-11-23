@@ -86,35 +86,50 @@ namespace
 	}
 
 	/**
-	 * Carries out the keys that set what dragging the gizmo of the viewport does: W to move, E to turn, R to size,
-	 * and Space for the next of the three.
+	 * Carries out the keys of the viewport that are single letters: F to bring the camera to what is selected, and
+	 * those that set what dragging the gizmo does: W to move, E to turn, R to size, and Space for the next of the
+	 * three.
 	 */
-	void CarryOutGizmoShortcuts(FUiFrame& Frame)
+	void CarryOutViewportShortcuts(FUiFrame& Frame)
 	{
+		// The keys are asked for in every frame, also in those in which a mouse button keeps them from doing
+		// anything. Dear ImGui gives a key to whoever asked for it in the frame before: a frame without the question
+		// would cost the key that goes down in the first frame after it, the one in which the button comes up.
+		const bool bWantsFocus = IsShortcutPressed(ImGuiKey_F);
+		const bool bWantsMove = IsShortcutPressed(ImGuiKey_W);
+		const bool bWantsRotate = IsShortcutPressed(ImGuiKey_E);
+		const bool bWantsScale = IsShortcutPressed(ImGuiKey_R);
+
+		// Space also presses the button that the keyboard has been taken to. While the mark of that is shown, the
+		// key is the button's, and is not asked for at all: asking would take it from the button.
+		const bool bWantsNext = !ImGui::GetIO().NavVisible && IsShortcutPressed(ImGuiKey_Space);
+
 		// While a mouse button is held, these keys are the camera's: W and E fly it, and the others are best left
-		// alone until the hand is free again.
+		// alone until the hand is free again. A camera that went somewhere else in the middle of a drag of the
+		// gizmo would leave the drag measuring from where the camera was.
 		if (ImGui::IsAnyMouseDown())
 		{
 			return;
 		}
 
 		FEditor& Editor = Frame.Editor;
-		if (IsShortcutPressed(ImGuiKey_W))
+		if (bWantsFocus)
+		{
+			FUiCommands::FocusSelection(Editor);
+		}
+		if (bWantsMove)
 		{
 			SetGizmoMode(Editor, EGizmoMode::Translate);
 		}
-		if (IsShortcutPressed(ImGuiKey_E))
+		if (bWantsRotate)
 		{
 			SetGizmoMode(Editor, EGizmoMode::Rotate);
 		}
-		if (IsShortcutPressed(ImGuiKey_R))
+		if (bWantsScale)
 		{
 			SetGizmoMode(Editor, EGizmoMode::Scale);
 		}
-
-		// Space also presses the button that the keyboard has been taken to. While the mark of that is shown, the
-		// key is the button's.
-		if (!ImGui::GetIO().NavVisible && IsShortcutPressed(ImGuiKey_Space))
+		if (bWantsNext)
 		{
 			SetGizmoMode(Editor, FGizmoSettings::GetNextMode(Editor.GetGizmoSettings().Mode));
 		}
@@ -177,11 +192,7 @@ void FMainMenuBar::Draw(FUiFrame& Frame)
 			{
 				RenameSelection(Frame);
 			}
-			if (IsShortcutPressed(ImGuiKey_F))
-			{
-				FUiCommands::FocusSelection(Frame.Editor);
-			}
-			CarryOutGizmoShortcuts(Frame);
+			CarryOutViewportShortcuts(Frame);
 
 			// The windows for projects are also asked for from outside the menu bar: the first when the editor
 			// starts, the second by the first, for someone who has no project to open yet.

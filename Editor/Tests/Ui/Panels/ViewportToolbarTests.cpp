@@ -415,13 +415,32 @@ TEST_SUITE("FViewportToolbar")
 	TEST_CASE("The keys of the gizmo are letters where something is being typed")
 	{
 		FEditorUiTest Test;
-
+		WScene& Scene = Test.Editor.GetScene();
+		const int64 Dancer = Scene.CreateEntity("Dancer")->GetId();
+		const int64 Wall = Scene.CreateEntity("Wall")->GetId();
+		Test.DrawFrame();
 		Test.Click("Outliner/Search");
-		Test.PressKey(EKey::E);
-		Test.PressKey(EKey::R);
-		Test.PressKey(EKey::Space);
-		Test.Type("er ");
 
+		// Each key is pressed where it would change what the gizmo does, were it the gizmo's: a letter from a mode
+		// that is not its own, and Space, which goes on from any. One look at the end would not do: E, R and Space
+		// after one another come back to where they began.
+		const auto StaysWhenPressed = [&Test](EKey Key, EGizmoMode Before)
+		{
+			FGizmoSettings Settings = GetSettings(Test);
+			Settings.Mode = Before;
+			Test.Editor.SetGizmoSettings(Settings);
+			Test.PressKey(Key);
+			return GetSettings(Test).Mode == Before;
+		};
+		CHECK(StaysWhenPressed(EKey::W, EGizmoMode::Rotate));
+		CHECK(StaysWhenPressed(EKey::E, EGizmoMode::Scale));
+		CHECK(StaysWhenPressed(EKey::R, EGizmoMode::Translate));
+		CHECK(StaysWhenPressed(EKey::Space, EGizmoMode::Translate));
+
+		// The letters are the field's: "er" finds the dancer and not the wall.
+		Test.Type("er");
+		CHECK(Test.HasItem(std::format("Outliner/{}", Dancer)));
+		CHECK_FALSE(Test.HasItem(std::format("Outliner/{}", Wall)));
 		CHECK(GetSettings(Test).Mode == EGizmoMode::Translate);
 	}
 
@@ -440,16 +459,76 @@ TEST_SUITE("FViewportToolbar")
 		CHECK(Test.Editor.GetViewportCamera().Location.y > Before.Location.y);
 		CHECK(GetSettings(Test).Mode == EGizmoMode::Translate);
 
-		// With any other button down, the keys do nothing.
-		PressOnViewport(Test, EMouseButton::Left);
-		Test.PressKey(EKey::R);
-		Test.PressKey(EKey::Space);
-		Release(Test, EMouseButton::Left);
+		// With any other button down, the keys do nothing. Each key is tried by itself: R and then Space would come
+		// back to moving.
+		const auto ChangesGizmoWhileHeld = [&Test](EMouseButton Button, EKey Key)
+		{
+			const EGizmoMode Before = GetSettings(Test).Mode;
+			PressOnViewport(Test, Button);
+			Test.PressKey(Key);
+			Release(Test, Button);
+			return GetSettings(Test).Mode != Before;
+		};
+		CHECK_FALSE(ChangesGizmoWhileHeld(EMouseButton::Left, EKey::R));
+		CHECK_FALSE(ChangesGizmoWhileHeld(EMouseButton::Left, EKey::Space));
+		CHECK_FALSE(ChangesGizmoWhileHeld(EMouseButton::Middle, EKey::R));
+		CHECK_FALSE(ChangesGizmoWhileHeld(EMouseButton::Middle, EKey::Space));
 		CHECK(GetSettings(Test).Mode == EGizmoMode::Translate);
 
 		// With the buttons up again, they are the gizmo's.
 		Test.PressKey(EKey::R);
 		CHECK(GetSettings(Test).Mode == EGizmoMode::Scale);
+	}
+
+	TEST_CASE("A key of the gizmo that goes down with a mouse button, while the mouse moves, is the camera's")
+	{
+		FEditorUiTest Test;
+		REQUIRE(GetSettings(Test).Mode == EGizmoMode::Translate);
+		const FViewportCamera Before = Test.Editor.GetViewportCamera();
+		const FVector2D Middle = Test.RequireItem("Viewport").GetCenter();
+		Test.MoveMouse(Middle);
+
+		// All between two frames, as a hand does that begins to fly upwards: the mouse moves on, and the button and
+		// the key go down.
+		Test.Input.HandleMouseMove(Middle + FVector2D(3.0, 0.0));
+		Test.Input.HandleMouseButtonEvent(EMouseButton::Right, EInputEvent::Pressed);
+		Test.Input.HandleKeyEvent(EKey::E, EInputEvent::Pressed);
+		Test.DrawFrames(10);
+		Test.Input.HandleKeyEvent(EKey::E, EInputEvent::Released);
+		Test.DrawFrame();
+		Release(Test, EMouseButton::Right);
+
+		// One thing and not two: E flew the camera upwards, and the gizmo is as it was.
+		CHECK(Test.Editor.GetViewportCamera().Location.y > Before.Location.y);
+		CHECK(GetSettings(Test).Mode == EGizmoMode::Translate);
+	}
+
+	TEST_CASE("A key of the gizmo that goes down in the frame in which the mouse button comes up is the gizmo's")
+	{
+		FEditorUiTest Test;
+		REQUIRE(GetSettings(Test).Mode == EGizmoMode::Translate);
+
+		SUBCASE("With the mouse where it was")
+		{
+			PressOnViewport(Test, EMouseButton::Left);
+			Test.DrawFrames(3);
+		}
+		SUBCASE("With the mouse moving on")
+		{
+			PressOnViewport(Test, EMouseButton::Left);
+			Test.DrawFrames(3);
+			Test.Input.HandleMouseMove(Test.Input.GetMousePosition() + FVector2D(8.0, 0.0));
+		}
+
+		// The button comes up and E goes down between two frames.
+		Test.Input.HandleMouseButtonEvent(EMouseButton::Left, EInputEvent::Released);
+		Test.Input.HandleKeyEvent(EKey::E, EInputEvent::Pressed);
+		Test.DrawFrame();
+		Test.Input.HandleKeyEvent(EKey::E, EInputEvent::Released);
+		Test.DrawFrames(3);
+
+		CHECK(GetSettings(Test).Mode == EGizmoMode::Rotate);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
 	}
 
 	TEST_CASE("While a window has to be answered, the keys of the gizmo do nothing")

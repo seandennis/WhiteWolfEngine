@@ -95,7 +95,7 @@ TEST_SUITE("FViewportPanel")
 		Release(Test, EMouseButton::Right);
 
 		// A fifth of a degree for each pixel: to the right, which the yaw counts down, and downwards.
-		const FViewportCamera& After = Test.Editor.GetViewportCamera();
+		const FViewportCamera After = Test.Editor.GetViewportCamera();
 		CHECK(After.Yaw == doctest::Approx(Before.Yaw - 10.0f));
 		CHECK(After.Pitch == doctest::Approx(Before.Pitch - 4.0f));
 		CHECK(After.Location == Before.Location);
@@ -352,9 +352,8 @@ TEST_SUITE("FViewportPanel")
 		FEditorUiTest Test;
 		REQUIRE(Test.Editor.GetGizmoSettings().Mode == EGizmoMode::Translate);
 
-		// Alt by itself takes the keyboard to the menu bar, as in every program that has one. On the picture Alt
-		// is a key of the mouse, and must not: Space would then press a menu, and no longer go on to the next
-		// thing that the gizmo does.
+		// Alt by itself takes the keyboard to the tabs of the panels. On the picture Alt is a key of the mouse, and
+		// must not: Space would then press a tab, and no longer go on to the next thing that the gizmo does.
 		SUBCASE("After the camera has gone around with Alt and the left button")
 		{
 			Test.SetKeyDown(EKey::LeftAlt, true);
@@ -385,7 +384,7 @@ TEST_SUITE("FViewportPanel")
 		CHECK(CountLoggedProblems(Test.Capture) == 0);
 	}
 
-	TEST_CASE("Over another panel, Alt is the menu bar's key as before")
+	TEST_CASE("Over another panel, Alt by itself takes the keyboard to the tabs of the panels, and not to the menu bar")
 	{
 		FEditorUiTest Test;
 
@@ -395,8 +394,45 @@ TEST_SUITE("FViewportPanel")
 		Test.DrawFrames(3);
 		Test.PressKey(EKey::Space);
 
-		// The keyboard is with the menu bar, and Space is not the gizmo's.
+		// The keyboard's mark is shown, so Space is not the gizmo's: it presses what is marked.
 		CHECK(Test.Editor.GetGizmoSettings().Mode == EGizmoMode::Translate);
+
+		// What is marked is the tab of a panel, which opens nothing. A title of the menu bar would have opened its
+		// menu.
+		CHECK_FALSE(Test.HasItem("Menu/File/New Scene"));
+		CHECK_FALSE(Test.HasItem("Menu/Edit/Undo"));
+		CHECK_FALSE(Test.HasItem("Menu/Window/Viewport"));
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("Alt that is let go of because the window loses the keyboard leaves the keyboard where it was")
+	{
+		FEditorUiTest Test;
+		REQUIRE(Test.Editor.GetGizmoSettings().Mode == EGizmoMode::Translate);
+
+		// Alt and Tab, to go to another program: the window is told that Alt went down, and then loses the
+		// keyboard, which lets go of Alt for it. That is no Alt by itself, wherever the mouse is.
+		SUBCASE("With the mouse over another panel")
+		{
+			Test.MoveMouse(Test.RequireItem("Details/NothingSelected").GetCenter());
+		}
+		SUBCASE("With the mouse outside the window")
+		{
+			Test.Input.HandleMouseLeave();
+			Test.DrawFrame();
+		}
+		Test.SetKeyDown(EKey::LeftAlt, true);
+		Test.Input.HandleFocusLost();
+		Test.DrawFrames(3);
+
+		// Back in the editor, Space is the gizmo's: the keyboard's mark is on no tab.
+		Test.Input.HandleFocusGained();
+		Test.MoveMouse(Test.RequireItem("Details/NothingSelected").GetCenter());
+		Test.DrawFrames(3);
+		Test.PressKey(EKey::Space);
+
+		CHECK(Test.Editor.GetGizmoSettings().Mode == EGizmoMode::Rotate);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
 	}
 
 	TEST_CASE("F brings the camera to where it sees what is selected, without turning it")
@@ -434,6 +470,27 @@ TEST_SUITE("FViewportPanel")
 		Test.PressKey(EKey::F);
 		Test.Type("f");
 		CHECK(Test.Editor.GetViewportCamera() == Before);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("While a mouse button is held, F leaves the camera where it is")
+	{
+		FEditorUiTest Test;
+		const int64 Crate = AddBox(Test, "Crate", FVector(40.0, 2.0, -70.0));
+		Test.Editor.SetSelection({Crate});
+		Test.DrawFrame();
+		const FViewportCamera Before = Test.Editor.GetViewportCamera();
+
+		// The middle button moves the camera sideways, and has not moved it here.
+		PressOnViewport(Test, EMouseButton::Middle);
+		Test.PressKey(EKey::F);
+		CHECK(Test.Editor.GetViewportCamera() == Before);
+		Release(Test, EMouseButton::Middle);
+		CHECK(Test.Editor.GetViewportCamera() == Before);
+
+		// With the hand free again, the key is the camera's.
+		Test.PressKey(EKey::F);
+		CHECK(IsSamePosition(Test.Editor.GetViewportCamera().GetFocusPoint(), FVector(40.0, 2.0, -70.0)));
 		CHECK(CountLoggedProblems(Test.Capture) == 0);
 	}
 

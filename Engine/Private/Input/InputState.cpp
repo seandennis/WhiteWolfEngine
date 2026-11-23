@@ -102,6 +102,17 @@ void FInputState::ReleaseAll()
 	bHasMousePosition = false;
 }
 
+void FInputState::HandleFocusLost()
+{
+	ReleaseAll();
+	bHasFocus = false;
+}
+
+void FInputState::HandleFocusGained()
+{
+	bHasFocus = true;
+}
+
 bool FInputState::IsKeyDown(EKey Key) const
 {
 	const std::size_t Index = static_cast<std::size_t>(Key);

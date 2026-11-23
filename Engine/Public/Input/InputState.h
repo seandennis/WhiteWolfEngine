@@ -65,10 +65,19 @@ public:
 
 	/**
 	 * Releases every key and button that is down, each counting as released in the current frame, and forgets the
-	 * mouse position. A window does this when it loses the keyboard focus, because the releases then go to
-	 * another window and would otherwise never be seen.
+	 * mouse position.
 	 */
 	ENGINE_API void ReleaseAll();
+
+	/**
+	 * Records that the window has lost the keyboard focus, and releases everything, as ReleaseAll does: the
+	 * releases then go to another window and would otherwise never be seen. Whoever reads the state can ask
+	 * HasFocus to tell keys that the focus took from keys that a hand let go of.
+	 */
+	ENGINE_API void HandleFocusLost();
+
+	/** Records that the window has the keyboard focus again. */
+	ENGINE_API void HandleFocusGained();
 
 	/** Returns true while the key is held down. */
 	ENGINE_API bool IsKeyDown(EKey Key) const;
@@ -82,6 +91,15 @@ public:
 	ENGINE_API bool IsMouseButtonDown(EMouseButton Button) const;
 	ENGINE_API bool WasMouseButtonPressed(EMouseButton Button) const;
 	ENGINE_API bool WasMouseButtonReleased(EMouseButton Button) const;
+
+	/**
+	 * Returns true while the window has the keyboard focus. A state that has never been told otherwise has it, so
+	 * whoever simulates input need not say so.
+	 */
+	bool HasFocus() const
+	{
+		return bHasFocus;
+	}
 
 	/** Returns the text that was typed during the current frame, in the order it was typed, as UTF-8. */
 	const std::string& GetTypedText() const
@@ -140,4 +158,7 @@ private:
 	 * next is not mistaken for a movement from the last one.
 	 */
 	bool bHasMousePosition = false;
+
+	/** False from HandleFocusLost to HandleFocusGained. */
+	bool bHasFocus = true;
 };

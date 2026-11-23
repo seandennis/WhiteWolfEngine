@@ -19,6 +19,8 @@ TEST_SUITE("FInputState")
 		CHECK(Input.GetMousePosition() == FVector2D(0.0));
 		CHECK(Input.GetMouseDelta() == FVector2D(0.0));
 		CHECK(Input.GetScrollDelta() == FVector2D(0.0));
+		// Whoever simulates input does not have to say that the window has the keyboard.
+		CHECK(Input.HasFocus());
 	}
 
 	TEST_CASE("A pressed key is down and counts as pressed in that frame")
@@ -339,5 +341,44 @@ TEST_SUITE("FInputState")
 		CHECK(Input.HasMousePosition());
 		CHECK(Input.GetMousePosition() == FVector2D(500.0, 500.0));
 		CHECK(Input.GetMouseDelta() == FVector2D(0.0));
+	}
+
+	TEST_CASE("A window that loses the keyboard lets go of everything, and says that it has lost it until it is back")
+	{
+		FInputState Input;
+		Input.HandleKeyEvent(EKey::LeftAlt, EInputEvent::Pressed);
+		Input.HandleMouseButtonEvent(EMouseButton::Right, EInputEvent::Pressed);
+		Input.HandleMouseMove(FVector2D(10.0, 10.0));
+		Input.BeginFrame();
+
+		Input.HandleFocusLost();
+
+		CHECK_FALSE(Input.HasFocus());
+		CHECK_FALSE(Input.IsKeyDown(EKey::LeftAlt));
+		CHECK(Input.WasKeyReleased(EKey::LeftAlt));
+		CHECK_FALSE(Input.IsMouseButtonDown(EMouseButton::Right));
+		CHECK(Input.WasMouseButtonReleased(EMouseButton::Right));
+		CHECK_FALSE(Input.HasMousePosition());
+
+		// It goes on not having it in the frames that follow, and losing it twice is losing it once.
+		Input.BeginFrame();
+		Input.HandleFocusLost();
+		CHECK_FALSE(Input.HasFocus());
+		CHECK_FALSE(Input.WasKeyReleased(EKey::LeftAlt));
+
+		Input.HandleFocusGained();
+		CHECK(Input.HasFocus());
+		// What was down when the keyboard was lost is not down again because it is back.
+		CHECK_FALSE(Input.IsKeyDown(EKey::LeftAlt));
+	}
+
+	TEST_CASE("ReleaseAll by itself does not take the keyboard from the window")
+	{
+		FInputState Input;
+		Input.HandleKeyEvent(EKey::W, EInputEvent::Pressed);
+
+		Input.ReleaseAll();
+
+		CHECK(Input.HasFocus());
 	}
 }

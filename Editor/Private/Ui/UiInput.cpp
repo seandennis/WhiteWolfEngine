@@ -152,6 +152,25 @@ namespace
 
 void FUiInput::Feed(const FInputState& Input, ImGuiIO& Io)
 {
+	// Whether the window has the keyboard comes first of all. A window that loses it lets go of every key, and
+	// Dear ImGui must not take that for a hand letting go of them: Alt that is let go of by itself takes the
+	// keyboard to the tabs of the panels, which is not what changing to another program is meant to do.
+	Io.AddFocusEvent(Input.HasFocus());
+
+	// Where the mouse is comes before the keys, and before what its buttons did there. Dear ImGui takes in nothing
+	// more of a frame once a position follows a key that has changed, so a key that it was given before the
+	// position would reach it a frame before the button that went down with it, whenever the mouse had moved.
+	if (Input.HasMousePosition())
+	{
+		const FVector2D& Position = Input.GetMousePosition();
+		Io.AddMousePosEvent(static_cast<float>(Position.x), static_cast<float>(Position.y));
+	}
+	else
+	{
+		// Dear ImGui's way of saying that there is no mouse over the user interface.
+		Io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+	}
+
 	// The modifiers come before the keys they modify, as they do from Dear ImGui's own platform code.
 	const bool bIsControlDown = Input.IsKeyDown(EKey::LeftControl) || Input.IsKeyDown(EKey::RightControl);
 	const bool bIsShiftDown = Input.IsKeyDown(EKey::LeftShift) || Input.IsKeyDown(EKey::RightShift);
@@ -168,18 +187,6 @@ void FUiInput::Feed(const FInputState& Input, ImGuiIO& Io)
 			Input.WasKeyPressed(Pair.Key),
 			Input.WasKeyReleased(Pair.Key),
 			[&Io, &Pair](bool bIsDown) { Io.AddKeyEvent(Pair.UiKey, bIsDown); });
-	}
-
-	// Where the mouse is, before what its buttons did there.
-	if (Input.HasMousePosition())
-	{
-		const FVector2D& Position = Input.GetMousePosition();
-		Io.AddMousePosEvent(static_cast<float>(Position.x), static_cast<float>(Position.y));
-	}
-	else
-	{
-		// Dear ImGui's way of saying that there is no mouse over the user interface.
-		Io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
 	}
 
 	for (const FMouseButtonPair& Pair : MouseButtonPairs)

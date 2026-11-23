@@ -110,7 +110,7 @@ bool FViewportPanel::Draw(FUiFrame& Frame, FRenderDevice& Device, std::string& O
 
 			// On the picture, Alt is a key of the mouse: it turns a press into going around, or a drag into a
 			// drag of copies. While the mouse is on the picture or held on it, the key is the picture's, and
-			// letting go of it does not hand the keyboard to the menu bar, as Alt by itself does elsewhere.
+			// letting go of it does not hand the keyboard to the row of tabs, as Alt by itself does elsewhere.
 			ImGui::SetItemKeyOwner(ImGuiMod_Alt);
 
 			// The gizmo comes first: a press that takes one of its handles neither steers the camera nor is a
