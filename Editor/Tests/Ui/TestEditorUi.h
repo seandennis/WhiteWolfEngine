@@ -118,8 +118,19 @@ public:
 	/** Drags with the left mouse button from the middle of one item to the middle of another, and lets go there. */
 	void Drag(std::string_view FromName, std::string_view ToName)
 	{
-		const FVector2D From = RequireItem(FromName).GetCenter();
-		const FVector2D To = RequireItem(ToName).GetCenter();
+		DragBetween(RequireItem(FromName).GetCenter(), RequireItem(ToName).GetCenter());
+	}
+
+	/** Drags with the left mouse button from the middle of an item by a distance in pixels, and lets go there. */
+	void DragBy(std::string_view Name, const FVector2D& Distance)
+	{
+		const FVector2D From = RequireItem(Name).GetCenter();
+		DragBetween(From, From + Distance);
+	}
+
+	/** Drags with the left mouse button from one place on the surface to another, and lets go there. */
+	void DragBetween(const FVector2D& From, const FVector2D& To)
+	{
 		MoveMouse(From);
 		Input.HandleMouseButtonEvent(EMouseButton::Left, EInputEvent::Pressed);
 		DrawFrame();

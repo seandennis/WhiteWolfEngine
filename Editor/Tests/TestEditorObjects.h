@@ -5,9 +5,15 @@
 #include "Json/JsonReader.h"
 #include "Json/JsonValue.h"
 #include "Json/JsonWriter.h"
+#include "Math/LinearColor.h"
+#include "Math/Quat.h"
+#include "Math/Transform.h"
+#include "Math/Vector.h"
 #include "Object/ObjectGlobals.h"
 #include "Object/ObjectMacros.h"
 #include "Object/ObjectPtr.h"
+#include "Object/WeakObjectPtr.h"
+#include "Rendering/Texture.h"
 #include "Scene/Component.h"
 #include "Scene/Entity.h"
 
@@ -50,6 +56,50 @@ class WEditorTestDerivedComponent : public WEditorTestComponent
 public:
 	WPROPERTY()
 	double Range = 1.5;
+};
+
+/** A component with a property of every kind that the Details panel has a widget for. */
+WCLASS()
+class WEditorTestGadgetComponent : public WComponent
+{
+	WW_DECLARE_CLASS(WEditorTestGadgetComponent, WComponent)
+
+public:
+	WPROPERTY()
+	bool bEnabled = true;
+
+	WPROPERTY()
+	uint8 Level = 3;
+
+	WPROPERTY(Category = "Motion")
+	float Speed = 1.5f;
+
+	WPROPERTY(Category = "Motion")
+	FVector Offset = FVector(0.0);
+
+	WPROPERTY(Category = "Motion")
+	FVector3f Direction = FVector3f(0.0f, 0.0f, -1.0f);
+
+	WPROPERTY(Category = "Motion")
+	FQuat Facing = FQuat(1.0f, 0.0f, 0.0f, 0.0f);
+
+	WPROPERTY(Category = "Motion")
+	FTransform Anchor;
+
+	WPROPERTY(Category = "Look")
+	FLinearColor Tint = FLinearColor(1.0f, 0.5f, 0.25f, 1.0f);
+
+	WPROPERTY(Category = "Look")
+	TObjectPtr<WTexture> Picture;
+
+	WPROPERTY(Category = "Links")
+	TObjectPtr<WEditorTestComponent> Partner;
+
+	WPROPERTY(Category = "Links")
+	TWeakObjectPtr<WEntity> Watched;
+
+	WPROPERTY(Category = "Links")
+	std::vector<std::string> Tags;
 };
 
 /** A component class that cannot be created. */

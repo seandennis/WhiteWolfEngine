@@ -187,6 +187,7 @@ void FMainMenuBar::DrawWindowMenu(FUiFrame& Frame)
 
 	MenuToggle(Frame, "Window", "Viewport", Frame.Workspace.bShowViewport);
 	MenuToggle(Frame, "Window", "Outliner", Frame.Workspace.bShowOutliner);
+	MenuToggle(Frame, "Window", "Details", Frame.Workspace.bShowDetails);
 	ImGui::Separator();
 	if (MenuEntry(Frame, "Window", "Load Default Layout", nullptr))
 	{

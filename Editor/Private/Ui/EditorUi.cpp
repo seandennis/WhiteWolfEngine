@@ -9,6 +9,7 @@
 #include "Rendering/UiRenderer.h"
 #include "Ui/ImGuiLibrary.h"
 #include "Ui/MainMenuBar.h"
+#include "Ui/Panels/DetailsPanel.h"
 #include "Ui/Panels/OutlinerPanel.h"
 #include "Ui/Panels/ViewportPanel.h"
 #include "Ui/UiDrawData.h"
@@ -28,6 +29,9 @@ namespace
 {
 	/** The part of the main window's width that the panels to the right of the viewport have in the default layout. */
 	constexpr float RightColumnFraction = 0.22f;
+
+	/** The part of that column's height that the Details panel has, below the outliner. */
+	constexpr float DetailsFraction = 0.6f;
 
 	/** The shortest time a frame counts as taking: Dear ImGui cannot divide by no time at all. */
 	constexpr float MinDeltaSeconds = 1.0e-5f;
@@ -69,8 +73,13 @@ struct FEditorUi::FImplementation
 		ImGuiID MiddleId = DockSpaceId;
 		const ImGuiID RightId =
 			ImGui::DockBuilderSplitNode(MiddleId, ImGuiDir_Right, RightColumnFraction, nullptr, &MiddleId);
+		// The outliner has the top of the column on the right and the details of what is selected in it the rest.
+		ImGuiID OutlinerId = RightId;
+		const ImGuiID DetailsId =
+			ImGui::DockBuilderSplitNode(OutlinerId, ImGuiDir_Down, DetailsFraction, nullptr, &OutlinerId);
 		ImGui::DockBuilderDockWindow(FViewportPanel::Title, MiddleId);
-		ImGui::DockBuilderDockWindow(FOutlinerPanel::Title, RightId);
+		ImGui::DockBuilderDockWindow(FOutlinerPanel::Title, OutlinerId);
+		ImGui::DockBuilderDockWindow(FDetailsPanel::Title, DetailsId);
 		ImGui::DockBuilderFinish(DockSpaceId);
 	}
 
@@ -88,11 +97,19 @@ struct FEditorUi::FImplementation
 		const ImGuiID DockSpaceId = ImGui::GetID("EditorDockSpace");
 		if (Workspace.bWantsDefaultLayout)
 		{
-			BuildDefaultLayout(DockSpaceId, MainViewport->WorkSize);
+			// The layout is built for the room that this frame's menu bar leaves. What the viewport gives as its
+			// work area is still the last frame's, and in the first frame of all the whole window: a layout built
+			// for that would be squeezed afterwards, and its panels a pixel off from where they are built now.
+			const ImRect WorkArea = static_cast<const ImGuiViewportP*>(MainViewport)->GetBuildWorkRect();
+			BuildDefaultLayout(DockSpaceId, WorkArea.GetSize());
 			Workspace.bWantsDefaultLayout = false;
 		}
 		ImGui::DockSpaceOverViewport(DockSpaceId, MainViewport);
 
+		// The Details panel is laid out before the panels in which the user selects. A click that selects another
+		// entity also ends what was being typed for the one that was selected, and that has to reach the entity it
+		// was typed for before the panel shows the other one.
+		Details.Draw(Frame);
 		const bool bViewportSucceeded = Viewport.Draw(Frame, Device, OutError);
 		Outliner.Draw(Frame);
 		return bViewportSucceeded;
@@ -118,6 +135,7 @@ struct FEditorUi::FImplementation
 	FMainMenuBar MenuBar;
 	FViewportPanel Viewport;
 	FOutlinerPanel Outliner;
+	FDetailsPanel Details;
 
 	/** The triangles of the frame being drawn. Kept between frames so that its memory is used again. */
 	FUiDrawList DrawList;

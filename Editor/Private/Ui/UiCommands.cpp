@@ -2,16 +2,51 @@
 
 #include "Commands/CommandResult.h"
 #include "Editor.h"
-#include "History/ScopedEditorStep.h"
 #include "Json/JsonValue.h"
+#include "Object/Class.h"
+#include "Object/ObjectGlobals.h"
+#include "Scene/Component.h"
 #include "Scene/Entity.h"
+#include "Scene/MissingComponent.h"
 #include "Scene/Scene.h"
+#include "Ui/UiText.h"
 
 #include <algorithm>
+#include <format>
+#include <string>
 #include <utility>
 
 namespace
 {
+	/**
+	 * One thing that the user did, as a step of the history: begun where this is created and ended where it goes
+	 * out of scope, whatever number of commands are given in between.
+	 *
+	 * A step that is still open belongs to something the user was in the middle of, such as dragging a number
+	 * (FUiCommands::BeginChange). Doing something else ends that first, because steps do not nest.
+	 */
+	class FUserStep
+	{
+	public:
+		FUserStep(FEditor& InEditor, std::string StepName)
+			: Editor(InEditor)
+		{
+			Editor.EndStep();
+			Editor.BeginStep(std::move(StepName));
+		}
+
+		~FUserStep()
+		{
+			Editor.EndStep();
+		}
+
+		FUserStep(const FUserStep&) = delete;
+		FUserStep& operator=(const FUserStep&) = delete;
+
+	private:
+		FEditor& Editor;
+	};
+
 	/** Returns the arguments of a command that acts on one entity. */
 	FJsonValue MakeEntityArguments(int64 EntityId)
 	{
@@ -84,7 +119,7 @@ std::optional<int64> FUiCommands::CreateEntity(FEditor& Editor, const std::strin
 		Arguments.SetMember("Parent", *ParentId);
 	}
 
-	const FScopedEditorStep Step(Editor, "Create Entity");
+	const FUserStep Step(Editor, "Create Entity");
 	const FCommandResult Result = Editor.ExecuteCommand("Entity.Create", Arguments);
 	if (!Result.HasSucceeded())
 	{
@@ -101,13 +136,13 @@ void FUiCommands::RenameEntity(FEditor& Editor, int64 EntityId, const std::strin
 	FJsonValue Arguments = MakeEntityArguments(EntityId);
 	Arguments.SetMember("Name", Name);
 
-	const FScopedEditorStep Step(Editor, "Rename");
+	const FUserStep Step(Editor, "Rename");
 	Editor.ExecuteCommand("Entity.Rename", Arguments);
 }
 
 void FUiCommands::DeleteEntities(FEditor& Editor, const std::vector<int64>& EntityIds)
 {
-	const FScopedEditorStep Step(Editor, "Delete");
+	const FUserStep Step(Editor, "Delete");
 	for (const int64 EntityId : GetTopmostEntities(Editor, EntityIds))
 	{
 		Editor.ExecuteCommand("Entity.Delete", MakeEntityArguments(EntityId));
@@ -122,7 +157,7 @@ void FUiCommands::DuplicateEntities(FEditor& Editor, const std::vector<int64>& E
 		return;
 	}
 
-	const FScopedEditorStep Step(Editor, "Duplicate");
+	const FUserStep Step(Editor, "Duplicate");
 	std::vector<int64> Copies;
 	for (const int64 EntityId : Originals)
 	{
@@ -138,7 +173,7 @@ void FUiCommands::DuplicateEntities(FEditor& Editor, const std::vector<int64>& E
 
 void FUiCommands::AttachEntities(FEditor& Editor, const std::vector<int64>& EntityIds, std::optional<int64> ParentId)
 {
-	const FScopedEditorStep Step(Editor, "Attach");
+	const FUserStep Step(Editor, "Attach");
 	for (const int64 EntityId : GetTopmostEntities(Editor, EntityIds))
 	{
 		FJsonValue Arguments = MakeEntityArguments(EntityId);
@@ -167,4 +202,53 @@ bool FUiCommands::CanAttachEntities(
 	return std::ranges::none_of(EntityIds,
 		[&Scene, Parent, &ParentId](int64 EntityId)
 		{ return EntityId == *ParentId || Parent->IsDescendantOf(Scene.FindEntityById(EntityId)); });
+}
+
+void FUiCommands::AddComponent(FEditor& Editor, int64 EntityId, const std::string& ClassName)
+{
+	FJsonValue Arguments = MakeEntityArguments(EntityId);
+	Arguments.SetMember("Class", ClassName);
+
+	const FUserStep Step(Editor, std::format("Add {}", FUiText::MakeClassLabel(ClassName)));
+	Editor.ExecuteCommand("Component.Add", Arguments);
+}
+
+void FUiCommands::RemoveComponent(FEditor& Editor, int64 ComponentId)
+{
+	// The step is named after what is removed, which only the component itself knows.
+	std::string StepName = "Remove Component";
+	if (const WComponent* const Component = Editor.GetScene().FindComponentById(ComponentId))
+	{
+		const WMissingComponent* const Missing = Cast<WMissingComponent>(Component);
+		const std::string& ClassName =
+			Missing != nullptr ? Missing->GetMissingClassName() : Component->GetClass()->GetName();
+		StepName = std::format("Remove {}", FUiText::MakeClassLabel(ClassName));
+	}
+
+	FJsonValue Arguments = FJsonValue::MakeObject();
+	Arguments.SetMember("Component", ComponentId);
+
+	const FUserStep Step(Editor, std::move(StepName));
+	Editor.ExecuteCommand("Component.Remove", Arguments);
+}
+
+void FUiCommands::BeginChange(FEditor& Editor, std::string StepName)
+{
+	// A change that was under way is over when the user begins another.
+	Editor.EndStep();
+	Editor.BeginStep(std::move(StepName));
+}
+
+void FUiCommands::EndChange(FEditor& Editor)
+{
+	Editor.EndStep();
+}
+
+void FUiCommands::SetProperty(FEditor& Editor, int64 ObjectId, const std::string& PropertyName, const FJsonValue& Value)
+{
+	FJsonValue Arguments = FJsonValue::MakeObject();
+	Arguments.SetMember("Object", ObjectId);
+	Arguments.SetMember("Property", PropertyName);
+	Arguments.SetMember("Value", Value);
+	Editor.ExecuteCommand("Object.SetProperty", Arguments);
 }

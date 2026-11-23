@@ -3,72 +3,20 @@
 #include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
 #include "Commands/CommandTargets.h"
+#include "Commands/SavedProperties.h"
 #include "Commands/ScenePropertyContext.h"
 #include "Editor.h"
 #include "Json/JsonValue.h"
 #include "Object/Class.h"
 #include "Object/Object.h"
 #include "Reflection/Property.h"
-#include "Reflection/PropertyFlags.h"
 
-#include <algorithm>
 #include <format>
-#include <memory>
 #include <string>
 #include <utility>
-#include <vector>
-
-// Commands read and change the properties that are saved with a scene, which are also the ones the Details panel
-// shows. A Transient property holds what an object works out for itself, such as an entity's place in the
-// hierarchy, and changing one behind the object's back would break it; the hierarchy has commands of its own.
 
 namespace
 {
-	/** Returns the properties of a class that commands read and change, those of its base classes first. */
-	std::vector<const FProperty*> GetSavedProperties(const WClass& Class)
-	{
-		std::vector<const WClass*> Classes;
-		for (const WClass* Current = &Class; Current != nullptr; Current = Current->GetSuperClass())
-		{
-			Classes.push_back(Current);
-		}
-		std::ranges::reverse(Classes);
-
-		std::vector<const FProperty*> Properties;
-		for (const WClass* const Current : Classes)
-		{
-			for (const std::unique_ptr<FProperty>& Property : Current->GetOwnProperties())
-			{
-				if (!Property->HasAnyFlags(EPropertyFlags::Transient))
-				{
-					Properties.push_back(Property.get());
-				}
-			}
-		}
-		return Properties;
-	}
-
-	/** Returns the property of that name of Object's class, or null, with the reason, if commands cannot use it. */
-	const FProperty* FindSavedProperty(const WObject& Object, const std::string& PropertyName, std::string& OutError)
-	{
-		const WClass& Class = *Object.GetClass();
-		const FProperty* const Property = Class.FindProperty(PropertyName);
-		if (Property == nullptr)
-		{
-			OutError = std::format("The class {} has no property \"{}\".", Class.GetName(), PropertyName);
-			return nullptr;
-		}
-		if (Property->HasAnyFlags(EPropertyFlags::Transient))
-		{
-			OutError = std::format("The property \"{}\" of the class {} is not saved with the scene, and commands "
-								   "neither read nor change such properties.",
-				PropertyName,
-				Class.GetName());
-			return nullptr;
-		}
-		return Property;
-	}
-
 	FCommandResult GetProperties(FEditor& Editor, const FCommandArguments& Arguments)
 	{
 		const int64 ObjectId = Arguments.GetInteger("Object");
@@ -81,7 +29,7 @@ namespace
 
 		FScenePropertyContext Context(Editor.GetScene());
 		FJsonValue PropertyValues = FJsonValue::MakeObject();
-		for (const FProperty* const Property : GetSavedProperties(*Object->GetClass()))
+		for (const FProperty* const Property : FSavedProperties::GetAll(*Object->GetClass()))
 		{
 			PropertyValues.SetMember(Property->GetName(), Property->ExportJson(Property->GetValuePtr(Object), Context));
 		}
@@ -101,7 +49,7 @@ namespace
 		{
 			return FCommandResult::Failure(std::move(Error));
 		}
-		const FProperty* const Property = FindSavedProperty(*Object, Arguments.GetString("Property"), Error);
+		const FProperty* const Property = FSavedProperties::Find(*Object, Arguments.GetString("Property"), Error);
 		if (Property == nullptr)
 		{
 			return FCommandResult::Failure(std::move(Error));
@@ -120,7 +68,7 @@ namespace
 			return FCommandResult::Failure(std::move(Error));
 		}
 		const std::string& PropertyName = Arguments.GetString("Property");
-		const FProperty* const Property = FindSavedProperty(*Object, PropertyName, Error);
+		const FProperty* const Property = FSavedProperties::Find(*Object, PropertyName, Error);
 		if (Property == nullptr)
 		{
 			return FCommandResult::Failure(std::move(Error));

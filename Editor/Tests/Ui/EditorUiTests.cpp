@@ -371,8 +371,7 @@ TEST_SUITE("FEditorUi")
 		Test.Click(std::format("Outliner/{}", Player));
 		REQUIRE(Test.Editor.GetSelection().size() == 1);
 
-		const FUiRectangle Row = Test.RequireItem(std::format("Outliner/{}", Player));
-		Test.ClickAt(FVector2D(Row.GetCenter().x, Row.Bottom + 200.0));
+		Test.Click("Outliner/Empty");
 
 		CHECK(Test.Editor.GetSelection().empty());
 	}
@@ -873,10 +872,19 @@ TEST_SUITE("FEditorUi")
 		FEditorUiTest Test;
 		const FUiRectangle Before = Test.RequireItem("Viewport");
 
+		const FUiRectangle DetailsBefore = Test.RequireItem("Details/NothingSelected");
+
 		Test.Click("Menu/Window");
 		Test.Click("Menu/Window/Outliner");
 		CHECK_FALSE(Test.HasItem("Outliner/Search"));
-		// The viewport takes the room the outliner had.
+		// The panel below the outliner takes the room it had, and the viewport keeps its own.
+		CHECK(Test.RequireItem("Details/NothingSelected").Top < DetailsBefore.Top);
+		CHECK(Test.RequireItem("Viewport") == Before);
+
+		Test.Click("Menu/Window");
+		Test.Click("Menu/Window/Details");
+		CHECK_FALSE(Test.HasItem("Details/NothingSelected"));
+		// With nothing left beside it, the viewport is as wide as the window.
 		CHECK(Test.RequireItem("Viewport").GetWidth() > Before.GetWidth());
 
 		Test.Click("Menu/Window");
@@ -892,6 +900,7 @@ TEST_SUITE("FEditorUi")
 		Test.Click("Menu/Window/Load Default Layout");
 		CHECK(Test.RequireItem("Viewport") == Before);
 		CHECK(Test.HasItem("Outliner/Search"));
+		CHECK(Test.RequireItem("Details/NothingSelected") == DetailsBefore);
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 

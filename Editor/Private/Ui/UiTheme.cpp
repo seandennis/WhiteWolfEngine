@@ -32,6 +32,13 @@ namespace
 
 	/** The height of the letters of the user interface, in pixels. */
 	constexpr float FontSize = 15.0f;
+
+	// What marks the first, second and third number of a value, the colours that the axes X, Y and Z have in
+	// every editor, and any number after those.
+	constexpr FColor FirstPartColor(204, 70, 70);
+	constexpr FColor SecondPartColor(104, 170, 62);
+	constexpr FColor ThirdPartColor(64, 124, 216);
+	constexpr FColor FurtherPartColor(150, 150, 150);
 }
 
 void FUiTheme::AddFonts()
@@ -129,4 +136,32 @@ void FUiTheme::Apply(float Scale)
 	Style.ScaleAllSizes(Scale);
 	Style.FontScaleDpi = Scale;
 	ImGui::GetStyle() = Style;
+}
+
+FColor FUiTheme::GetPartColor(int32 PartIndex)
+{
+	switch (PartIndex)
+	{
+		case 0:
+			return FirstPartColor;
+		case 1:
+			return SecondPartColor;
+		case 2:
+			return ThirdPartColor;
+		default:
+			return FurtherPartColor;
+	}
+}
+
+void FUiTheme::PushHeadingColors()
+{
+	ImGui::PushStyleColor(ImGuiCol_Header, Raised);
+	ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Control);
+	ImGui::PushStyleColor(ImGuiCol_HeaderActive, Control);
+}
+
+void FUiTheme::PopHeadingColors()
+{
+	constexpr int32 HeadingColorCount = 3;
+	ImGui::PopStyleColor(HeadingColorCount);
 }

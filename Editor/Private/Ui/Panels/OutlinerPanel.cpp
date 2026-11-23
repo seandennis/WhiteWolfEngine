@@ -10,35 +10,19 @@
 #include "Ui/UiFrame.h"
 #include "Ui/UiItems.h"
 #include "Ui/UiRequests.h"
+#include "Ui/UiText.h"
 #include "Ui/UiWorkspace.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <format>
-#include <string_view>
 #include <utility>
 
 namespace
 {
 	/** What Dear ImGui calls the thing that is dragged when a row is: the identifier of the row's entity. */
 	constexpr const char* EntityPayloadType = "WhiteWolfEntity";
-
-	char ToLowerAscii(char Character)
-	{
-		return Character >= 'A' && Character <= 'Z' ? static_cast<char>(Character - 'A' + 'a') : Character;
-	}
-
-	/** Returns true if Text contains Part, taking the letters A to Z as the same in capitals and small. */
-	bool ContainsIgnoringCase(std::string_view Text, std::string_view Part)
-	{
-		const auto Found = std::search(Text.begin(),
-			Text.end(),
-			Part.begin(),
-			Part.end(),
-			[](char Left, char Right) { return ToLowerAscii(Left) == ToLowerAscii(Right); });
-		return Found != Text.end() || Part.empty();
-	}
 
 	/**
 	 * Returns the entities that go where a dragged row goes: everything that is selected if the row is among it,
@@ -92,7 +76,7 @@ void FOutlinerPanel::Draw(FUiFrame& Frame)
 			// What is searched for is listed by itself, without the entities around it.
 			for (const WEntity* const Entity : Scene.GetAllEntities())
 			{
-				if (ContainsIgnoringCase(Entity->GetName(), SearchText))
+				if (FUiText::ContainsIgnoringCase(Entity->GetName(), SearchText))
 				{
 					DrawRow(Frame, *Entity, false);
 				}
