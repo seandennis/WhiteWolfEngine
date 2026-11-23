@@ -19,6 +19,7 @@ void FMemoryLogSink::Write(const FLogMessage& Message)
 		Messages.pop_front();
 	}
 	Messages.push_back(Message);
+	++Revision;
 }
 
 std::vector<FLogMessage> FMemoryLogSink::GetMessages() const
@@ -28,9 +29,17 @@ std::vector<FLogMessage> FMemoryLogSink::GetMessages() const
 	return std::vector<FLogMessage>(Messages.begin(), Messages.end());
 }
 
+int64 FMemoryLogSink::GetRevision() const
+{
+	const std::scoped_lock Lock(Mutex);
+
+	return Revision;
+}
+
 void FMemoryLogSink::Clear()
 {
 	const std::scoped_lock Lock(Mutex);
 
 	Messages.clear();
+	++Revision;
 }

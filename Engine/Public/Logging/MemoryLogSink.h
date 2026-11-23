@@ -31,6 +31,13 @@ public:
 	/** Returns a copy of the stored messages, oldest first. */
 	std::vector<FLogMessage> GetMessages() const;
 
+	/**
+	 * Returns a number that is another one after every change to what is stored: a message that was written, and
+	 * the messages being discarded. Whoever shows the messages keeps the number that went with its copy of them,
+	 * and fetches them again only when the number is no longer that.
+	 */
+	int64 GetRevision() const;
+
 	/** Discards every stored message. */
 	void Clear();
 
@@ -38,4 +45,7 @@ private:
 	mutable std::mutex Mutex;
 	std::deque<FLogMessage> Messages;
 	int32 Capacity;
+
+	/** How many times what is stored has changed. */
+	int64 Revision = 0;
 };

@@ -114,6 +114,35 @@ TEST_SUITE("FMemoryLogSink")
 		CHECK(Messages[0].Text == "Second");
 	}
 
+	TEST_CASE("The revision is another number after every change to what is stored, and only then")
+	{
+		FMemoryLogSink Sink(2);
+		const int64 Empty = Sink.GetRevision();
+		CHECK(Sink.GetRevision() == Empty);
+
+		Sink.Write(MakeMessage("First"));
+		const int64 AfterFirst = Sink.GetRevision();
+		CHECK(AfterFirst != Empty);
+
+		// Reading changes nothing.
+		CHECK(Sink.GetMessages().size() == 1);
+		CHECK(Sink.GetRevision() == AfterFirst);
+
+		// A message that pushes the oldest one out is a change like any other.
+		Sink.Write(MakeMessage("Second"));
+		const int64 AfterSecond = Sink.GetRevision();
+		Sink.Write(MakeMessage("Third"));
+		const int64 AfterThird = Sink.GetRevision();
+		CHECK(AfterSecond != AfterFirst);
+		CHECK(AfterThird != AfterSecond);
+
+		// So is discarding them, also when the same number of messages is stored afterwards as some time before.
+		Sink.Clear();
+		const int64 AfterClear = Sink.GetRevision();
+		CHECK(AfterClear != AfterThird);
+		CHECK(AfterClear != Empty);
+	}
+
 	TEST_CASE("GetMessages returns a snapshot that later writes do not change")
 	{
 		FMemoryLogSink Sink;
