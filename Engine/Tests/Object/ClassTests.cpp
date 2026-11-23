@@ -180,6 +180,24 @@ TEST_SUITE("WClass")
 		CHECK(ObjectProperty->ContainsObjectReferences());
 	}
 
+	TEST_CASE("An object property says what a reference refers to")
+	{
+		const FScopedObjectTest ObjectTest;
+		const FObjectProperty* const Property =
+			dynamic_cast<const FObjectProperty*>(WTestObject::StaticClass()->FindProperty("Other"));
+		REQUIRE(Property != nullptr);
+		WTestObject* const Object = NewObject<WTestObject>();
+		Object->AddToRoot();
+
+		CHECK(Property->GetReferencedObject(Property->GetValuePtr(Object)) == nullptr);
+
+		WTestObject* const Other = NewObject<WTestObject>();
+		Object->Other = Other;
+		CHECK(Property->GetReferencedObject(Property->GetValuePtr(Object)) == Other);
+
+		Object->RemoveFromRoot();
+	}
+
 	TEST_CASE("A TWeakObjectPtr member is a weak object property, which holds no strong reference")
 	{
 		const FProperty* const Property = WTestObject::StaticClass()->FindProperty("WeakOther");
@@ -189,6 +207,27 @@ TEST_SUITE("WClass")
 		REQUIRE(WeakProperty != nullptr);
 		CHECK(WeakProperty->GetPropertyClass() == WTestObject::StaticClass());
 		CHECK_FALSE(WeakProperty->ContainsObjectReferences());
+	}
+
+	TEST_CASE("A weak object property says what a reference refers to, until that is destroyed")
+	{
+		const FScopedObjectTest ObjectTest;
+		const FWeakObjectProperty* const Property =
+			dynamic_cast<const FWeakObjectProperty*>(WTestObject::StaticClass()->FindProperty("WeakOther"));
+		REQUIRE(Property != nullptr);
+		WTestObject* const Object = NewObject<WTestObject>();
+		Object->AddToRoot();
+
+		CHECK(Property->GetReferencedObject(Property->GetValuePtr(Object)) == nullptr);
+
+		WTestObject* const Other = NewObject<WTestObject>();
+		Object->WeakOther = Other;
+		CHECK(Property->GetReferencedObject(Property->GetValuePtr(Object)) == Other);
+
+		Other->Destroy();
+		CHECK(Property->GetReferencedObject(Property->GetValuePtr(Object)) == nullptr);
+
+		Object->RemoveFromRoot();
 	}
 
 	TEST_CASE("A std::vector member is an array property with an element property")

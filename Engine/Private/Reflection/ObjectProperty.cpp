@@ -21,6 +21,12 @@ WClass* FObjectProperty::GetPropertyClass() const
 	return GetPropertyClassFunction();
 }
 
+WObject* FObjectProperty::GetReferencedObject(const void* Value) const
+{
+	// Every TObjectPtr<T> is an FObjectPtr and nothing more, whatever T is.
+	return static_cast<const FObjectPtr*>(Value)->Get();
+}
+
 std::string FObjectProperty::GetTypeName() const
 {
 	return std::format("TObjectPtr<{}>", GetPropertyClass()->GetName());
@@ -33,13 +39,13 @@ bool FObjectProperty::ContainsObjectReferences() const
 
 void FObjectProperty::VisitObjectReferences(void* Value, IObjectReferenceVisitor& Visitor) const
 {
-	// Every TObjectPtr<T> is an FObjectPtr and nothing more, whatever T is.
+	// The value is an FObjectPtr; see GetReferencedObject.
 	Visitor.VisitObjectReference(*static_cast<FObjectPtr*>(Value));
 }
 
 FJsonValue FObjectProperty::ExportJson(const void* Value, IPropertyJsonContext& Context) const
 {
-	return FObjectReferenceJson::Export(static_cast<const FObjectPtr*>(Value)->Get(), Context);
+	return FObjectReferenceJson::Export(GetReferencedObject(Value), Context);
 }
 
 bool FObjectProperty::ImportJson(

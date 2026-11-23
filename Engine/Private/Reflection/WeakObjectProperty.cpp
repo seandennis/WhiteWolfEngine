@@ -20,6 +20,12 @@ WClass* FWeakObjectProperty::GetPropertyClass() const
 	return GetPropertyClassFunction();
 }
 
+WObject* FWeakObjectProperty::GetReferencedObject(const void* Value) const
+{
+	// Every TWeakObjectPtr<T> is an FWeakObjectPtr and nothing more, whatever T is.
+	return static_cast<const FWeakObjectPtr*>(Value)->Get();
+}
+
 std::string FWeakObjectProperty::GetTypeName() const
 {
 	return std::format("TWeakObjectPtr<{}>", GetPropertyClass()->GetName());
@@ -27,7 +33,7 @@ std::string FWeakObjectProperty::GetTypeName() const
 
 FJsonValue FWeakObjectProperty::ExportJson(const void* Value, IPropertyJsonContext& Context) const
 {
-	return FObjectReferenceJson::Export(static_cast<const FWeakObjectPtr*>(Value)->Get(), Context);
+	return FObjectReferenceJson::Export(GetReferencedObject(Value), Context);
 }
 
 bool FWeakObjectProperty::ImportJson(

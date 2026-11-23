@@ -5,6 +5,7 @@
 #include "Reflection/Property.h"
 
 class WClass;
+class WObject;
 
 /**
  * A property whose value is a TObjectPtr: a strong reference to an object of a given class.
@@ -26,6 +27,13 @@ public:
 
 	/** Returns the class that the referenced objects must be instances of. */
 	WClass* GetPropertyClass() const;
+
+	/**
+	 * Returns the object that a reference refers to, or null if it refers to none.
+	 *
+	 * @param Value The address of the reference, a value of this property (GetValuePtr).
+	 */
+	WObject* GetReferencedObject(const void* Value) const;
 
 	std::string GetTypeName() const override;
 	bool ContainsObjectReferences() const override;

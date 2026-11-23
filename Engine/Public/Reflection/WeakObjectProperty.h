@@ -5,6 +5,7 @@
 #include "Reflection/Property.h"
 
 class WClass;
+class WObject;
 
 /**
  * A property whose value is a TWeakObjectPtr: a reference to an object of a given class that does not keep the
@@ -24,6 +25,14 @@ public:
 
 	/** Returns the class that the referenced objects must be instances of. */
 	WClass* GetPropertyClass() const;
+
+	/**
+	 * Returns the object that a reference refers to, or null if it refers to none or the object has been
+	 * destroyed.
+	 *
+	 * @param Value The address of the reference, a value of this property (GetValuePtr).
+	 */
+	WObject* GetReferencedObject(const void* Value) const;
 
 	std::string GetTypeName() const override;
 	FJsonValue ExportJson(const void* Value, IPropertyJsonContext& Context) const override;
