@@ -83,6 +83,11 @@ std::unique_ptr<FRenderTarget> FRenderDevice::CreateRenderTarget(int32 Width, in
 	OcclusionDescription.format = FRenderTarget::FImplementation::OcclusionFormat;
 	OcclusionDescription.debugName = "RenderTargetOcclusion";
 
+	// Where the meshes are that get a line around them: drawn to, then read by the pass that draws the line.
+	nvrhi::TextureDesc OutlineMaskDescription = TextureDescription;
+	OutlineMaskDescription.format = FRenderTarget::FImplementation::OutlineMaskFormat;
+	OutlineMaskDescription.debugName = "RenderTargetOutlineMask";
+
 	nvrhi::IDevice* const Device = Context->GetDevice();
 	std::unique_ptr<FRenderTarget::FImplementation> Implementation = std::make_unique<FRenderTarget::FImplementation>();
 	Implementation->Context = Context;
@@ -94,10 +99,12 @@ std::unique_ptr<FRenderTarget> FRenderDevice::CreateRenderTarget(int32 Width, in
 	Implementation->NormalTexture = Device->createTexture(NormalDescription);
 	Implementation->OcclusionTextures[0] = Device->createTexture(OcclusionDescription);
 	Implementation->OcclusionTextures[1] = Device->createTexture(OcclusionDescription);
+	Implementation->OutlineMaskTexture = Device->createTexture(OutlineMaskDescription);
 
 	const bool bHasTextures = Implementation->Texture != nullptr && Implementation->DepthTexture != nullptr &&
 		Implementation->SceneColorTexture != nullptr && Implementation->NormalTexture != nullptr &&
-		Implementation->OcclusionTextures[0] != nullptr && Implementation->OcclusionTextures[1] != nullptr;
+		Implementation->OcclusionTextures[0] != nullptr && Implementation->OcclusionTextures[1] != nullptr &&
+		Implementation->OutlineMaskTexture != nullptr;
 	if (bHasTextures)
 	{
 		nvrhi::ITexture* const Depth = Implementation->DepthTexture;
@@ -113,12 +120,14 @@ std::unique_ptr<FRenderTarget> FRenderDevice::CreateRenderTarget(int32 Width, in
 			nvrhi::FramebufferDesc().addColorAttachment(Implementation->OcclusionTextures[0]));
 		Implementation->OcclusionFramebuffers[1] = Device->createFramebuffer(
 			nvrhi::FramebufferDesc().addColorAttachment(Implementation->OcclusionTextures[1]));
+		Implementation->OutlineMaskFramebuffer =
+			Device->createFramebuffer(nvrhi::FramebufferDesc().addColorAttachment(Implementation->OutlineMaskTexture));
 	}
 
 	const bool bHasFramebuffers = Implementation->Framebuffer != nullptr &&
 		Implementation->SceneFramebuffer != nullptr && Implementation->OutputFramebuffer != nullptr &&
 		Implementation->PrepassFramebuffer != nullptr && Implementation->OcclusionFramebuffers[0] != nullptr &&
-		Implementation->OcclusionFramebuffers[1] != nullptr;
+		Implementation->OcclusionFramebuffers[1] != nullptr && Implementation->OutlineMaskFramebuffer != nullptr;
 	if (!bHasFramebuffers)
 	{
 		OutError = std::format("the graphics card could not create a render target of {} by {} pixels", Width, Height);

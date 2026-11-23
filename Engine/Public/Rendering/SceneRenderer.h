@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 class FRenderDevice;
 class FRenderTarget;
@@ -91,6 +92,30 @@ public:
 
 	/** How strongly ambient occlusion dims the sky light. One is the natural amount; zero or less switches it off. */
 	float AmbientOcclusionIntensity = 1.0f;
+
+	/** The widest that the line around outlined entities can be, in pixels. */
+	static constexpr float MaxOutlineWidth = 4.0f;
+
+	/**
+	 * The identifiers of the entities that get a line around them in the picture: around everything that they and
+	 * the entities below them show, as one shape, also where something nearer hides it. An editor marks what is
+	 * selected like this. An identifier that no entity of the scene has is ignored, and so is an entity that shows
+	 * nothing.
+	 */
+	std::vector<int64> OutlinedEntities;
+
+	/**
+	 * The colour of that line, in linear space. The line is drawn over the finished picture: it is the same in
+	 * every view mode and whatever the camera's exposure. The alpha is how much of the picture below the line it
+	 * covers.
+	 */
+	FLinearColor OutlineColor = FLinearColor(1.0f, 0.5f, 0.0f, 1.0f);
+
+	/**
+	 * How wide the line is, in pixels of the picture, up to MaxOutlineWidth; its outer edge is soft over one pixel
+	 * more. Zero or less draws no line.
+	 */
+	float OutlineWidth = 2.0f;
 
 	/**
 	 * Draws a scene onto a render target, replacing what the target showed.

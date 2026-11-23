@@ -41,5 +41,8 @@ struct FSceneRenderStatistics
 	/** How many point lights lit the picture. Always zero in the unlit view mode. */
 	int32 PointLightCount = 0;
 
+	/** How many of the drawn meshes got a line around them; see FSceneRenderer::OutlinedEntities. */
+	int32 OutlinedMeshCount = 0;
+
 	bool operator==(const FSceneRenderStatistics& Other) const = default;
 };

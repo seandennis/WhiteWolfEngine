@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 
 #include "Rendering/AmbientOcclusionTargetBindings.h"
+#include "Rendering/OutlineTargetBindings.h"
 #include "Rendering/RenderContext.h"
 #include "Rendering/RenderTarget.h"
 
@@ -27,6 +28,9 @@ struct FRenderTarget::FImplementation
 	/** The formats of what ambient occlusion is worked out from and into: the way surfaces face, and the result. */
 	static constexpr nvrhi::Format NormalFormat = nvrhi::Format::RGBA8_UNORM;
 	static constexpr nvrhi::Format OcclusionFormat = nvrhi::Format::R8_UNORM;
+
+	/** The format of the mask that says where the meshes are that get a line around them. */
+	static constexpr nvrhi::Format OutlineMaskFormat = nvrhi::Format::R8_UNORM;
 
 	/** The surface itself, on the graphics card. */
 	nvrhi::TextureHandle Texture;
@@ -59,6 +63,13 @@ struct FRenderTarget::FImplementation
 	nvrhi::BindingLayoutHandle LitBindingLayout;
 	nvrhi::BindingSetHandle LitBindingSet;
 	nvrhi::ITexture* LitBoundOcclusion = nullptr;
+
+	/** Where the meshes are that get a line around them, the same size as the surface, and what draws into it. */
+	nvrhi::TextureHandle OutlineMaskTexture;
+	nvrhi::FramebufferHandle OutlineMaskFramebuffer;
+
+	/** What gives the pass that draws those lines the mask to read. Made by the scene renderer. */
+	FOutlineTargetBindings OutlineBindings;
 
 	/** The surface and the depth together, for drawing that needs no lighting. */
 	nvrhi::FramebufferHandle Framebuffer;

@@ -6,6 +6,7 @@
 #include "Rendering/EnvironmentCache.h"
 #include "Rendering/MaterialBindings.h"
 #include "Rendering/MeshPipelines.h"
+#include "Rendering/Outlines.h"
 #include "Rendering/RenderContext.h"
 #include "Rendering/SceneRenderStatistics.h"
 #include "Rendering/SceneRenderer.h"
@@ -70,6 +71,9 @@ struct FSceneRenderer::FImplementation
 
 	/** Draw meshes in their base colour, straight onto the surface of a render target. */
 	FMeshPipelines UnlitPipelines;
+
+	/** Draws the lines around outlined meshes. */
+	FOutlines Outlines;
 
 	/** Fits the lit scene to the display. Its binding layout gives it the lit scene and the exposure. */
 	nvrhi::BindingLayoutHandle TonemapBindingLayout;

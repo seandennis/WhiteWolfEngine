@@ -1237,3 +1237,24 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** Lights and entities without a mesh cannot be clicked on: nothing of them is drawn yet. There is no rectangle to drag around several things. What is selected is not marked in the picture yet; the outline around it is to come.
 
 **Testing.** In the user interface, with boxes where the viewport's camera looks: a click on a box and beside it, with the history and the camera as they were; two boxes behind one another, and the nearer one made invisible; a box below another entity; Ctrl with a click on a second box, on the first again and on nothing; presses that drag from nothing onto a box, from a box onto nothing and from one box onto another; the right button, the middle button and the left one with Alt held.
+
+## D-068: A line around things is drawn from a mask of their meshes
+
+**Status:** Accepted.
+
+**Context.** The specification asks for an orange outline on what is selected in the viewport. Since D-067 a click in the viewport selects a thing, and nothing in the picture said which.
+
+**Decision.**
+
+- **The scene renderer draws a line around the entities it is told to** (`FSceneRenderer::OutlinedEntities`, with `OutlineColor` and `OutlineWidth`): around everything that they and the entities below them show. What is done to an entity is done to what is below it everywhere else, and an entity that only holds others together, as the top of an imported model does, shows nothing itself.
+- **It takes two passes, after the picture is finished.** The meshes are drawn into a mask of the picture's size, a byte for each pixel, with both sides of every triangle and without regard to depth. Then one triangle over the picture draws the line wherever the pixel is not marked and a marked pixel is no farther away than the width of the line (`FOutlines`). The line is therefore outside the shape, round at its corners, and one line around meshes that overlap. Its outermost pixel is as much line as the distance leaves of it, which makes the outer edge smooth.
+- **The line takes no notice of what is in front.** It goes around the whole of a mesh, also where a wall hides it, and around a mesh that is seen from behind and so not drawn: what is selected can be found wherever it is.
+- **The line is drawn over the finished picture,** after the light has been fitted to the display. Its colour is the colour that was asked for, in every view mode and at every exposure.
+- **Its width is in pixels,** four at most. A line that is to look the same on a denser display is asked for wider by whoever knows the display.
+- **Each render target has a mask of its own,** one more byte for each pixel. Nothing is drawn into it, and nothing read from it, while nothing is outlined.
+
+**Alternatives considered.** Drawing each mesh once more, a little larger and behind itself, needs no mask; the line it makes is as wide as the mesh is near, breaks apart at the corners of a mesh with flat sides, and is drawn for each mesh separately where two overlap. A stencil buffer could take the place of the mask; the depth buffers have no stencil (D-029), and giving them one costs every render target more than a byte for each pixel. A distance field made by jump flooding costs the same whatever the width of the line; for a line of a few pixels, looking at the pixels around each one is less to build, and 25 looks for each pixel at the usual width. A line only where the mesh is seen, or a dimmer one where it is hidden as in Unreal, needs the depth of the picture in the pass that draws the mask, and can be added. A box around what is selected says where a thing is and nothing of its shape.
+
+**Limits.** The line is the same where a mesh is hidden as where it is seen. While something is outlined, every pixel of the picture looks at up to 81 pixels around it, at the widest line. Lights and entities that show no mesh get no line. The inner edge of the line follows the pixels of the mesh, which are not smoothed anywhere else in the picture either.
+
+**Testing.** A square two metres ahead and the pixels beside it: without outlined entities and with an identifier that no entity has; a line of two pixels on every side, along the edges and around the corners; widths of one, one and a half and three pixels, of more than the most, of zero, below zero and no number; an entity two levels above the square, and a square beside it that is not outlined; a square hidden behind another; two squares that overlap; the lit, the unlit and the ambient occlusion view mode at a low exposure; a colour that is half see-through; a square seen from behind; a mirrored square; an outlined entity that is invisible, and one without a mesh; a square at the edge of the picture and one that fills it; and pictures of three sizes from one renderer. All with the validation layer on.

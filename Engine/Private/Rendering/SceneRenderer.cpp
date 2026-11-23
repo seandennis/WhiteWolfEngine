@@ -85,6 +85,10 @@ namespace
 		/** For each mesh, whether its entity mirrors it, which turns the corners of its triangles around. */
 		std::vector<bool> IsMirrored;
 
+		/** For each mesh, whether it gets a line around it, and how many do. */
+		std::vector<bool> IsOutlined;
+		int32 OutlinedMeshCount = 0;
+
 		/** For each directional light in ViewConstants, whether it casts shadows, and its rotation. */
 		std::array<bool, FSceneRenderer::MaxDirectionalLights> bLightCastsShadows{};
 		std::array<FQuat, FSceneRenderer::MaxDirectionalLights> LightRotations{};
@@ -143,11 +147,16 @@ namespace
 		return (bMirrorsX != bMirrorsY) != bMirrorsZ;
 	}
 
-	/** Adds the draw of a mesh component to Contents, if the component shows anything. */
+	/**
+	 * Adds the draw of a mesh component to Contents, if the component shows anything.
+	 *
+	 * @param bIsOutlined True if the mesh gets a line around it.
+	 */
 	void CollectMesh(const WStaticMeshComponent& Component,
 		const FTransform& WorldTransform,
 		const FCameraView& View,
 		const FMatrix4f& RelativeToClip,
+		bool bIsOutlined,
 		FSceneContents& Contents)
 	{
 		WStaticMesh* const Mesh = Component.Mesh.Get();
@@ -185,6 +194,8 @@ namespace
 		Contents.DrawData.push_back(Data);
 		Contents.CastsShadows.push_back(Component.bCastShadows);
 		Contents.IsMirrored.push_back(IsMirroring(WorldTransform.Scale));
+		Contents.IsOutlined.push_back(bIsOutlined);
+		Contents.OutlinedMeshCount += bIsOutlined ? 1 : 0;
 	}
 
 	/** Adds a directional light to Contents, if it shines and there is room for it. */
@@ -262,16 +273,27 @@ namespace
 	 * Walks the entities of a scene once and collects what a picture of it needs.
 	 *
 	 * @param bCollectLights False for a picture without lighting, which leaves the lights out.
+	 * @param OutlinedEntities The identifiers of the entities that get a line around what they and the entities
+	 * below them show.
 	 */
-	FSceneContents CollectScene(const WScene& Scene, const FCameraView& View, float AspectRatio, bool bCollectLights)
+	FSceneContents CollectScene(const WScene& Scene,
+		const FCameraView& View,
+		float AspectRatio,
+		bool bCollectLights,
+		std::span<const int64> OutlinedEntities)
 	{
 		const FMatrix4f RelativeToClip = View.GetProjectionMatrix(AspectRatio) * View.GetViewMatrix();
 
-		/** An entity that is still to be visited, with the world transform of its parent. */
+		/** An entity that is still to be visited, with what it has from its parent. */
 		struct FPendingEntity
 		{
 			const WEntity* Entity = nullptr;
+
+			/** The world transform of its parent. */
 			FTransform ParentTransform;
+
+			/** True if an entity above it is outlined, which outlines it too. */
+			bool bIsBelowOutlined = false;
 		};
 
 		// Entities wait on a stack. They are pushed in reverse, so that they are visited in the order of the scene:
@@ -280,7 +302,7 @@ namespace
 		const std::vector<TObjectPtr<WEntity>>& Roots = Scene.GetRootEntities();
 		for (std::size_t Index = Roots.size(); Index > 0; --Index)
 		{
-			Pending.push_back({Roots[Index - 1].Get(), FTransform()});
+			Pending.push_back({Roots[Index - 1].Get(), FTransform(), false});
 		}
 
 		FSceneContents Contents;
@@ -295,10 +317,12 @@ namespace
 
 			const FTransform WorldTransform =
 				FTransform::Combine(Current.ParentTransform, Current.Entity->GetRelativeTransform());
+			const bool bIsOutlined = Current.bIsBelowOutlined ||
+				std::ranges::find(OutlinedEntities, Current.Entity->GetId()) != OutlinedEntities.end();
 			const std::vector<TObjectPtr<WEntity>>& Children = Current.Entity->GetChildren();
 			for (std::size_t Index = Children.size(); Index > 0; --Index)
 			{
-				Pending.push_back({Children[Index - 1].Get(), WorldTransform});
+				Pending.push_back({Children[Index - 1].Get(), WorldTransform, bIsOutlined});
 			}
 
 			for (const TObjectPtr<WComponent>& Component : Current.Entity->GetComponents())
@@ -310,7 +334,7 @@ namespace
 
 				if (const WStaticMeshComponent* const Mesh = Cast<WStaticMeshComponent>(Component.Get()))
 				{
-					CollectMesh(*Mesh, WorldTransform, View, RelativeToClip, Contents);
+					CollectMesh(*Mesh, WorldTransform, View, RelativeToClip, bIsOutlined, Contents);
 				}
 				else if (!bCollectLights)
 				{
@@ -632,6 +656,17 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 		NewImplementation->SceneBindingLayout,
 		FRenderTarget::FImplementation::SceneColorFormat,
 		FRenderTarget::FImplementation::DepthFormat);
+	if (!NewImplementation->Outlines.Initialize(NewImplementation->Context,
+			InputLayout,
+			VertexShader,
+			NewImplementation->SceneBindingLayout,
+			FRenderTarget::FImplementation::OutlineMaskFormat,
+			FRenderTarget::FImplementation::ColorFormat))
+	{
+		OutError = "the graphics card could not create what the lines around outlined meshes need";
+		return nullptr;
+	}
+
 	const bool bHasMeshPipelines = NewImplementation->LitPipelines.IsComplete() &&
 		NewImplementation->UnlitPipelines.IsComplete() && NewImplementation->PrepassPipelines.IsComplete();
 	if (!bHasMeshPipelines || NewImplementation->TonemapPipeline == nullptr ||
@@ -687,8 +722,13 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		std::isfinite(AmbientOcclusionIntensity) && AmbientOcclusionIntensity > 0.0f;
 	const bool bHasOcclusion = (bIsLit || bShowsOcclusion) && bOcclusionIsSwitchedOn;
 	const float AspectRatio = static_cast<float>(TargetData.Width) / static_cast<float>(TargetData.Height);
-	const FSceneContents Contents = CollectScene(Scene, View, AspectRatio, bIsLit);
+	const FSceneContents Contents = CollectScene(Scene, View, AspectRatio, bIsLit, OutlinedEntities);
 	const int32 DrawCount = static_cast<int32>(Contents.Meshes.size());
+
+	// A line is drawn if there is something to draw it around and it has a width. A width that is no number is
+	// none.
+	const float OutlineLineWidth = std::isfinite(OutlineWidth) ? std::min(OutlineWidth, MaxOutlineWidth) : 0.0f;
+	const bool bHasOutlines = Contents.OutlinedMeshCount > 0 && OutlineLineWidth > 0.0f;
 
 	// Everything that can fail happens before the first command is recorded, so that a failure leaves the target
 	// as it was.
@@ -939,6 +979,13 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		return false;
 	}
 
+	if (bHasOutlines &&
+		!Implementation->Outlines.PrepareTarget(TargetData.OutlineBindings, TargetData.OutlineMaskTexture))
+	{
+		OutError = "the graphics card could not bind the render target's mask for outlines";
+		return false;
+	}
+
 	FAmbientOcclusion::FConstants OcclusionConstants;
 	{
 		const float HalfHeight = std::tan(glm::radians(View.VerticalFieldOfView) * 0.5f);
@@ -1170,6 +1217,50 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		CommandList.draw(nvrhi::DrawArguments().setVertexCount(FullScreenTriangleVertexCount));
 	}
 
+	if (bHasOutlines)
+	{
+		// The meshes that get a line around them are marked in the mask, and the line is then drawn onto the
+		// finished picture, around what is marked.
+		const nvrhi::Color Unmarked(0.0f, 0.0f, 0.0f, 0.0f);
+		CommandList.clearTextureFloat(TargetData.OutlineMaskTexture, nvrhi::AllSubresources, Unmarked);
+
+		nvrhi::GraphicsState State;
+		State.pipeline = Implementation->Outlines.GetMaskPipeline();
+		State.framebuffer = TargetData.OutlineMaskFramebuffer;
+		State.viewport.addViewportAndScissorRect(Viewport);
+		State.bindings.push_back(Implementation->SceneBindingSet);
+		State.vertexBuffers.resize(1);
+		for (int32 DrawIndex = 0; DrawIndex < DrawCount; ++DrawIndex)
+		{
+			if (!Contents.IsOutlined[static_cast<std::size_t>(DrawIndex)])
+			{
+				continue;
+			}
+
+			const FStaticMeshBuffers& Buffers =
+				Implementation->MeshBuffers.at(Contents.Meshes[static_cast<std::size_t>(DrawIndex)]);
+			State.vertexBuffers[0] =
+				nvrhi::VertexBufferBinding().setBuffer(Buffers.VertexBuffer).setSlot(0).setOffset(0);
+			State.indexBuffer = nvrhi::IndexBufferBinding()
+									.setBuffer(Buffers.IndexBuffer)
+									.setFormat(nvrhi::Format::R32_UINT)
+									.setOffset(0);
+			CommandList.setGraphicsState(State);
+			CommandList.drawIndexed(nvrhi::DrawArguments()
+										.setVertexCount(Buffers.IndexCount)
+										.setStartInstanceLocation(static_cast<uint32>(DrawIndex)));
+		}
+
+		FOutlines::FConstants OutlineConstants;
+		OutlineConstants.Color = glm::vec4(std::clamp(OutlineColor.R, 0.0f, 1.0f),
+			std::clamp(OutlineColor.G, 0.0f, 1.0f),
+			std::clamp(OutlineColor.B, 0.0f, 1.0f),
+			std::clamp(OutlineColor.A, 0.0f, 1.0f));
+		OutlineConstants.Settings = glm::vec4(OutlineLineWidth, 0.0f, 0.0f, 0.0f);
+		Implementation->Outlines.Draw(
+			CommandList, TargetData.OutlineBindings, TargetData.OutputFramebuffer, Viewport, OutlineConstants);
+	}
+
 	CommandList.close();
 	Device.executeCommandList(&CommandList);
 	Device.runGarbageCollection();
@@ -1186,6 +1277,7 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	Implementation->Statistics.AmbientOcclusionPassCount = bHasOcclusion ? 1 : 0;
 	Implementation->Statistics.DirectionalLightCount = Contents.ViewConstants.LightCounts.x;
 	Implementation->Statistics.PointLightCount = Contents.ViewConstants.LightCounts.y;
+	Implementation->Statistics.OutlinedMeshCount = bHasOutlines ? Contents.OutlinedMeshCount : 0;
 	return true;
 }
 
