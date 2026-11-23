@@ -231,6 +231,41 @@ void* FWindow::GetNativeHandle() const
 	return nullptr;
 }
 
+void FWindow::CaptureMouse()
+{
+	if (IsMouseCaptured())
+	{
+		return;
+	}
+
+	glfwSetInputMode(Implementation->Handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	// Where the window system can report the movement of the mouse itself, that is what a camera is turned by:
+	// the movement of the pointer has the system's acceleration in it.
+	if (glfwRawMouseMotionSupported() == GLFW_TRUE)
+	{
+		glfwSetInputMode(Implementation->Handle, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+	}
+}
+
+void FWindow::ReleaseMouse()
+{
+	if (!IsMouseCaptured())
+	{
+		return;
+	}
+
+	if (glfwRawMouseMotionSupported() == GLFW_TRUE)
+	{
+		glfwSetInputMode(Implementation->Handle, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
+	}
+	glfwSetInputMode(Implementation->Handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+}
+
+bool FWindow::IsMouseCaptured() const
+{
+	return glfwGetInputMode(Implementation->Handle, GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
+}
+
 FInputState& FWindow::GetInput()
 {
 	return Implementation->Input;

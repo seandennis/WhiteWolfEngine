@@ -160,6 +160,46 @@ TEST_SUITE("FWindow")
 		CHECK(Window->GetHeight() >= 360);
 	}
 
+	TEST_CASE("A window takes the mouse and gives it back")
+	{
+		const FScopedHeadlessPlatform Platform;
+		std::string Error;
+		const std::unique_ptr<FWindow> Window = FWindow::Create(FWindowDescription(), Error);
+		REQUIRE(Window != nullptr);
+		const std::unique_ptr<FWindow> Other = FWindow::Create(FWindowDescription(), Error);
+		REQUIRE(Other != nullptr);
+
+		CHECK_FALSE(Window->IsMouseCaptured());
+
+		Window->CaptureMouse();
+		CHECK(Window->IsMouseCaptured());
+		// It is this window's alone.
+		CHECK_FALSE(Other->IsMouseCaptured());
+
+		// Taking it again, or giving it back twice, changes nothing.
+		Window->CaptureMouse();
+		CHECK(Window->IsMouseCaptured());
+		Window->ReleaseMouse();
+		CHECK_FALSE(Window->IsMouseCaptured());
+		Window->ReleaseMouse();
+		CHECK_FALSE(Window->IsMouseCaptured());
+	}
+
+	TEST_CASE("The mouse of a window that has taken it is reported wherever it goes")
+	{
+		const FScopedHeadlessPlatform Platform;
+		std::string Error;
+		const std::unique_ptr<FWindow> Window = FWindow::Create(FWindowDescription(), Error);
+		REQUIRE(Window != nullptr);
+		Window->CaptureMouse();
+
+		// Far beyond the edges of the window, where a pointer could not be.
+		Window->GetInput().HandleMouseMove(FVector2D(-5000.0, 90000.0));
+
+		CHECK(Window->GetInput().HasMousePosition());
+		CHECK(Window->GetInput().GetMousePosition() == FVector2D(-5000.0, 90000.0));
+	}
+
 	TEST_CASE("Each window has its own input state")
 	{
 		const FScopedHeadlessPlatform Platform;

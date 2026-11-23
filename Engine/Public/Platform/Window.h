@@ -74,6 +74,22 @@ public:
 	 */
 	ENGINE_API void* GetNativeHandle() const;
 
+	/**
+	 * Takes the mouse for this window. Its pointer is no longer shown, and no longer stopped by the edges of the
+	 * screen: the mouse can be moved without end, as it is to turn a camera, and the position that the input
+	 * state reports goes on changing with it, beyond the window. Does nothing if the window has the mouse already.
+	 */
+	ENGINE_API void CaptureMouse();
+
+	/**
+	 * Gives the mouse back after CaptureMouse: the pointer is shown again, where it was when the mouse was taken.
+	 * Does nothing if the window has not taken the mouse.
+	 */
+	ENGINE_API void ReleaseMouse();
+
+	/** Returns true between CaptureMouse and ReleaseMouse. */
+	ENGINE_API bool IsMouseCaptured() const;
+
 	/** Returns the keyboard and mouse state of this window. */
 	ENGINE_API FInputState& GetInput();
 	ENGINE_API const FInputState& GetInput() const;
