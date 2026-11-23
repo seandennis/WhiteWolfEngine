@@ -1348,3 +1348,23 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** If the entity that has the gizmo is below another that is selected, it is the one above that is copied and selected, and the gizmo goes to the last of the copies. After the step is undone, nothing is selected, as after an undone Ctrl+D.
 
 **Testing.** In the user interface, from straight in front: a drag of an arrow with Alt, with the original where it was, the copy moved, selected and under the gizmo, one step that is undone and redone, and the camera where it was; a click with Alt, and a drag with Alt that is shorter than a step, with no copy and no step; three selected entities of which one is below another, with a copy of each of the two above and of what is below them; a ring and a box with Alt, each making a copy of what the last drag left selected; an undo in the middle of a drag of copies, after which the mouse moves on and nothing is copied again; and Alt with the left button beside the gizmo, which goes around as before. The second fails when copies are made at the press.
+
+## D-073: The editor keeps the log, and a command reads it
+
+**Status:** Accepted.
+
+**Context.** The specification asks for a command that reads the log, so that an agent can find out why its work did not come out as it meant, and for an Output Log in the editor's window. The editor logged the reason of every command that failed, and nothing kept the log where either could read it: in the window, a command that was refused did nothing that could be seen.
+
+**Decision.**
+
+- **An `FEditor` keeps what is logged while it exists:** a memory sink (`FMemoryLogSink`, which the engine had) that it gives the log when it is made and takes back when it is destroyed. It holds the most recent 4096 messages of the editor and of the engine, whatever their category lets through. `FEditor::GetLog` is the sink, and `ClearLog` empties it.
+- **`Log.Read` returns the messages that are wanted** (`FLogFilter`): of at least one importance, of one category, with a text somewhere in them or in the name of their category. It returns the last hundred of those, or as many as it is asked for, oldest first, each with its time, and says how many there were in all. `Log.Clear` forgets them, which is how to see what one thing logged by itself.
+- **The kinds of message are named as the code names them** (Fatal, Error, Warning, Display, Log, Verbose, VeryVerbose), and a name that is none of them is refused with the list.
+- **Neither command changes the scene,** and neither is a step of the history.
+- **The sink says when what it holds has changed** (`GetRevision`), so that whoever shows the messages copies them only then.
+
+**Alternatives considered.** A log that belongs to the process and not to an editor would also have what was logged before the editor was made; a test, and an agent's session, would then read what others left there. Returning the file that the log is written to leaves the choosing to whoever reads it, and the editor writes no such file. A number for each message, and a command that returns what came after a number, would let an agent follow the log; clearing it before something is tried does the same with less.
+
+**Limits.** What was logged before the editor was made is not kept, and of more than 4096 messages the oldest are gone. Messages of the kinds that a category does not let through, which are the details of debugging unless a category is set otherwise, were never logged at all.
+
+**Testing.** `FMemoryLogSink`: that its revision is another number after a message, after one that pushes the oldest out, and after it is emptied, and the same after it is read. `FLogFilter`: a new one, every kind of message against each least importance, a category written exactly and nearly, a text in the message and in the name of the category in any case, all three at once, and equality. `FEditor`: what is logged before and while it exists, by the editor and the engine; what a category does not let through; emptying; two editors at once, and one that is gone; a command that fails and one that does not. The commands: messages in their order with all their fields and a time of the right form; an empty log; each least importance; a category, a text, and both with an importance; fewer messages than were asked for, more, and the hundred that are returned unasked; a kind of message that there is not, in two spellings, and counts of none and less; arguments of the wrong type and one that there is not; the reason of a failed command; clearing; and that the history is as it was.

@@ -5,6 +5,7 @@
 #include "Commands/CommandRegistry.h"
 #include "Commands/CommandResult.h"
 #include "History/UndoHistory.h"
+#include "Logging/MemoryLogSink.h"
 #include "Object/WeakObjectPtr.h"
 #include "Project/Project.h"
 #include "Rendering/SceneViewMode.h"
@@ -13,6 +14,7 @@
 #include "Viewport/ViewportCamera.h"
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -35,8 +37,9 @@ extern EDITOR_API FLogCategory LogEditor;
  * It may have a project (FProject), which is where the assets that scenes refer to are. It knows which entities
  * of the scene are selected, the ones that the user is working on. It knows from where the scene is looked at:
  * the camera of the viewport, which is the user's eye and not something in the scene. It knows how the gizmo is
- * set that things are moved with in the viewport. And it remembers which projects were opened last
- * (FEditorSettings), from one run to the next if it is given a file to keep that in.
+ * set that things are moved with in the viewport. It remembers which projects were opened last
+ * (FEditorSettings), from one run to the next if it is given a file to keep that in. And it keeps what is logged
+ * while it exists, for the user and for an agent to read.
  *
  * Every change to the scene can be undone. After each command that can change the scene (ECommandEffect), the
  * editor writes the scene down, and if it differs from what it was, that is a step of the history; Undo and Redo
@@ -260,6 +263,19 @@ public:
 	EDITOR_API void SetSettingsFile(std::filesystem::path File);
 
 	/**
+	 * Returns what has been logged while this editor exists, by the editor and by the engine: the most recent
+	 * messages, which the Output Log shows and the command Log.Read returns. That a command failed, and why, is
+	 * among them.
+	 */
+	const FMemoryLogSink& GetLog() const
+	{
+		return *LogSink;
+	}
+
+	/** Forgets what has been logged so far. What is logged from now on is kept as before. */
+	EDITOR_API void ClearLog();
+
+	/**
 	 * Returns the file that a path given to a command means: a relative path is relative to the content directory
 	 * of the project, if one is open, so that a scene can be named as "Scenes/Level1.json". Any other path is
 	 * returned as it is.
@@ -319,4 +335,7 @@ private:
 
 	/** The file the settings are kept in; empty if they are kept nowhere. */
 	std::filesystem::path SettingsFile;
+
+	/** Where the log's messages are kept for GetLog. The log has it for as long as the editor exists. */
+	std::shared_ptr<FMemoryLogSink> LogSink;
 };

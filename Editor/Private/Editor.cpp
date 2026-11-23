@@ -7,6 +7,7 @@
 #include "Commands/EditCommands.h"
 #include "Commands/EditorCommands.h"
 #include "Commands/EntityCommands.h"
+#include "Commands/LogCommands.h"
 #include "Commands/ProjectCommands.h"
 #include "Commands/PropertyCommands.h"
 #include "Commands/SceneCommands.h"
@@ -16,18 +17,24 @@
 #include "Json/JsonFormat.h"
 #include "Json/JsonValue.h"
 #include "Json/JsonWriter.h"
+#include "Logging/Log.h"
 #include "Object/ObjectGlobals.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneSerializer.h"
 
 #include <algorithm>
+#include <memory>
 #include <system_error>
 #include <utility>
 
 constinit FLogCategory LogEditor("LogEditor", ELogVerbosity::Log);
 
 FEditor::FEditor()
+	: LogSink(std::make_shared<FMemoryLogSink>())
 {
+	// Before anything else, so that whatever the editor does is in its log.
+	FLog::AddSink(LogSink);
+
 	FEditorCommands::Register(Commands);
 	FEditCommands::Register(Commands);
 	FProjectCommands::Register(Commands);
@@ -38,6 +45,7 @@ FEditor::FEditor()
 	FPropertyCommands::Register(Commands);
 	FSelectionCommands::Register(Commands);
 	FViewportCommands::Register(Commands);
+	FLogCommands::Register(Commands);
 
 	WScene* const EmptyScene = NewObject<WScene>();
 	EmptyScene->SetName(std::string(DefaultSceneName));
@@ -57,6 +65,13 @@ FEditor::~FEditor()
 	{
 		FAssetManager::SetContentDirectory(std::filesystem::path());
 	}
+
+	FLog::RemoveSink(LogSink);
+}
+
+void FEditor::ClearLog()
+{
+	LogSink->Clear();
 }
 
 FCommandResult FEditor::ExecuteCommand(std::string_view Name, const FJsonValue& Arguments)
