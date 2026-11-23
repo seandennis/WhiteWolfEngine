@@ -441,6 +441,41 @@ TEST_SUITE("FViewportGizmo")
 		CHECK(Moved.Rotation == Upright.Rotation);
 	}
 
+	TEST_CASE("A ring turns a thing around the thing's own axis when the gizmo is set to its own axes")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		const int64 Crate = AddEntity(Test, "Crate", FVector(0.0));
+		// A quarter turn around X: the crate's own Y points at the camera, where the world's Z does.
+		FTransform Tipped;
+		Tipped.Rotation = glm::angleAxis(glm::radians(90.0f), FVector3f(1.0f, 0.0f, 0.0f));
+		Test.Editor.GetScene().FindEntityById(Crate)->SetRelativeTransform(Tipped);
+		Test.Editor.SetSelection({Crate});
+
+		// Along the axes of the world, the ring around Y is seen from its edge: a level line through the middle.
+		SetGizmo(Test, EGizmoMode::Rotate, EGizmoSpace::World);
+		const FVector2D Middle = Test.RequireItem("Viewport/Gizmo").GetCenter();
+		const double AxisLength = GetAxisLength(Test);
+		CHECK(Test.RequireItem(Handle("Y")).GetCenter().y == doctest::Approx(Middle.y).epsilon(0.01));
+
+		// Along the crate's own, it is seen squarely, and taken hold of at its lower right.
+		SetGizmo(Test, EGizmoMode::Rotate, EGizmoSpace::Local);
+		const FVector2D OnRing = Test.RequireItem(Handle("Y")).GetCenter();
+		REQUIRE(OnRing.x > Middle.x + 30.0);
+		REQUIRE(OnRing.y > Middle.y + 30.0);
+
+		// Up and to the right from there is along the ring, counter-clockwise as the camera sees it.
+		Test.DragBy(Handle("Y"), FVector2D(30.0, -30.0));
+
+		const FTransform Turned = GetTransform(Test, Crate);
+		const double ExpectedDegrees = glm::degrees(std::sqrt(1800.0) / AxisLength);
+		CHECK(GetTurnAroundZ(Turned.Rotation) == doctest::Approx(ExpectedDegrees).epsilon(DragTolerance));
+		// Around the crate's own Y, which points where it did.
+		CHECK(glm::length(Turned.Rotation * FVector3f(0.0f, 1.0f, 0.0f) - AxisZ) < 1.0e-4f);
+		CHECK(Turned.Location == FVector(0.0));
+		CHECK(GetLastStepName(Test) == "Rotate");
+	}
+
 	TEST_CASE("Sizes are changed along a thing's own axes, whichever axes the gizmo is set to")
 	{
 		FEditorUiTest Test;
@@ -511,6 +546,49 @@ TEST_SUITE("FViewportGizmo")
 		CHECK(Relative.Rotation == WheelTransform.Rotation);
 		CHECK(Relative.Scale == WheelTransform.Scale);
 		CHECK(GetTransform(Test, CartId) == CartTransform);
+	}
+
+	TEST_CASE("Below an entity that is flat along an axis, a drag leaves where a thing is along that axis")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		WEntity* const Floor = Test.Editor.GetScene().CreateEntity("Floor");
+		REQUIRE(Floor != nullptr);
+		FTransform FloorTransform;
+		FloorTransform.Scale = FVector3f(1.0f, 0.0f, 1.0f);
+		Floor->SetRelativeTransform(FloorTransform);
+
+		// Five metres above the floor, which a flat floor does not show: in the world the lamp is where the floor is.
+		WEntity* const LampEntity = Test.Editor.GetScene().CreateEntity("Lamp", Floor);
+		REQUIRE(LampEntity != nullptr);
+		FTransform LampTransform;
+		LampTransform.Location = FVector(0.0, 5.0, 0.0);
+		LampEntity->SetRelativeTransform(LampTransform);
+		REQUIRE(LampEntity->GetWorldLocation() == FVector(0.0));
+		const int64 Lamp = LampEntity->GetId();
+		Test.Editor.SetSelection({Lamp});
+		Test.DrawFrame();
+		const double PixelSize = GetPixelSize(Test);
+
+		Test.DragBy(Handle("X"), FVector2D(60.0, 0.0));
+
+		const FVector Moved = GetTransform(Test, Lamp).Location;
+		CHECK(Moved.x == doctest::Approx(60.0 * PixelSize).epsilon(DragTolerance));
+		CHECK(Moved.y == 5.0);
+		CHECK(Moved.z == 0.0);
+		CHECK(CountSteps(Test, "Move") == 1);
+
+		// Along the axis that the floor is flat along, a drag moves nothing in the world and changes nothing.
+		Test.DragBy(Handle("Y"), FVector2D(0.0, -40.0));
+		CHECK(GetTransform(Test, Lamp).Location == Moved);
+		CHECK(CountSteps(Test, "Move") == 1);
+
+		// With Alt held, such a drag makes no copy to lie on what it is a copy of.
+		Test.SetKeyDown(EKey::LeftAlt, true);
+		Test.DragBy(Handle("Y"), FVector2D(0.0, -40.0));
+		Test.SetKeyDown(EKey::LeftAlt, false);
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 2);
+		CHECK(CountSteps(Test, "Duplicate") == 0);
 	}
 
 	TEST_CASE("Everything that is selected is dragged, and what is below something selected only with it")
@@ -633,10 +711,63 @@ TEST_SUITE("FViewportGizmo")
 		CHECK(CountSteps(Test, "Move") == 0);
 		CHECK_FALSE(Test.Editor.IsStepOpen());
 
-		// Nor does a drag of the handle, which ends over the box, select the box.
-		Test.DragBy(Handle("X"), FVector2D(10.0, 0.0));
+		// Nor does a drag of the handle that is too short for the library to call it one, and ends over the box,
+		// select the box.
+		Test.DragBy(Handle("X"), FVector2D(4.0, 0.0));
 		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Crate});
 		CHECK(CountSteps(Test, "Move") == 1);
+	}
+
+	TEST_CASE("A drag ends where the mouse is when the button comes up, also if it came there in that very frame")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		const int64 Crate = AddEntity(Test, "Crate", FVector(0.0));
+		Test.Editor.SetSelection({Crate});
+		Test.DrawFrame();
+		const double PixelSize = GetPixelSize(Test);
+
+		PressAt(Test, Test.RequireItem(Handle("X")).GetCenter(), EMouseButton::Left);
+		MoveBy(Test, FVector2D(20.0, 0.0));
+
+		// The mouse goes on and the button comes up before the next frame is drawn.
+		Test.Input.HandleMouseMove(Test.Input.GetMousePosition() + FVector2D(20.0, 0.0));
+		Test.Input.HandleMouseButtonEvent(EMouseButton::Left, EInputEvent::Released);
+		Test.DrawFrames(3);
+
+		CHECK(GetTransform(Test, Crate).Location.x == doctest::Approx(40.0 * PixelSize).epsilon(DragTolerance));
+		CHECK(CountSteps(Test, "Move") == 1);
+		CHECK_FALSE(Test.Editor.IsStepOpen());
+	}
+
+	TEST_CASE("While it is not known where the mouse is, a drag stays what it was")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		const int64 Crate = AddEntity(Test, "Crate", FVector(0.0));
+		Test.Editor.SetSelection({Crate});
+		SetGizmo(Test, EGizmoMode::Rotate);
+
+		// A ring, which is measured in the picture alone: a place that is no place would turn the thing by an angle
+		// that is no number.
+		PressAt(Test, Test.RequireItem(Handle("Z")).GetCenter(), EMouseButton::Left);
+		MoveBy(Test, FVector2D(-30.0, -30.0));
+		const FTransform Turned = GetTransform(Test, Crate);
+		REQUIRE(GetTurnAroundZ(Turned.Rotation) > 10.0);
+
+		// The mouse leaves the window with the button down.
+		Test.Input.HandleMouseLeave();
+		Test.DrawFrames(2);
+		CHECK(GetTransform(Test, Crate) == Turned);
+		CHECK(Test.Editor.IsStepOpen());
+
+		// The button comes up out there: the drag ends as it was.
+		Release(Test, EMouseButton::Left);
+		Test.DrawFrames(3);
+		CHECK(GetTransform(Test, Crate) == Turned);
+		CHECK_FALSE(Test.Editor.IsStepOpen());
+		CHECK(CountSteps(Test, "Rotate") == 1);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
 	}
 
 	TEST_CASE("While a handle is dragged, the mouse steers no camera and stays a mouse")
@@ -882,6 +1013,47 @@ TEST_SUITE("FViewportGizmo")
 		CHECK(CountLoggedProblems(Test.Capture) == 0);
 	}
 
+	TEST_CASE(
+		"Undoing after a press with Alt, before anything is copied, ends the drag, and nothing is copied after it")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		const int64 Crate = AddEntity(Test, "Crate", FVector(0.0));
+		Test.Editor.SetSelection({Crate});
+		Test.DrawFrame();
+
+		// A step for the undo to take back that leaves the crate in the scene, and selected.
+		Test.DragBy(Handle("X"), FVector2D(40.0, 0.0));
+		REQUIRE(GetTransform(Test, Crate).Location.x > 0.1);
+		REQUIRE(CountSteps(Test, "Move") == 1);
+
+		Test.SetKeyDown(EKey::LeftAlt, true);
+		PressAt(Test, Test.RequireItem(Handle("X")).GetCenter(), EMouseButton::Left);
+		Test.SetKeyDown(EKey::LeftAlt, false);
+		REQUIRE(Test.Editor.IsStepOpen());
+		REQUIRE(Test.Editor.GetScene().GetAllEntities().size() == 1);
+
+		// The drag has changed nothing yet, so it is the move before it that is undone.
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		CHECK(GetTransform(Test, Crate) == FTransform());
+		CHECK_FALSE(Test.Editor.IsStepOpen());
+
+		// The button is still down, and the mouse moves on: the drag is over, and makes no copy now.
+		MoveBy(Test, FVector2D(40.0, 0.0));
+		Release(Test, EMouseButton::Left);
+		Test.DrawFrames(3);
+
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 1);
+		CHECK(GetTransform(Test, Crate) == FTransform());
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Crate});
+		CHECK(CountSteps(Test, "Duplicate") == 0);
+		CHECK(CountSteps(Test, "Entity.Duplicate") == 0);
+		const std::vector<std::string> Undone = {"Move"};
+		CHECK(Test.Editor.GetHistory().GetRedoStepNames() == Undone);
+		CHECK_FALSE(Test.Editor.IsStepOpen());
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
 	TEST_CASE("Undoing in the middle of a drag ends the drag")
 	{
 		FEditorUiTest Test;
@@ -988,6 +1160,106 @@ TEST_SUITE("FViewportGizmo")
 		CHECK(Test.Editor.GetScene().FindEntityById(Barrel) == nullptr);
 		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Crate});
 		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("A drag ends when one of the things that it moves is given another parent")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		WEntity* const CartEntity = Test.Editor.GetScene().CreateEntity("Cart");
+		REQUIRE(CartEntity != nullptr);
+		FTransform CartTransform;
+		CartTransform.Location = FVector(-2.0, 1.0, 0.0);
+		CartTransform.Rotation = glm::angleAxis(glm::radians(90.0f), AxisZ);
+		CartTransform.Scale = FVector3f(2.0f);
+		CartEntity->SetRelativeTransform(CartTransform);
+		const int64 Cart = CartEntity->GetId();
+		const int64 Crate = AddEntity(Test, "Crate", FVector(0.0));
+		Test.Editor.SetSelection({Crate});
+		Test.DrawFrame();
+
+		PressAt(Test, Test.RequireItem(Handle("X")).GetCenter(), EMouseButton::Left);
+		MoveBy(Test, FVector2D(40.0, 0.0));
+		REQUIRE(GetTransform(Test, Crate).Location.x > 0.1);
+
+		// As a command of an agent may do while the user drags. The crate stays where it is in the world, and is
+		// from here on placed relative to the cart.
+		FJsonValue Arguments = FJsonValue::MakeObject();
+		Arguments.SetMember("Entity", Crate);
+		Arguments.SetMember("Parent", Cart);
+		REQUIRE(Test.Editor.ExecuteCommand("Entity.SetParent", Arguments).HasSucceeded());
+		const FTransform OnCart = GetTransform(Test, Crate);
+		Test.DrawFrame();
+		CHECK_FALSE(Test.Editor.IsStepOpen());
+		CHECK(GetTransform(Test, Crate) == OnCart);
+
+		// The button is still down, and the mouse moves on: nothing follows it any more.
+		MoveBy(Test, FVector2D(40.0, 0.0));
+		Release(Test, EMouseButton::Left);
+		Test.DrawFrames(3);
+
+		CHECK(GetTransform(Test, Crate) == OnCart);
+		CHECK(GetEntity(Test, Crate).GetParent() == &GetEntity(Test, Cart));
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Crate});
+		CHECK(CountSteps(Test, "Move") == 1);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("A name that is typed in the outliner is given before a drag of the gizmo begins")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		const int64 Crate = AddEntity(Test, "Crate", FVector(0.0));
+		Test.Editor.SetSelection({Crate});
+		Test.DrawFrame();
+
+		// The name is being typed, and nothing has ended the typing, when the mouse takes hold of the arrow.
+		Test.PressKey(EKey::F2);
+		REQUIRE(Test.HasItem("Outliner/Rename"));
+		Test.Type("Hero");
+		REQUIRE(GetEntity(Test, Crate).GetName() == "Crate");
+
+		Test.DragBy(Handle("X"), FVector2D(60.0, 0.0));
+
+		CHECK(GetEntity(Test, Crate).GetName() == "Hero");
+		CHECK_FALSE(Test.HasItem("Outliner/Rename"));
+		CHECK(GetTransform(Test, Crate).Location.x > 0.1);
+		CHECK_FALSE(Test.Editor.IsStepOpen());
+		const std::vector<std::string> Names = Test.Editor.GetHistory().GetUndoStepNames();
+		REQUIRE(Names.size() >= 2);
+		CHECK(Names[0] == "Move");
+		CHECK(Names[1] == "Rename");
+
+		// The drag is undone without the name.
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		CHECK(GetTransform(Test, Crate).Location == FVector(0.0));
+		CHECK(GetEntity(Test, Crate).GetName() == "Hero");
+	}
+
+	TEST_CASE("A name that is typed in the outliner is given before a drag with Alt makes a copy")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		const int64 Crate = AddEntity(Test, "Crate", FVector(0.0));
+		Test.Editor.SetSelection({Crate});
+		Test.DrawFrame();
+		Test.PressKey(EKey::F2);
+		REQUIRE(Test.HasItem("Outliner/Rename"));
+		Test.Type("Hero");
+
+		Test.SetKeyDown(EKey::LeftAlt, true);
+		Test.DragBy(Handle("X"), FVector2D(60.0, 0.0));
+		Test.SetKeyDown(EKey::LeftAlt, false);
+
+		// The copy is of the entity as it was named, and it is the copy that has moved.
+		const std::vector<WEntity*> Entities = Test.Editor.GetScene().GetAllEntities();
+		REQUIRE(Entities.size() == 2);
+		CHECK(Entities[0]->GetName() == "Hero");
+		CHECK(Entities[1]->GetName() == "Hero");
+		CHECK(GetTransform(Test, Crate).Location == FVector(0.0));
+		CHECK(GetLastStepName(Test) == "Duplicate");
+		CHECK(CountSteps(Test, "Rename") == 1);
+		CHECK_FALSE(Test.Editor.IsStepOpen());
 	}
 
 	TEST_CASE("What is typed in the Details panel is a step of its own before a drag of the gizmo begins")

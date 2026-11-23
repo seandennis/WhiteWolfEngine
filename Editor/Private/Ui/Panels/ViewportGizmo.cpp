@@ -213,9 +213,10 @@ void FViewportGizmo::Draw(FUiFrame& Frame, const FVector2f& PictureCorner, const
 	const FVector2f MousePoint = FVector2f(Io.MousePos.x, Io.MousePos.y) - PictureCorner;
 	const bool bIsMouseKnown = ImGui::IsMousePosValid();
 
-	// A drag moves what was selected when it began. Once something else is selected, or one of those things is
-	// gone, as a command of an agent may have it in the middle of a drag, the drag is over.
-	if (Drag.has_value() && Editor.GetSelection() != DraggedSelection)
+	// A drag moves what was selected when it began, each thing from where it and its parent were then. Once
+	// something else is selected, one of those things is gone, or one of them has another parent or a parent that
+	// has moved, as a command may have it in the middle of a drag, the drag is over.
+	if (Drag.has_value() && !CanDragGoOn(Editor))
 	{
 		EndDrag(Frame);
 	}
@@ -283,6 +284,29 @@ void FViewportGizmo::LetGo(FUiFrame& Frame)
 	EndDrag(Frame);
 	bHasMouse = false;
 	bHadMouse = false;
+}
+
+bool FViewportGizmo::CanDragGoOn(const FEditor& Editor) const
+{
+	if (Editor.GetSelection() != DraggedSelection)
+	{
+		return false;
+	}
+
+	const WScene& Scene = Editor.GetScene();
+	return std::ranges::all_of(DraggedEntities,
+		[&Scene](const FDraggedEntity& Dragged)
+		{
+			const WEntity* const Entity = Scene.FindEntityById(Dragged.EntityId);
+			if (Entity == nullptr)
+			{
+				return false;
+			}
+
+			const WEntity* const Parent = Entity->GetParent();
+			const FTransform ParentTransform = Parent != nullptr ? Parent->GetWorldTransform() : FTransform();
+			return ParentTransform == Dragged.ParentTransform;
+		});
 }
 
 void FViewportGizmo::BeginDrag(
@@ -412,7 +436,16 @@ FTransform FViewportGizmo::FindDraggedTransform(const FDraggedEntity& Dragged) c
 	FTransform Transform = Dragged.RelativeTransform;
 	if (InWorld.Location != Dragged.WorldTransform.Location)
 	{
-		Transform.Location = Dragged.ParentTransform.InverseTransformPosition(InWorld.Location);
+		const FTransform& Parent = Dragged.ParentTransform;
+		Transform.Location = Parent.InverseTransformPosition(InWorld.Location);
+		if (!Parent.IsInvertible())
+		{
+			// A parent that is flat along one of its axes hides where a thing is along that axis: the way back
+			// from the world gives zero for it, for where the thing was as for where it is now. Along that axis
+			// the thing keeps what it had; along the others the two cancel, but for what rounding leaves.
+			Transform.Location +=
+				Dragged.RelativeTransform.Location - Parent.InverseTransformPosition(Dragged.WorldTransform.Location);
+		}
 	}
 	if (InWorld.Rotation != Dragged.WorldTransform.Rotation)
 	{

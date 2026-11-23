@@ -11,6 +11,7 @@
 #include <optional>
 #include <vector>
 
+class FEditor;
 class FTransformGizmo;
 struct FUiFrame;
 
@@ -67,6 +68,12 @@ private:
 		/** The transform of its parent in the world; none for an entity at the root of the scene. */
 		FTransform ParentTransform;
 	};
+
+	/**
+	 * Returns true if the drag can go on: what was selected when it began still is, and the parent of each thing
+	 * that it moves is where it was then. Where a drag puts a thing is worked out from there.
+	 */
+	bool CanDragGoOn(const FEditor& Editor) const;
 
 	/** Begins a drag of a handle, of everything that is selected, as a step of the history. */
 	void BeginDrag(FUiFrame& Frame,

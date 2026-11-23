@@ -123,12 +123,15 @@ struct FEditorUi::FImplementation
 		}
 		ImGui::DockSpaceOverViewport(DockSpaceId, MainViewport);
 
-		// The Details panel is laid out before the panels in which the user selects. A click that selects another
-		// entity also ends what was being typed for the one that was selected, and that has to reach the entity it
-		// was typed for before the panel shows the other one.
+		// The panels in which something is typed for the scene come first. The Details panel is laid out before the
+		// panels in which the user selects: a click that selects another entity also ends what was being typed for
+		// the one that was selected, and that has to reach the entity it was typed for before the panel shows the
+		// other one. The outliner is laid out before the viewport: a press on the picture is acted on at once, as
+		// taking a handle of the gizmo begins a step of the history, and a name whose typing the same press ends has
+		// to be given before that, or giving it would end the step of the drag.
 		Details.Draw(Frame);
-		const bool bViewportSucceeded = Viewport.Draw(Frame, Device, OutError);
 		Outliner.Draw(Frame);
+		const bool bViewportSucceeded = Viewport.Draw(Frame, Device, OutError);
 		OutputLog.Draw(Frame);
 		return bViewportSucceeded;
 	}
