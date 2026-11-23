@@ -9,6 +9,7 @@
 #include "Rendering/UiRenderer.h"
 #include "Ui/ImGuiLibrary.h"
 #include "Ui/MainMenuBar.h"
+#include "Ui/MainToolbar.h"
 #include "Ui/Panels/DetailsPanel.h"
 #include "Ui/Panels/OutlinerPanel.h"
 #include "Ui/Panels/ViewportPanel.h"
@@ -32,6 +33,9 @@ namespace
 
 	/** The part of that column's height that the Details panel has, below the outliner. */
 	constexpr float DetailsFraction = 0.6f;
+
+	/** The least width and height that a layout of panels is built for, in pixels. */
+	constexpr float MinLayoutSize = 1.0f;
 
 	/** The shortest time a frame counts as taking: Dear ImGui cannot divide by no time at all. */
 	constexpr float MinDeltaSeconds = 1.0e-5f;
@@ -92,16 +96,21 @@ struct FEditorUi::FImplementation
 	{
 		FUiFrame Frame{Editor, Items, Textures, Workspace, Requests};
 		MenuBar.Draw(Frame);
+		Toolbar.Draw(Frame);
 
 		const ImGuiViewport* const MainViewport = ImGui::GetMainViewport();
 		const ImGuiID DockSpaceId = ImGui::GetID("EditorDockSpace");
 		if (Workspace.bWantsDefaultLayout)
 		{
-			// The layout is built for the room that this frame's menu bar leaves. What the viewport gives as its
-			// work area is still the last frame's, and in the first frame of all the whole window: a layout built
-			// for that would be squeezed afterwards, and its panels a pixel off from where they are built now.
+			// The layout is built for the room that this frame's menu bar and toolbar leave. What the viewport
+			// gives as its work area is still the last frame's, and in the first frame of all the whole window: a
+			// layout built for that would be squeezed afterwards, and its panels a pixel off from where they are
+			// built now. A window that is too small to have any room below its bars still gets its layout, for
+			// the smallest room there can be: the panels are then where they belong once it is made larger.
 			const ImRect WorkArea = static_cast<const ImGuiViewportP*>(MainViewport)->GetBuildWorkRect();
-			BuildDefaultLayout(DockSpaceId, WorkArea.GetSize());
+			const ImVec2 Room(
+				std::max(WorkArea.GetWidth(), MinLayoutSize), std::max(WorkArea.GetHeight(), MinLayoutSize));
+			BuildDefaultLayout(DockSpaceId, Room);
 			Workspace.bWantsDefaultLayout = false;
 		}
 		ImGui::DockSpaceOverViewport(DockSpaceId, MainViewport);
@@ -133,6 +142,7 @@ struct FEditorUi::FImplementation
 	float Scale = 1.0f;
 
 	FMainMenuBar MenuBar;
+	FMainToolbar Toolbar;
 	FViewportPanel Viewport;
 	FOutlinerPanel Outliner;
 	FDetailsPanel Details;

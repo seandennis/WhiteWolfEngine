@@ -291,10 +291,12 @@ TEST_SUITE("FEditorUi")
 
 		const FUiRectangle Viewport = Test.RequireItem("Viewport");
 
-		// To the left of the outliner, below the menu bar and the row of tabs, down to the bottom of the surface.
+		// To the left of the outliner, below the menu bar, the toolbar and the row of tabs, down to the bottom of
+		// the surface.
+		const float ToolbarBottom = Test.RequireItem("Toolbar/Add").Bottom;
 		CHECK(Viewport.Left <= 2.0f);
-		CHECK(Viewport.Top > 20.0f);
-		CHECK(Viewport.Top < 80.0f);
+		CHECK(Viewport.Top > ToolbarBottom);
+		CHECK(Viewport.Top < ToolbarBottom + 45.0f);
 		CHECK(Viewport.Right > 900.0f);
 		CHECK(Viewport.Right < Test.RequireItem("Outliner/Search").Left);
 		CHECK(Viewport.Bottom >= static_cast<float>(FEditorUiTest::DefaultHeight) - 2.0f);

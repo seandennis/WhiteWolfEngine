@@ -8,6 +8,7 @@
 
 class FEditor;
 class FJsonValue;
+struct FUiNewEntity;
 
 /**
  * The commands that the widgets of the user interface give the editor.
@@ -69,6 +70,15 @@ public:
 	 */
 	static bool CanAttachEntities(
 		const FEditor& Editor, const std::vector<int64>& EntityIds, std::optional<int64> ParentId);
+
+	/**
+	 * Entity.Create and what follows it: makes an entity where the viewport's camera looks, with the component and
+	 * the mesh that it is to begin with, and selects it. One step, named "Add" and what the entity is called.
+	 *
+	 * @param NewEntity What to make. It is written in the code, not by the user, so a class of component that
+	 * cannot be added or a mesh that does not exist is a mistake there, and a fatal error.
+	 */
+	static void AddEntity(FEditor& Editor, const FUiNewEntity& NewEntity);
 
 	/** Viewport.Focus: brings the viewport's camera to where it sees the selected entities whole, if any are. */
 	static void FocusSelection(FEditor& Editor);

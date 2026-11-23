@@ -1094,3 +1094,25 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** There are three shapes; a cylinder, a cone and a capsule wait for `FMeshShapes` to make them. There is no built-in material: a mesh without one is drawn white.
 
 **Testing.** That each shape loads without a content directory, knows its path, and has the bounds of one metre; that the three are one package, loaded once; the errors for a shape that does not exist, for the file without a key and for the wrong class; that the shapes survive a change of the content directory and that a file of the same name does not replace them; that a scene with a cube is saved with the path and loaded again without a content directory; and the two commands, without a project and with one.
+
+## D-061: The toolbar's Add menu makes entities out of the commands that exist
+
+**Status:** Accepted.
+
+**Context.** The specification's main toolbar has Add, to create entities quickly. With the shapes built into the engine (D-060) there is something to add that needs no file. A scene could so far be filled only through the outliner's empty entities and the Details panel's Add Component, or by an agent.
+
+**Decision.**
+
+- **The toolbar is a bar across the main window, below the menu bar** (`FMainToolbar`). It has what works: Add. Save, the buttons that play the game and the one that exports it join it as those exist.
+- **Add lists an empty entity, the three shapes and the three lights.** Each line is an entry of a table: the name of the entity, the class of its component, the mesh a mesh component shows, and how the entity is turned.
+- **What a line does is commands that exist:** `Entity.Create`, `Object.SetProperty` for its transform, `Component.Add`, and `Object.SetProperty` for the mesh, as one step named "Add Cube" (`FUiCommands::AddEntity`), after which the entity is selected. There is no command that adds a cube: an agent gives the same four, and a command for every line of a menu would be a second list to keep.
+- **What a line makes is written in the code, not by the user.** If the editor refuses one of its commands, the table is wrong, which is a mistake in the code and a fatal error, not something to clean up after: every line is added in a test.
+- **The new entity goes where the viewport's camera looks,** at its focus point (D-059), rounded to the centimetre. There it is in sight wherever the camera has been flown, and its place reads as a number that someone might have typed.
+- **A sun that is added shines down at a slant** (a pitch of -50 degrees and a yaw of -30), so that what it lights has a bright side, a dim side and a shadow. Everything else is added unturned.
+- **The default layout is built for the room that the bars leave,** and for no less than a pixel each way: a window too small to have room below its bars would otherwise ask the library for a layout of no size, which it refuses.
+
+**Alternatives considered.** Placing new things at the origin is predictable and, after the first few, out of sight. Placing them on whatever is under the middle of the picture needs a way to find what that is, which the viewport does not have yet. A separate command per kind of thing was weighed above.
+
+**Limits.** A shape is put with its middle at the focus point, not standing on what is there. The sky light is added without an environment, which it needs to light anything. There are no icons yet: the buttons say what they do in words.
+
+**Testing.** With the mouse of `FEditorUiTest`: the cube, with its name, its component and mesh, its place to the centimetre, the selection, the name of the step and one undo; every other line of the list; the sun's direction; that a cube that was added is in the picture of the viewport, in the middle of it; several things added one after another; and the user interface on a surface too small for anything, which must still cover it.

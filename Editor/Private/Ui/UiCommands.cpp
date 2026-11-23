@@ -3,17 +3,25 @@
 #include "Commands/CommandResult.h"
 #include "Editor.h"
 #include "Json/JsonValue.h"
+#include "Math/Transform.h"
 #include "Object/Class.h"
 #include "Object/ObjectGlobals.h"
+#include "Reflection/PropertyValueTraits.h"
 #include "Scene/Component.h"
 #include "Scene/Entity.h"
 #include "Scene/MissingComponent.h"
 #include "Scene/Scene.h"
+#include "Ui/UiNewEntity.h"
 #include "Ui/UiText.h"
+#include "Viewport/ViewportCamera.h"
+
+#include <glm/common.hpp>
 
 #include <algorithm>
 #include <format>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace
@@ -53,6 +61,39 @@ namespace
 		FJsonValue Arguments = FJsonValue::MakeObject();
 		Arguments.SetMember("Entity", EntityId);
 		return Arguments;
+	}
+
+	/** The properties that the user interface sets by name: where an entity is, and what a mesh component shows. */
+	constexpr std::string_view EntityTransformProperty = "RelativeTransform";
+	constexpr std::string_view MeshProperty = "Mesh";
+
+	/** The parts of a metre that the place of a new entity is rounded to. */
+	constexpr double PlacesPerMetre = 100.0;
+
+	/** Returns the arguments of Object.SetProperty. */
+	FJsonValue MakePropertyArguments(int64 ObjectId, std::string_view PropertyName, const FJsonValue& Value)
+	{
+		FJsonValue Arguments = FJsonValue::MakeObject();
+		Arguments.SetMember("Object", ObjectId);
+		Arguments.SetMember("Property", PropertyName);
+		Arguments.SetMember("Value", Value);
+		return Arguments;
+	}
+
+	/**
+	 * Gives the editor a command whose arguments the code itself has written, not the user: a refusal means that
+	 * the code is wrong, and is a fatal error.
+	 *
+	 * @return What the command returned.
+	 */
+	FJsonValue ExecuteOwnCommand(FEditor& Editor, std::string_view Name, const FJsonValue& Arguments)
+	{
+		const FCommandResult Result = Editor.ExecuteCommand(Name, Arguments);
+		WW_CHECKF(Result.HasSucceeded(),
+			"The editor refused the command {}, which the user interface wrote itself: {}",
+			Name,
+			Result.GetError());
+		return Result.GetValue();
 	}
 
 	/**
@@ -204,6 +245,38 @@ bool FUiCommands::CanAttachEntities(
 		{ return EntityId == *ParentId || Parent->IsDescendantOf(Scene.FindEntityById(EntityId)); });
 }
 
+void FUiCommands::AddEntity(FEditor& Editor, const FUiNewEntity& NewEntity)
+{
+	const FUserStep Step(Editor, std::format("Add {}", NewEntity.Name));
+
+	FJsonValue CreateArguments = FJsonValue::MakeObject();
+	CreateArguments.SetMember("Name", NewEntity.Name);
+	const int64 EntityId = ExecuteOwnCommand(Editor, "Entity.Create", CreateArguments).FindMember("Id")->GetInteger();
+
+	// What the user looks at is where the new thing goes: there it is in sight, wherever the camera has been
+	// flown to. To the centimetre, so that its place reads as a number someone might have typed.
+	FTransform Transform;
+	Transform.Location = glm::round(Editor.GetViewportCamera().GetFocusPoint() * PlacesPerMetre) / PlacesPerMetre;
+	Transform.Rotation = NewEntity.Rotation.ToQuat();
+	ExecuteOwnCommand(Editor,
+		"Object.SetProperty",
+		MakePropertyArguments(EntityId, EntityTransformProperty, TPropertyValueTraits<FTransform>::ToJson(Transform)));
+
+	if (!NewEntity.ComponentClassName.empty())
+	{
+		FJsonValue AddArguments = MakeEntityArguments(EntityId);
+		AddArguments.SetMember("Class", NewEntity.ComponentClassName);
+		const int64 ComponentId =
+			ExecuteOwnCommand(Editor, "Component.Add", AddArguments).FindMember("Id")->GetInteger();
+		if (!NewEntity.MeshPath.empty())
+		{
+			ExecuteOwnCommand(Editor,
+				"Object.SetProperty",
+				MakePropertyArguments(ComponentId, MeshProperty, FJsonValue(NewEntity.MeshPath)));
+		}
+	}
+	SetSelection(Editor, {EntityId});
+}
 void FUiCommands::FocusSelection(FEditor& Editor)
 {
 	// With nothing selected there is nothing to look at, which the command would say by failing.
@@ -255,9 +328,5 @@ void FUiCommands::EndChange(FEditor& Editor)
 
 void FUiCommands::SetProperty(FEditor& Editor, int64 ObjectId, const std::string& PropertyName, const FJsonValue& Value)
 {
-	FJsonValue Arguments = FJsonValue::MakeObject();
-	Arguments.SetMember("Object", ObjectId);
-	Arguments.SetMember("Property", PropertyName);
-	Arguments.SetMember("Value", Value);
-	Editor.ExecuteCommand("Object.SetProperty", Arguments);
+	Editor.ExecuteCommand("Object.SetProperty", MakePropertyArguments(ObjectId, PropertyName, Value));
 }
