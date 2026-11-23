@@ -132,7 +132,8 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
                           WeakObjectPtr.h (TWeakObjectPtr), ObjectGlobals.h (NewObject, Cast, IsValid,
                           CollectGarbage), GarbageCollector.h (FGarbageCollector), ObjectMacros.h (class
                           registration)
-    Platform/             The window system: Platform.h (FPlatform), Window.h (FWindow)
+    Platform/             The window system: Platform.h (FPlatform), Window.h (FWindow). The directories that the
+                          system keeps for a user, for settings and for documents: UserDirectories.h (FUserDirectories)
     Rendering/            The renderer: RenderDevice.h (FRenderDevice), RenderTarget.h (FRenderTarget), Image.h (FImage),
                           HdrImage.h (FHdrImage), ImageFile.h (FImageFile: PNG, JPEG and Radiance HDR files),
                           ImageDifference.h (FImageDifference),

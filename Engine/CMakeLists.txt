@@ -7,6 +7,12 @@ ww_add_module(Engine
     PUBLIC_DEPENDENCIES Threads::Threads glm::glm-header-only
     PRIVATE_DEPENDENCIES glfw nvrhi nvrhi_vk Vulkan::Headers stb cgltf ${CMAKE_DL_LIBS})
 
+# Where a user's own directories are is asked of the shell of Windows (FUserDirectories): the function is in
+# shell32, what frees its answer in ole32, and the identifiers of the directories in uuid.
+if(WIN32)
+    target_link_libraries(Engine PRIVATE shell32 ole32 uuid)
+endif()
+
 # The engine's shaders are compiled while it is built and become part of the DLL.
 ww_add_shaders(Engine ROOT "${CMAKE_CURRENT_SOURCE_DIR}/Shaders")
 
