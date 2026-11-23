@@ -60,6 +60,21 @@ public:
 	static FColor GetGizmoHighlightColor();
 
 	/**
+	 * Makes the buttons that are laid out next look chosen: in the accent, as the one of several buttons that
+	 * says what is in force now. PopChosenButtonColors follows the buttons.
+	 */
+	static void PushChosenButtonColors();
+
+	/** Ends what PushChosenButtonColors began. */
+	static void PopChosenButtonColors();
+
+	/**
+	 * Returns the colour that lies behind buttons which are laid out over a picture, as those over the viewport
+	 * are: dark, so that the buttons can be read on anything, and letting some of the picture through.
+	 */
+	static FColor GetOverlayColor();
+
+	/**
 	 * Makes the headings that are laid out next bands of grey: a heading that opens and closes what is under it
 	 * is not something that is selected, which is what the accent means. PopHeadingColors follows the headings.
 	 */

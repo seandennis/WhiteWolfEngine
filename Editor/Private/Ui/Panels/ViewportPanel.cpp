@@ -118,6 +118,10 @@ bool FViewportPanel::Draw(FUiFrame& Frame, FRenderDevice& Device, std::string& O
 				Navigate(Frame, Height, Continued);
 				SelectClicked(Frame, Corner, Size, Continued);
 			}
+
+			// The toolbar comes last. Everything before it asks what the mouse does on the picture, which is the
+			// item that was laid out last until the toolbar is.
+			Toolbar.Draw(Frame, Corner, Size);
 		}
 	}
 	ImGui::End();

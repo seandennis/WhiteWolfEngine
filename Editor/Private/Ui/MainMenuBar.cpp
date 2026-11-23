@@ -9,6 +9,8 @@
 #include "Ui/UiItems.h"
 #include "Ui/UiRequests.h"
 #include "Ui/UiWorkspace.h"
+#include "Viewport/GizmoMode.h"
+#include "Viewport/GizmoSettings.h"
 
 #include <format>
 #include <string>
@@ -57,10 +59,65 @@ namespace
 		Frame.Items.NameLastItem(std::format("Menu/{}/{}", Menu, Label));
 	}
 
+	/**
+	 * Like MenuEntry, for one of several entries of which one is in force, and has a tick that says so.
+	 *
+	 * @return True if the entry was chosen.
+	 */
+	bool MenuChoice(FUiFrame& Frame, const char* Menu, const char* Label, const char* Shortcut, bool bIsInForce)
+	{
+		const bool bWasChosen = ImGui::MenuItem(Label, Shortcut, bIsInForce);
+		Frame.Items.NameLastItem(std::format("Menu/{}/{}", Menu, Label));
+		return bWasChosen;
+	}
+
 	/** Returns true if the keys of a shortcut were pressed and nothing that takes the keyboard for itself has it. */
 	bool IsShortcutPressed(ImGuiKeyChord Keys)
 	{
 		return ImGui::Shortcut(Keys, ImGuiInputFlags_RouteGlobal);
+	}
+
+	/** Sets what dragging the gizmo of the viewport does. */
+	void SetGizmoMode(FEditor& Editor, EGizmoMode Mode)
+	{
+		FGizmoSettings Settings = Editor.GetGizmoSettings();
+		Settings.Mode = Mode;
+		Editor.SetGizmoSettings(Settings);
+	}
+
+	/**
+	 * Carries out the keys that set what dragging the gizmo of the viewport does: W to move, E to turn, R to size,
+	 * and Space for the next of the three.
+	 */
+	void CarryOutGizmoShortcuts(FUiFrame& Frame)
+	{
+		// While a mouse button is held, these keys are the camera's: W and E fly it, and the others are best left
+		// alone until the hand is free again.
+		if (ImGui::IsAnyMouseDown())
+		{
+			return;
+		}
+
+		FEditor& Editor = Frame.Editor;
+		if (IsShortcutPressed(ImGuiKey_W))
+		{
+			SetGizmoMode(Editor, EGizmoMode::Translate);
+		}
+		if (IsShortcutPressed(ImGuiKey_E))
+		{
+			SetGizmoMode(Editor, EGizmoMode::Rotate);
+		}
+		if (IsShortcutPressed(ImGuiKey_R))
+		{
+			SetGizmoMode(Editor, EGizmoMode::Scale);
+		}
+
+		// Space also presses the button that the keyboard has been taken to. While the mark of that is shown, the
+		// key is the button's.
+		if (!ImGui::GetIO().NavVisible && IsShortcutPressed(ImGuiKey_Space))
+		{
+			SetGizmoMode(Editor, FGizmoSettings::GetNextMode(Editor.GetGizmoSettings().Mode));
+		}
 	}
 
 	/** Asks the outliner to let the user type a new name for the entity that was selected last. */
@@ -124,6 +181,7 @@ void FMainMenuBar::Draw(FUiFrame& Frame)
 			{
 				FUiCommands::FocusSelection(Frame.Editor);
 			}
+			CarryOutGizmoShortcuts(Frame);
 
 			// The windows for projects are also asked for from outside the menu bar: the first when the editor
 			// starts, the second by the first, for someone who has no project to open yet.
@@ -253,6 +311,22 @@ void FMainMenuBar::DrawEditMenu(FUiFrame& Frame)
 	if (MenuEntry(Frame, "Edit", "Focus", "F", bHasSelection))
 	{
 		FUiCommands::FocusSelection(Frame.Editor);
+	}
+
+	// What dragging the gizmo of the viewport does.
+	ImGui::Separator();
+	const EGizmoMode GizmoMode = Frame.Editor.GetGizmoSettings().Mode;
+	if (MenuChoice(Frame, "Edit", "Move", "W", GizmoMode == EGizmoMode::Translate))
+	{
+		SetGizmoMode(Frame.Editor, EGizmoMode::Translate);
+	}
+	if (MenuChoice(Frame, "Edit", "Rotate", "E", GizmoMode == EGizmoMode::Rotate))
+	{
+		SetGizmoMode(Frame.Editor, EGizmoMode::Rotate);
+	}
+	if (MenuChoice(Frame, "Edit", "Scale", "R", GizmoMode == EGizmoMode::Scale))
+	{
+		SetGizmoMode(Frame.Editor, EGizmoMode::Scale);
 	}
 	ImGui::EndMenu();
 }

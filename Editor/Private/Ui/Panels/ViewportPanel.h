@@ -4,6 +4,7 @@
 
 #include "Math/Vector.h"
 #include "Ui/Panels/ViewportGizmo.h"
+#include "Ui/Panels/ViewportToolbar.h"
 
 #include <memory>
 #include <string>
@@ -30,6 +31,9 @@ struct FUiFrame;
  * selects nothing. With Ctrl held, a click adds the entity to what is selected or takes it out. What is selected
  * has an orange line around it in the picture, and the gizmo on it (FViewportGizmo), whose handles the left button
  * drags to move, turn and size it.
+ *
+ * Over the top of the picture lies a toolbar (FViewportToolbar) that sets what the gizmo does, how fast the camera
+ * flies and how the scene is shaded.
  */
 class FViewportPanel
 {
@@ -105,6 +109,9 @@ private:
 
 	/** The handles on what is selected, and the drag of one of them that is under way. */
 	FViewportGizmo Gizmo;
+
+	/** The buttons over the top of the picture. */
+	FViewportToolbar Toolbar;
 
 	/** The surface the scene is drawn onto. Null until the panel is first shown. */
 	std::unique_ptr<FRenderTarget> Target;

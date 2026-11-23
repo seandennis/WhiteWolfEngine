@@ -8,3 +8,17 @@ bool FGizmoSettings::IsValid() const
 	const bool bHasValidScaleSnap = ScaleSnap >= MinScaleSnap && ScaleSnap <= MaxScaleSnap;
 	return bHasValidLocationSnap && bHasValidRotationSnap && bHasValidScaleSnap;
 }
+
+EGizmoMode FGizmoSettings::GetNextMode(EGizmoMode Mode)
+{
+	switch (Mode)
+	{
+		case EGizmoMode::Translate:
+			return EGizmoMode::Rotate;
+		case EGizmoMode::Rotate:
+			return EGizmoMode::Scale;
+		case EGizmoMode::Scale:
+		default:
+			return EGizmoMode::Translate;
+	}
+}

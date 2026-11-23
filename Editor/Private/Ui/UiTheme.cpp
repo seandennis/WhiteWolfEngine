@@ -58,6 +58,9 @@ namespace
 
 	/** The handle of the gizmo that the mouse is on, in the yellow that such a handle has in other editors. */
 	constexpr FColor GizmoHighlightColor(255, 214, 64);
+
+	/** What lies behind buttons over a picture: the grey of a panel, with a fifth of the picture showing through. */
+	constexpr FColor OverlayColor(36, 36, 36, 204);
 }
 
 void FUiTheme::AddFonts()
@@ -208,6 +211,24 @@ float FUiTheme::GetGizmoLineWidth()
 FColor FUiTheme::GetGizmoHighlightColor()
 {
 	return GizmoHighlightColor;
+}
+
+void FUiTheme::PushChosenButtonColors()
+{
+	ImGui::PushStyleColor(ImGuiCol_Button, Accent);
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, AccentHovered);
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, Accent);
+}
+
+void FUiTheme::PopChosenButtonColors()
+{
+	constexpr int32 ChosenButtonColorCount = 3;
+	ImGui::PopStyleColor(ChosenButtonColorCount);
+}
+
+FColor FUiTheme::GetOverlayColor()
+{
+	return OverlayColor;
 }
 
 void FUiTheme::PushHeadingColors()

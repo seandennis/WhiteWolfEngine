@@ -28,6 +28,13 @@ TEST_SUITE("FGizmoSettings")
 		CHECK(Settings.ScaleSnap == 0.25f);
 	}
 
+	TEST_CASE("The modes follow one another in turn: moving, turning, sizing, and moving again")
+	{
+		CHECK(FGizmoSettings::GetNextMode(EGizmoMode::Translate) == EGizmoMode::Rotate);
+		CHECK(FGizmoSettings::GetNextMode(EGizmoMode::Rotate) == EGizmoMode::Scale);
+		CHECK(FGizmoSettings::GetNextMode(EGizmoMode::Scale) == EGizmoMode::Translate);
+	}
+
 	TEST_CASE("Settings are valid while every step is a number within its limits")
 	{
 		FGizmoSettings Settings;
