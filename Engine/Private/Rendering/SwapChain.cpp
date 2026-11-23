@@ -436,7 +436,7 @@ bool FSwapChain::FImplementation::RecreateSwapChain(std::string& OutError)
 		VkCompositeAlphaFlagBitsKHR CompositeMode = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 		for (const VkCompositeAlphaFlagBitsKHR Mode : CompositeModes)
 		{
-			if ((Capabilities.supportedCompositeAlpha & Mode) != 0)
+			if ((Capabilities.supportedCompositeAlpha & static_cast<VkCompositeAlphaFlagsKHR>(Mode)) != 0)
 			{
 				CompositeMode = Mode;
 				break;
