@@ -207,6 +207,15 @@ namespace
 	}
 
 	/**
+	 * Returns true if a number reads as zero with the digits that it is shown with: it is zero, with or without a
+	 * minus sign of its own, or closer to zero than half of the last digit.
+	 */
+	bool ReadsAsZero(double Number, int32 MaxDecimals)
+	{
+		return std::isfinite(Number) && std::round(std::abs(Number) * std::pow(10.0, MaxDecimals)) == 0.0;
+	}
+
+	/**
 	 * Lays out a number with a point to drag or to type.
 	 *
 	 * @param Number The number, which is changed only to another number: what is typed may be none at all, as
@@ -217,9 +226,15 @@ namespace
 	template <std::floating_point NumberType>
 	bool DragNumber(const char* Id, NumberType& Number, float Speed, int32 MaxDecimals)
 	{
+		// A number that reads as zero is shown as zero. Printed as it is, one that is just below zero, or a zero
+		// with a minus sign of its own, would read "-0". While the number is being dragged or typed it is what it
+		// is: a drag in fine steps has to go on from where the last frame left it.
+		const bool bIsBeingChanged = ImGui::GetActiveID() == ImGui::GetID(Id);
+		const bool bShowsZero = !bIsBeingChanged && ReadsAsZero(static_cast<double>(Number), MaxDecimals);
+		NumberType NewNumber = bShowsZero ? NumberType(0) : Number;
+
 		// The library would round a dragged number to the digits that are shown, which here are as few as the
 		// number needs. It is rounded below instead, to more digits than that.
-		NumberType NewNumber = Number;
 		const bool bChanged = ImGui::DragScalar(Id,
 			GetDataType<NumberType>(),
 			&NewNumber,
@@ -240,7 +255,8 @@ namespace
 			const double Scale = std::pow(10.0, DraggedNumberDecimals);
 			NewNumber = static_cast<NumberType>(std::round(static_cast<double>(NewNumber) * Scale) / Scale);
 		}
-		Number = NewNumber;
+		// Rounding something just below zero leaves a zero with a minus sign. Zero has none here.
+		Number = NewNumber == NumberType(0) ? NumberType(0) : NewNumber;
 		return true;
 	}
 

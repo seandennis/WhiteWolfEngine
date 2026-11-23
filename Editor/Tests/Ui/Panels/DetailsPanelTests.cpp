@@ -51,6 +51,22 @@ namespace
 		Test.PressKey(EKey::Enter);
 	}
 
+	/** Returns the pixels of the surface that an item covers, row after row: what the item looks like. */
+	std::vector<FColor> ReadItem(const FEditorUiTest& Test, const std::string& ItemName)
+	{
+		const FUiRectangle Rectangle = Test.RequireItem(ItemName);
+		const FImage Picture = Test.ReadPicture();
+		std::vector<FColor> Pixels;
+		for (int32 Y = static_cast<int32>(Rectangle.Top); Y < static_cast<int32>(Rectangle.Bottom); ++Y)
+		{
+			for (int32 X = static_cast<int32>(Rectangle.Left); X < static_cast<int32>(Rectangle.Right); ++X)
+			{
+				Pixels.push_back(Picture.GetPixel(X, Y));
+			}
+		}
+		return Pixels;
+	}
+
 	/** Creates an entity in the editor's scene, selects it and shows it in the panel. */
 	int64 AddSelectedEntity(FEditorUiTest& Test, const char* Name)
 	{
@@ -236,6 +252,52 @@ TEST_SUITE("FDetailsPanel")
 		CHECK(GetEntity(Test, Player).GetRelativeTransform().Location == FVector(0.0));
 		Test.PressKey(EKey::Y, {EKey::LeftControl});
 		CHECK(GetEntity(Test, Player).GetRelativeTransform().Location == Dragged);
+	}
+
+	TEST_CASE("A number that reads as zero is shown as zero, whatever sign it has")
+	{
+		FEditorUiTest Test;
+		const int64 Player = AddSelectedEntity(Test, "Player");
+		const std::string Field = Row(Player, "RelativeTransform/Location/X");
+		const std::vector<FColor> ShownAtZero = ReadItem(Test, Field);
+
+		// Returns what the field shows once the entity is that far along X.
+		const auto ShowAt = [&Test, &Field, Player](double X)
+		{
+			WEntity* const Entity = Test.Editor.GetScene().FindEntityById(Player);
+			REQUIRE(Entity != nullptr);
+			FTransform Transform;
+			Transform.Location = FVector(X, 0.0, 0.0);
+			Entity->SetRelativeTransform(Transform);
+			Test.DrawFrame();
+			return ReadItem(Test, Field);
+		};
+
+		// Closer to zero than the digits that are shown can say, from below and from above, and a zero that has
+		// a minus sign of its own: none of them reads "-0".
+		CHECK(ShowAt(-0.0004) == ShownAtZero);
+		CHECK(ShowAt(0.0004) == ShownAtZero);
+		CHECK(ShowAt(-0.0) == ShownAtZero);
+
+		// What the digits can say is shown as it is.
+		CHECK_FALSE(ShowAt(-0.001) == ShownAtZero);
+		CHECK_FALSE(ShowAt(-1.0) == ShownAtZero);
+		CHECK(ShowAt(0.0) == ShownAtZero);
+	}
+
+	TEST_CASE("A zero that is typed with a minus sign is the entity's without one")
+	{
+		FEditorUiTest Test;
+		const int64 Player = AddSelectedEntity(Test, "Player");
+		const std::string Field = Row(Player, "RelativeTransform/Location/Y");
+		TypeNumber(Test, Field, "5");
+		REQUIRE(GetEntity(Test, Player).GetRelativeTransform().Location.y == 5.0);
+
+		TypeNumber(Test, Field, "-0");
+
+		const double Y = GetEntity(Test, Player).GetRelativeTransform().Location.y;
+		CHECK(Y == 0.0);
+		CHECK_FALSE(std::signbit(Y));
 	}
 
 	TEST_CASE("The arrow beside a part of the transform puts that part back, and is there only if it is changed")

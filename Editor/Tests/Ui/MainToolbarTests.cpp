@@ -81,6 +81,25 @@ TEST_SUITE("FMainToolbar")
 		CHECK(CountLoggedProblems(Test.Capture) == 0);
 	}
 
+	TEST_CASE("Where the place of what is added is zero, it is zero without a minus sign")
+	{
+		FEditorUiTest Test;
+		// The camera of a new editor looks at a point a few millimetres to the left of the middle of the world.
+		// To the centimetre that is zero, and rounded from below zero.
+		const FVector Focus = Test.Editor.GetViewportCamera().GetFocusPoint();
+		REQUIRE(Focus.x < 0.0);
+		REQUIRE(Focus.x > -0.005);
+
+		Test.Click("Toolbar/Add");
+		Test.Click("Toolbar/Add/Cube");
+
+		const std::vector<int64> Selection = Test.Editor.GetSelection();
+		REQUIRE(Selection.size() == 1);
+		const double X = Test.Editor.GetScene().FindEntityById(Selection.front())->GetWorldLocation().x;
+		CHECK(X == 0.0);
+		CHECK_FALSE(std::signbit(X));
+	}
+
 	TEST_CASE("Each line of the Add menu makes an entity with what the line names")
 	{
 		FEditorUiTest Test;

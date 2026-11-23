@@ -324,8 +324,10 @@ void FUiCommands::AddEntity(FEditor& Editor, const FUiNewEntity& NewEntity)
 
 	// What the user looks at is where the new thing goes: there it is in sight, wherever the camera has been
 	// flown to. To the centimetre, so that its place reads as a number someone might have typed.
+	// Rounding something just below zero leaves a zero with a minus sign, which adding zero takes away.
 	FTransform Transform;
-	Transform.Location = glm::round(Editor.GetViewportCamera().GetFocusPoint() * PlacesPerMetre) / PlacesPerMetre;
+	Transform.Location =
+		glm::round(Editor.GetViewportCamera().GetFocusPoint() * PlacesPerMetre) / PlacesPerMetre + FVector(0.0);
 	Transform.Rotation = NewEntity.Rotation.ToQuat();
 	ExecuteOwnCommand(Editor,
 		"Object.SetProperty",
