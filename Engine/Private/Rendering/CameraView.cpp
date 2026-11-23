@@ -90,3 +90,20 @@ FRay FCameraView::GetRay(const FVector2f& PicturePoint, float AspectRatio) const
 	Ray.Direction = glm::normalize(AlongWorldAxes);
 	return Ray;
 }
+
+std::optional<FVector2f> FCameraView::Project(const FVector& WorldPoint, float AspectRatio) const
+{
+	WW_CHECKF(AspectRatio > 0.0f, "The aspect ratio of a picture must be greater than zero, not {}", AspectRatio);
+
+	// From the camera, as everything is that is drawn: the subtraction in double precision, the rest in single.
+	const FVector3f InViewSpace = glm::conjugate(Rotation) * FVector3f(WorldPoint - Location);
+	const float Depth = -InViewSpace.z;
+	if (!(Depth >= NearPlane))
+	{
+		return std::nullopt;
+	}
+
+	// At that depth the picture is this high and wide, measured from its middle.
+	const float HalfHeight = std::tan(glm::radians(VerticalFieldOfView) * 0.5f) * Depth;
+	return FVector2f(InViewSpace.x / (HalfHeight * AspectRatio), InViewSpace.y / HalfHeight);
+}

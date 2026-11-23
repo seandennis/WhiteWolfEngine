@@ -11,6 +11,7 @@
 #include <cmath>
 #include <initializer_list>
 #include <limits>
+#include <optional>
 
 namespace
 {
@@ -336,5 +337,87 @@ TEST_SUITE("FCameraView")
 
 		CHECK_THROWS_AS(View.GetRay(FVector2f(0.0f, 0.0f), 0.0f), FFatalErrorException);
 		CHECK_THROWS_AS(View.GetRay(FVector2f(0.0f, 0.0f), -2.0f), FFatalErrorException);
+	}
+
+	TEST_CASE("A point of the world is found in the picture where the ray through it began")
+	{
+		FCameraView View;
+		View.Location = FVector(120.0, -4.0, 37.5);
+		View.Rotation = YawRotation(130.0f) * glm::angleAxis(glm::radians(-25.0f), FVector3f(1.0f, 0.0f, 0.0f));
+		View.VerticalFieldOfView = 70.0f;
+		View.NearPlane = 0.5f;
+		constexpr float AspectRatio = 1.6f;
+
+		// The last of the points is beside what the picture shows.
+		for (const FVector2f& PicturePoint : {FVector2f(0.0f, 0.0f),
+				 FVector2f(1.0f, 1.0f),
+				 FVector2f(-1.0f, -1.0f),
+				 FVector2f(0.3f, -0.7f),
+				 FVector2f(-1.5f, 0.2f)})
+		{
+			const FRay Ray = View.GetRay(PicturePoint, AspectRatio);
+			for (const double Distance : {0.01, 1.0, 250.0})
+			{
+				const std::optional<FVector2f> Found = View.Project(Ray.GetPoint(Distance), AspectRatio);
+
+				REQUIRE(Found.has_value());
+				CHECK(Found->x == doctest::Approx(PicturePoint.x).epsilon(1.0e-4));
+				CHECK(Found->y == doctest::Approx(PicturePoint.y).epsilon(1.0e-4));
+			}
+		}
+	}
+
+	TEST_CASE("A point is found where the projection draws it")
+	{
+		FCameraView View;
+		View.VerticalFieldOfView = 90.0f;
+		constexpr float AspectRatio = 2.0f;
+
+		// Four metres ahead, the picture is four metres up from its middle and eight to the side.
+		const std::optional<FVector2f> Found = View.Project(FVector(2.0, -1.0, -4.0), AspectRatio);
+		const FProjectedPoint Drawn = Project(View, AspectRatio, FVector3f(2.0f, -1.0f, -4.0f));
+
+		REQUIRE(Found.has_value());
+		CHECK(Found->x == doctest::Approx(0.25f));
+		CHECK(Found->y == doctest::Approx(-0.25f));
+		CHECK(Found->x == doctest::Approx(Drawn.X));
+		CHECK(Found->y == doctest::Approx(Drawn.Y));
+	}
+
+	TEST_CASE("A point that is closer than the near plane, or behind the camera, is nowhere in the picture")
+	{
+		FCameraView View;
+		View.NearPlane = 0.5f;
+
+		CHECK(View.Project(FVector(0.0, 0.0, -0.5), 1.0f).has_value());
+		CHECK(View.Project(FVector(0.0, 0.0, -100.0), 1.0f).has_value());
+		CHECK_FALSE(View.Project(FVector(0.0, 0.0, -0.4), 1.0f).has_value());
+		CHECK_FALSE(View.Project(FVector(0.0, 0.0, 0.0), 1.0f).has_value());
+		CHECK_FALSE(View.Project(FVector(0.0, 0.0, 3.0), 1.0f).has_value());
+		// Far to the side but ahead, it is beside the picture and not nowhere.
+		CHECK(View.Project(FVector(500.0, 0.0, -1.0), 1.0f).has_value());
+	}
+
+	TEST_CASE("A point is found exactly however far it and the camera are from the origin of the world")
+	{
+		FCameraView View;
+		View.Location = FVector(4.0e9, -2.0e9, 1.0e9);
+		View.VerticalFieldOfView = 90.0f;
+
+		// A metre to the right and two ahead: half way to the right edge of a square picture.
+		const std::optional<FVector2f> Found = View.Project(View.Location + FVector(1.0, 0.0, -2.0), 1.0f);
+
+		REQUIRE(Found.has_value());
+		CHECK(Found->x == doctest::Approx(0.5f));
+		CHECK(Found->y == doctest::Approx(0.0f));
+	}
+
+	TEST_CASE("Asking where a point is with an aspect ratio that is not positive is a programming error")
+	{
+		const FScopedLogCapture Capture;
+		const FCameraView View;
+
+		CHECK_THROWS_AS(View.Project(FVector(0.0, 0.0, -1.0), 0.0f), FFatalErrorException);
+		CHECK_THROWS_AS(View.Project(FVector(0.0, 0.0, -1.0), -2.0f), FFatalErrorException);
 	}
 }

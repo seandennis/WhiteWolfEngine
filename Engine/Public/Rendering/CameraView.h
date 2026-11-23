@@ -8,6 +8,8 @@
 #include "Math/Transform.h"
 #include "Math/Vector.h"
 
+#include <optional>
+
 /**
  * The point of view a picture is drawn from.
  *
@@ -88,6 +90,19 @@ struct FCameraView
 	 * @param AspectRatio The width of the picture divided by its height. Must be greater than zero.
 	 */
 	ENGINE_API FRay GetRay(const FVector2f& PicturePoint, float AspectRatio) const;
+
+	/**
+	 * Returns where in the picture a point of the world is drawn: the opposite of GetRay. Whoever draws something
+	 * over a picture of a scene, as an editor draws its handles, finds the place for it with this.
+	 *
+	 * @param WorldPoint The point, in world space.
+	 * @param AspectRatio The width of the picture divided by its height. Must be greater than zero.
+	 * @return The point as the projection counts, x from -1 at the left edge of the picture to 1 at the right and
+	 * y from -1 at the bottom to 1 at the top, and beyond those for a point that is to the side of what the
+	 * picture shows. Nothing for a point that is closer to the camera than the near plane, or behind the camera:
+	 * such a point is drawn nowhere.
+	 */
+	ENGINE_API std::optional<FVector2f> Project(const FVector& WorldPoint, float AspectRatio) const;
 
 	bool operator==(const FCameraView& Other) const = default;
 };

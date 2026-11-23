@@ -1,6 +1,10 @@
 #include "Math/Ray.h"
 
 #include <doctest/doctest.h>
+#include <glm/geometric.hpp>
+
+#include <cmath>
+#include <optional>
 
 TEST_SUITE("FRay")
 {
@@ -47,5 +51,67 @@ TEST_SUITE("FRay")
 		CHECK(Ray == Same);
 		CHECK_FALSE(Ray == Elsewhere);
 		CHECK_FALSE(Ray == Turned);
+	}
+
+	TEST_CASE("A ray goes through a plane at the distance of the plane along it, from either side")
+	{
+		const FVector3f Up(0.0f, 1.0f, 0.0f);
+		FRay Ray;
+		Ray.Origin = FVector(2.0, 5.0, -3.0);
+		Ray.Direction = FVector3f(0.0f, -1.0f, 0.0f);
+
+		// Straight down onto a floor, and onto one that is not where the world begins.
+		std::optional<double> Distance = Ray.IntersectPlane(FVector(0.0), Up);
+		REQUIRE(Distance.has_value());
+		CHECK(*Distance == doctest::Approx(5.0));
+		Distance = Ray.IntersectPlane(FVector(100.0, 1.5, 100.0), Up);
+		REQUIRE(Distance.has_value());
+		CHECK(*Distance == doctest::Approx(3.5));
+
+		// A floor that faces down is gone through as well.
+		Distance = Ray.IntersectPlane(FVector(0.0), -Up);
+		REQUIRE(Distance.has_value());
+		CHECK(*Distance == doctest::Approx(5.0));
+
+		// At a slant the way is longer: at 45 degrees, by the square root of two.
+		Ray.Direction = glm::normalize(FVector3f(1.0f, -1.0f, 0.0f));
+		Distance = Ray.IntersectPlane(FVector(0.0), Up);
+		REQUIRE(Distance.has_value());
+		CHECK(*Distance == doctest::Approx(5.0 * std::sqrt(2.0)));
+		CHECK(Ray.GetPoint(*Distance).x == doctest::Approx(7.0));
+		CHECK(Ray.GetPoint(*Distance).y == doctest::Approx(0.0).epsilon(1.0e-6));
+	}
+
+	TEST_CASE("A ray that runs along a plane, or away from it, does not go through it")
+	{
+		const FVector3f Up(0.0f, 1.0f, 0.0f);
+		FRay Ray;
+		Ray.Origin = FVector(0.0, 5.0, 0.0);
+
+		Ray.Direction = FVector3f(1.0f, 0.0f, 0.0f);
+		CHECK_FALSE(Ray.IntersectPlane(FVector(0.0), Up).has_value());
+
+		Ray.Direction = FVector3f(0.0f, 1.0f, 0.0f);
+		CHECK_FALSE(Ray.IntersectPlane(FVector(0.0), Up).has_value());
+
+		// One that begins on the plane is through it at once.
+		Ray.Origin = FVector(3.0, 0.0, 3.0);
+		Ray.Direction = FVector3f(0.0f, -1.0f, 0.0f);
+		const std::optional<double> Distance = Ray.IntersectPlane(FVector(0.0), Up);
+		REQUIRE(Distance.has_value());
+		CHECK(*Distance == doctest::Approx(0.0));
+	}
+
+	TEST_CASE("Where a ray goes through a plane is exact far from the origin of the world")
+	{
+		FRay Ray;
+		Ray.Origin = FVector(1.0e10, 2.25, -1.0e10);
+		Ray.Direction = FVector3f(0.0f, -1.0f, 0.0f);
+
+		const std::optional<double> Distance =
+			Ray.IntersectPlane(FVector(1.0e10, 0.0, 1.0e10), FVector3f(0.0f, 1.0f, 0.0f));
+
+		REQUIRE(Distance.has_value());
+		CHECK(*Distance == 2.25);
 	}
 }
