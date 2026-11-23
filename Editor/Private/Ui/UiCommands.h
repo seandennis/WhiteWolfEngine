@@ -70,6 +70,9 @@ public:
 	static bool CanAttachEntities(
 		const FEditor& Editor, const std::vector<int64>& EntityIds, std::optional<int64> ParentId);
 
+	/** Viewport.Focus: brings the viewport's camera to where it sees the selected entities whole, if any are. */
+	static void FocusSelection(FEditor& Editor);
+
 	/** Component.Add: gives an entity a component of the named class. The step is named after the class. */
 	static void AddComponent(FEditor& Editor, int64 EntityId, const std::string& ClassName);
 

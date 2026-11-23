@@ -6,7 +6,6 @@
 #include "Editor.h"
 #include "Json/JsonValue.h"
 
-#include <format>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,29 +14,11 @@ namespace
 {
 	FCommandResult SetSelection(FEditor& Editor, const FCommandArguments& Arguments)
 	{
-		const FJsonValue& Entities = Arguments.GetJson("Entities");
-		if (!Entities.IsArray())
-		{
-			return FCommandResult::Failure(std::format(
-				"Entities must be an array of entity identifiers, but is {}.", Entities.GetTypeDescription()));
-		}
-
 		std::vector<int64> EntityIds;
-		for (const FJsonValue& Element : Entities.GetElements())
+		std::string Error;
+		if (!FCommandTargets::ReadEntityIds(Editor, Arguments.GetJson("Entities"), EntityIds, Error))
 		{
-			if (!Element.IsInteger())
-			{
-				return FCommandResult::Failure(
-					std::format("Entities must hold entity identifiers, which are integers, but holds {}.",
-						Element.GetTypeDescription()));
-			}
-
-			std::string Error;
-			if (FCommandTargets::FindEntity(Editor, Element.GetInteger(), Error) == nullptr)
-			{
-				return FCommandResult::Failure(std::move(Error));
-			}
-			EntityIds.push_back(Element.GetInteger());
+			return FCommandResult::Failure(std::move(Error));
 		}
 
 		Editor.SetSelection(EntityIds);

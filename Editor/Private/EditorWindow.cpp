@@ -122,6 +122,17 @@ bool FEditorWindow::RunFrame(double DeltaSeconds, std::string& OutError)
 	{
 		return false;
 	}
+
+	// While the user steers the viewport's camera, the mouse is the window's: hidden, and free to move without
+	// end. Both calls do nothing when it is so already.
+	if (Ui->WantsMouseCaptured())
+	{
+		Window->CaptureMouse();
+	}
+	else
+	{
+		Window->ReleaseMouse();
+	}
 	return SwapChain == nullptr || SwapChain->Present(*Picture, OutError);
 }
 

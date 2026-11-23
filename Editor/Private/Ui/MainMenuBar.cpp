@@ -106,6 +106,10 @@ void FMainMenuBar::Draw(FUiFrame& Frame)
 			{
 				RenameSelection(Frame);
 			}
+			if (IsShortcutPressed(ImGuiKey_F))
+			{
+				FUiCommands::FocusSelection(Frame.Editor);
+			}
 		}
 
 		DrawFileMenu(Frame);
@@ -174,6 +178,10 @@ void FMainMenuBar::DrawEditMenu(FUiFrame& Frame)
 	if (MenuEntry(Frame, "Edit", "Rename", "F2", bHasSelection))
 	{
 		RenameSelection(Frame);
+	}
+	if (MenuEntry(Frame, "Edit", "Focus", "F", bHasSelection))
+	{
+		FUiCommands::FocusSelection(Frame.Editor);
 	}
 	ImGui::EndMenu();
 }

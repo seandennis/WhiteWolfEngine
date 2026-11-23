@@ -204,6 +204,15 @@ bool FUiCommands::CanAttachEntities(
 		{ return EntityId == *ParentId || Parent->IsDescendantOf(Scene.FindEntityById(EntityId)); });
 }
 
+void FUiCommands::FocusSelection(FEditor& Editor)
+{
+	// With nothing selected there is nothing to look at, which the command would say by failing.
+	if (!Editor.GetSelection().empty())
+	{
+		Editor.ExecuteCommand("Viewport.Focus", FJsonValue());
+	}
+}
+
 void FUiCommands::AddComponent(FEditor& Editor, int64 EntityId, const std::string& ClassName)
 {
 	FJsonValue Arguments = MakeEntityArguments(EntityId);

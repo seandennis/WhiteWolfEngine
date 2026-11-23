@@ -1,11 +1,13 @@
 #include "Commands/CommandTargets.h"
 
 #include "Editor.h"
+#include "Json/JsonValue.h"
 #include "Scene/Component.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
 
 #include <format>
+#include <utility>
 
 WEntity* FCommandTargets::FindEntity(const FEditor& Editor, int64 EntityId, std::string& OutError)
 {
@@ -40,4 +42,34 @@ WObject* FCommandTargets::FindObject(const FEditor& Editor, int64 ObjectId, std:
 	}
 	OutError = std::format("There is no entity or component with the identifier {}.", ObjectId);
 	return nullptr;
+}
+
+bool FCommandTargets::ReadEntityIds(
+	const FEditor& Editor, const FJsonValue& Entities, std::vector<int64>& OutEntityIds, std::string& OutError)
+{
+	if (!Entities.IsArray())
+	{
+		OutError =
+			std::format("Entities must be an array of entity identifiers, but is {}.", Entities.GetTypeDescription());
+		return false;
+	}
+
+	std::vector<int64> EntityIds;
+	for (const FJsonValue& Element : Entities.GetElements())
+	{
+		if (!Element.IsInteger())
+		{
+			OutError = std::format("Entities must hold entity identifiers, which are integers, but holds {}.",
+				Element.GetTypeDescription());
+			return false;
+		}
+		if (FindEntity(Editor, Element.GetInteger(), OutError) == nullptr)
+		{
+			return false;
+		}
+		EntityIds.push_back(Element.GetInteger());
+	}
+
+	OutEntityIds = std::move(EntityIds);
+	return true;
 }

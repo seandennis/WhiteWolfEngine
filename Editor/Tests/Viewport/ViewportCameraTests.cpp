@@ -2,7 +2,10 @@
 
 #include <doctest/doctest.h>
 #include <glm/geometric.hpp>
+#include <glm/trigonometric.hpp>
 
+#include <cmath>
+#include <initializer_list>
 #include <limits>
 #include <ostream>
 
@@ -14,6 +17,14 @@ namespace
 	bool IsSameDirection(const FVector3f& Actual, const FVector3f& Expected)
 	{
 		return glm::length(Actual - Expected) <= DirectionTolerance;
+	}
+
+	/** How far two positions may be apart, in metres, and still count as the same. */
+	constexpr double PositionTolerance = 1.0e-5;
+
+	bool IsSamePosition(const FVector& Actual, const FVector& Expected)
+	{
+		return glm::length(Actual - Expected) <= PositionTolerance;
 	}
 
 	/** A camera at the origin that is not turned or tilted. */
@@ -239,6 +250,246 @@ TEST_SUITE("FViewportCamera")
 		CHECK(Camera.IsValid());
 
 		Camera.Pitch = -FViewportCamera::MaxPitch;
+		CHECK(Camera.IsValid());
+	}
+
+	TEST_CASE("A new camera's focus point is about the origin of the scene, and it can be steered")
+	{
+		const FViewportCamera Camera;
+
+		CHECK(glm::length(Camera.GetFocusPoint()) < 0.25);
+		CHECK(Camera.FocusDistance >= FViewportCamera::MinFocusDistance);
+		CHECK(Camera.FlySpeed >= FViewportCamera::MinFlySpeed);
+		CHECK(Camera.FlySpeed <= FViewportCamera::MaxFlySpeed);
+	}
+
+	TEST_CASE("The focus point is the focus distance in front of the camera")
+	{
+		FViewportCamera Camera = MakeLevelCamera();
+		Camera.Location = FVector(1.0, 2.0, 3.0);
+		Camera.FocusDistance = 5.0;
+
+		CHECK(IsSamePosition(Camera.GetFocusPoint(), FVector(1.0, 2.0, -2.0)));
+
+		Camera.Yaw = 90.0f;
+		CHECK(IsSamePosition(Camera.GetFocusPoint(), FVector(-4.0, 2.0, 3.0)));
+	}
+
+	TEST_CASE("LookAt makes the point it faces the focus point")
+	{
+		FViewportCamera Camera = MakeLevelCamera();
+
+		REQUIRE(Camera.LookAt(FVector(3.0, 4.0, -12.0)));
+
+		CHECK(Camera.FocusDistance == doctest::Approx(13.0));
+		CHECK(IsSamePosition(Camera.GetFocusPoint(), FVector(3.0, 4.0, -12.0)));
+	}
+
+	TEST_CASE("Turn adds to the angles where the camera stands")
+	{
+		FViewportCamera Camera = MakeLevelCamera();
+		Camera.Location = FVector(5.0, 6.0, 7.0);
+
+		Camera.Turn(30.0f, -20.0f);
+
+		CHECK(Camera.Yaw == doctest::Approx(30.0f));
+		CHECK(Camera.Pitch == doctest::Approx(-20.0f));
+		CHECK(Camera.Location == FVector(5.0, 6.0, 7.0));
+	}
+
+	TEST_CASE("Turn keeps the yaw within half a turn either way and stops the pitch at its limit")
+	{
+		FViewportCamera Camera = MakeLevelCamera();
+
+		Camera.Turn(170.0f, 0.0f);
+		Camera.Turn(30.0f, 0.0f);
+		CHECK(Camera.Yaw == doctest::Approx(-160.0f));
+
+		Camera.Turn(-400.0f, 0.0f);
+		CHECK(Camera.Yaw == doctest::Approx(160.0f));
+
+		Camera.Turn(0.0f, 500.0f);
+		CHECK(Camera.Pitch == FViewportCamera::MaxPitch);
+		Camera.Turn(0.0f, -500.0f);
+		CHECK(Camera.Pitch == -FViewportCamera::MaxPitch);
+		CHECK(Camera.IsValid());
+	}
+
+	TEST_CASE("Fly moves the camera to its right, up in the world and the way it looks, without turning it")
+	{
+		FViewportCamera Camera = MakeLevelCamera();
+		// Turned to the left, so that its right is along -Z and ahead of it is -X, and looking down a little.
+		Camera.Yaw = 90.0f;
+
+		Camera.Fly(2.0, 0.0, 0.0);
+		CHECK(IsSamePosition(Camera.Location, FVector(0.0, 0.0, -2.0)));
+
+		Camera.Fly(0.0, 0.0, 3.0);
+		CHECK(IsSamePosition(Camera.Location, FVector(-3.0, 0.0, -2.0)));
+
+		// Up is the world's up, however steeply the camera looks down.
+		Camera.Pitch = -60.0f;
+		Camera.Fly(0.0, 4.0, 0.0);
+		CHECK(IsSamePosition(Camera.Location, FVector(-3.0, 4.0, -2.0)));
+
+		// Ahead is where it looks: down as well as forwards.
+		Camera.Fly(0.0, 0.0, 2.0);
+		CHECK(IsSamePosition(Camera.Location, FVector(-4.0, 4.0 - std::sqrt(3.0), -2.0)));
+		CHECK(Camera.Yaw == 90.0f);
+		CHECK(Camera.Pitch == -60.0f);
+	}
+
+	TEST_CASE("Orbit takes the camera around its focus point, which stays where it is")
+	{
+		FViewportCamera Camera = MakeLevelCamera();
+		Camera.Location = FVector(10.0, 1.0, 5.0);
+		Camera.FocusDistance = 5.0;
+		const FVector FocusPoint = Camera.GetFocusPoint();
+		REQUIRE(IsSamePosition(FocusPoint, FVector(10.0, 1.0, 0.0)));
+
+		// A quarter of the way around to the left: the camera now looks along -X, from the +X side of the point.
+		Camera.Orbit(90.0f, 0.0f);
+
+		CHECK(Camera.Yaw == doctest::Approx(90.0f));
+		CHECK(IsSamePosition(Camera.Location, FVector(15.0, 1.0, 0.0)));
+		CHECK(IsSamePosition(Camera.GetFocusPoint(), FocusPoint));
+		CHECK(Camera.FocusDistance == 5.0);
+
+		// Looking down at the point means being above it.
+		Camera.Orbit(0.0f, -30.0f);
+		CHECK(Camera.Location.y == doctest::Approx(1.0 + 2.5));
+		CHECK(IsSamePosition(Camera.GetFocusPoint(), FocusPoint));
+
+		// The pitch stops at its limit, and the camera with it, still facing the point.
+		Camera.Orbit(0.0f, -500.0f);
+		CHECK(Camera.Pitch == -FViewportCamera::MaxPitch);
+		CHECK(IsSamePosition(Camera.GetFocusPoint(), FocusPoint));
+	}
+
+	TEST_CASE("Dolly moves the camera towards its focus point and stops short of it")
+	{
+		FViewportCamera Camera = MakeLevelCamera();
+		Camera.FocusDistance = 10.0;
+		const FVector FocusPoint = Camera.GetFocusPoint();
+
+		Camera.Dolly(4.0);
+		CHECK(IsSamePosition(Camera.Location, FVector(0.0, 0.0, -4.0)));
+		CHECK(Camera.FocusDistance == doctest::Approx(6.0));
+		CHECK(IsSamePosition(Camera.GetFocusPoint(), FocusPoint));
+
+		Camera.Dolly(-14.0);
+		CHECK(IsSamePosition(Camera.Location, FVector(0.0, 0.0, 10.0)));
+		CHECK(Camera.FocusDistance == doctest::Approx(20.0));
+
+		// However far it is asked to go, it does not reach the point or pass it.
+		Camera.Dolly(1000.0);
+		CHECK(Camera.FocusDistance == FViewportCamera::MinFocusDistance);
+		CHECK(IsSamePosition(Camera.GetFocusPoint(), FocusPoint));
+		CHECK(Camera.IsValid());
+	}
+
+	TEST_CASE("Pan moves the camera in the plane of the picture")
+	{
+		FViewportCamera Camera = MakeLevelCamera();
+		Camera.Pitch = -45.0f;
+		const FVector3f PictureUp = Camera.GetUp();
+
+		Camera.Pan(2.0, 0.0);
+		CHECK(IsSamePosition(Camera.Location, FVector(2.0, 0.0, 0.0)));
+
+		// The top of the picture of a camera that looks down is forwards as much as it is up.
+		Camera.Pan(0.0, 3.0);
+		CHECK(IsSamePosition(Camera.Location, FVector(2.0, 0.0, 0.0) + FVector(PictureUp) * 3.0));
+		CHECK(Camera.Location.y == doctest::Approx(3.0 * std::sqrt(0.5)));
+		CHECK(Camera.Location.z == doctest::Approx(-3.0 * std::sqrt(0.5)));
+		CHECK(Camera.Pitch == -45.0f);
+	}
+
+	TEST_CASE("Frame puts the camera where it sees a ball whole, without turning it")
+	{
+		FViewportCamera Camera;
+		const float YawBefore = Camera.Yaw;
+		const float PitchBefore = Camera.Pitch;
+		const FVector Center(100.0, 20.0, -300.0);
+		constexpr double Radius = 2.0;
+
+		REQUIRE(Camera.Frame(Center, Radius));
+
+		CHECK(Camera.Yaw == YawBefore);
+		CHECK(Camera.Pitch == PitchBefore);
+		CHECK(IsSamePosition(Camera.GetFocusPoint(), Center));
+
+		// The ball takes up less than the height of the picture: the angle it is seen under is less than the
+		// field of view, and more than half of it, so that it is not small either.
+		const double Distance = glm::length(Center - Camera.Location);
+		const double AngleOfBall = 2.0 * glm::degrees(std::asin(Radius / Distance));
+		CHECK(AngleOfBall < static_cast<double>(Camera.VerticalFieldOfView));
+		CHECK(AngleOfBall > 0.5 * static_cast<double>(Camera.VerticalFieldOfView));
+		CHECK(Camera.IsValid());
+	}
+
+	TEST_CASE("Frame refuses what is not a ball, and leaves the camera as it was")
+	{
+		const FViewportCamera Before;
+		const double NotANumber = std::numeric_limits<double>::quiet_NaN();
+		const double Infinity = std::numeric_limits<double>::infinity();
+
+		for (const double Radius : {0.0, -1.0, NotANumber, Infinity})
+		{
+			CAPTURE(Radius);
+			FViewportCamera Camera;
+			CHECK_FALSE(Camera.Frame(FVector(1.0, 2.0, 3.0), Radius));
+			CHECK(Camera == Before);
+		}
+
+		FViewportCamera Camera;
+		CHECK_FALSE(Camera.Frame(FVector(NotANumber, 0.0, 0.0), 1.0));
+		CHECK_FALSE(Camera.Frame(FVector(0.0, Infinity, 0.0), 1.0));
+		CHECK(Camera == Before);
+	}
+
+	TEST_CASE("A very small ball is framed from no nearer than the nearest focus distance")
+	{
+		FViewportCamera Camera;
+
+		REQUIRE(Camera.Frame(FVector(0.0), 1.0e-6));
+
+		CHECK(Camera.FocusDistance == FViewportCamera::MinFocusDistance);
+		CHECK(Camera.IsValid());
+	}
+
+	TEST_CASE("The size of a pixel at the focus point follows the distance and the height of the picture")
+	{
+		FViewportCamera Camera = MakeLevelCamera();
+		Camera.VerticalFieldOfView = 90.0f;
+		Camera.FocusDistance = 10.0;
+
+		// With a right angle between the top and the bottom of the picture, the picture is twice as high at the
+		// focus point as the point is far.
+		CHECK(Camera.GetPixelSizeAtFocus(1000) == doctest::Approx(0.02));
+		CHECK(Camera.GetPixelSizeAtFocus(500) == doctest::Approx(0.04));
+
+		Camera.FocusDistance = 20.0;
+		CHECK(Camera.GetPixelSizeAtFocus(1000) == doctest::Approx(0.04));
+	}
+
+	TEST_CASE("A camera is not valid with a focus distance or a fly speed out of its limits")
+	{
+		FViewportCamera Camera;
+		Camera.FocusDistance = 0.0;
+		CHECK_FALSE(Camera.IsValid());
+		Camera.FocusDistance = std::numeric_limits<double>::infinity();
+		CHECK_FALSE(Camera.IsValid());
+		Camera.FocusDistance = FViewportCamera::MinFocusDistance;
+		CHECK(Camera.IsValid());
+
+		Camera.FlySpeed = 0.0f;
+		CHECK_FALSE(Camera.IsValid());
+		Camera.FlySpeed = FViewportCamera::MaxFlySpeed * 2.0f;
+		CHECK_FALSE(Camera.IsValid());
+		Camera.FlySpeed = std::numeric_limits<float>::quiet_NaN();
+		CHECK_FALSE(Camera.IsValid());
+		Camera.FlySpeed = FViewportCamera::MaxFlySpeed;
 		CHECK(Camera.IsValid());
 	}
 }

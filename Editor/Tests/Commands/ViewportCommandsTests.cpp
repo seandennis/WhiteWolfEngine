@@ -1,5 +1,10 @@
 #include "Editor.h"
+#include "Rendering/MeshShapes.h"
 #include "Rendering/SceneViewMode.h"
+#include "Rendering/StaticMesh.h"
+#include "Rendering/StaticMeshComponent.h"
+#include "Scene/Entity.h"
+#include "Scene/Scene.h"
 #include "TestEditorObjects.h"
 #include "TestSupport/FatalErrorException.h"
 #include "TestSupport/ScopedLogCapture.h"
@@ -8,9 +13,18 @@
 #include <doctest/doctest.h>
 #include <glm/geometric.hpp>
 
+#include <cmath>
+#include <format>
 #include <limits>
 #include <ostream>
 #include <string>
+#include <vector>
+
+namespace
+{
+	/** How far from a point the camera's focus point may be, in metres, and still count as being on it. */
+	constexpr double FocusTolerance = 1.0e-4;
+}
 
 TEST_SUITE("Viewport commands")
 {
@@ -312,6 +326,125 @@ TEST_SUITE("Viewport commands")
 
 		CHECK_THROWS_AS(Editor.SetViewportCamera(Broken), FFatalErrorException);
 
+		CHECK(Editor.GetViewportCamera() == Before);
+	}
+
+	TEST_CASE("Viewport.Focus brings the camera to where it sees what is selected, without turning it")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		WEntity* const Crate = Editor.GetScene().CreateEntity("Crate");
+		Crate->SetWorldLocation(FVector(10.0, 0.0, -4.0));
+		Crate->AddComponent<WStaticMeshComponent>()->Mesh = FMeshShapes::CreateBox(FVector3f(2.0f));
+		Editor.SetSelection({Crate->GetId()});
+		const FViewportCamera Before = Editor.GetViewportCamera();
+
+		const FCommandResult Result = Editor.ExecuteCommand("Viewport.Focus", FJsonValue());
+
+		REQUIRE(Result.HasSucceeded());
+		CHECK(Result.GetValue().IsNull());
+		const FViewportCamera& After = Editor.GetViewportCamera();
+		CHECK(glm::length(After.GetFocusPoint() - FVector(10.0, 0.0, -4.0)) < FocusTolerance);
+		CHECK(After.Yaw == Before.Yaw);
+		CHECK(After.Pitch == Before.Pitch);
+
+		// The corners of a box of two metres are the square root of three from its middle. A ball of that radius
+		// fills a picture of 60 degrees from twice as far, and the camera stands back a little more.
+		CHECK(After.FocusDistance == doctest::Approx(std::sqrt(3.0) * 2.0 * FViewportCamera::FrameMargin));
+	}
+
+	TEST_CASE("Viewport.Focus looks at the entities it is given, with the meshes of what is below them")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		WScene& Scene = Editor.GetScene();
+		// A cart that shows nothing itself, far from its wheel, which does.
+		WEntity* const Cart = Scene.CreateEntity("Cart");
+		WEntity* const Wheel = Scene.CreateEntity("Wheel", Cart);
+		Wheel->SetWorldLocation(FVector(100.0, 0.0, 0.0));
+		Wheel->AddComponent<WStaticMeshComponent>()->Mesh = FMeshShapes::CreateBox(FVector3f(1.0f));
+		WEntity* const Crate = Scene.CreateEntity("Crate");
+		Crate->SetWorldLocation(FVector(110.0, 0.0, 0.0));
+		Crate->AddComponent<WStaticMeshComponent>()->Mesh = FMeshShapes::CreateBox(FVector3f(1.0f));
+		const WEntity* const Other = Scene.CreateEntity("Other");
+		Editor.SetSelection({Other->GetId()});
+
+		REQUIRE(
+			Editor
+				.ExecuteCommand("Viewport.Focus", ParseTestJson(std::format(R"({{"Entities": [{}]}})", Cart->GetId())))
+				.HasSucceeded());
+
+		// What is seen of the cart is its wheel: that is looked at, not the place of the cart.
+		CHECK(glm::length(Editor.GetViewportCamera().GetFocusPoint() - FVector(100.0, 0.0, 0.0)) < FocusTolerance);
+		CHECK(Editor.GetSelection() == std::vector<int64>{Other->GetId()});
+
+		// Several entities are looked at together: the middle of the room they take up, from where all of it shows.
+		REQUIRE(Editor
+					.ExecuteCommand("Viewport.Focus",
+						ParseTestJson(std::format(R"({{"Entities": [{}, {}]}})", Cart->GetId(), Crate->GetId())))
+					.HasSucceeded());
+		const FViewportCamera& Camera = Editor.GetViewportCamera();
+		CHECK(glm::length(Camera.GetFocusPoint() - FVector(105.0, 0.0, 0.0)) < FocusTolerance);
+		const double Radius = 0.5 * std::sqrt(11.0 * 11.0 + 1.0 + 1.0);
+		CHECK(Camera.FocusDistance == doctest::Approx(Radius * 2.0 * FViewportCamera::FrameMargin));
+	}
+
+	TEST_CASE("Viewport.Focus looks at entities that show nothing where they are, from about an arm's length")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		WEntity* const Lamp = Editor.GetScene().CreateEntity("Lamp");
+		Lamp->SetWorldLocation(FVector(3.0, 4.0, 5.0));
+		Editor.SetSelection({Lamp->GetId()});
+
+		REQUIRE(Editor.ExecuteCommand("Viewport.Focus", FJsonValue()).HasSucceeded());
+
+		const FViewportCamera& Camera = Editor.GetViewportCamera();
+		CHECK(glm::length(Camera.GetFocusPoint() - FVector(3.0, 4.0, 5.0)) < FocusTolerance);
+		CHECK(Camera.FocusDistance == doctest::Approx(0.5 * 2.0 * FViewportCamera::FrameMargin));
+	}
+
+	TEST_CASE("Viewport.Focus fails, and leaves the camera where it is, when there is nothing to look at")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		WEntity* const Crate = Editor.GetScene().CreateEntity("Crate");
+		const FViewportCamera Before = Editor.GetViewportCamera();
+		std::string ArgumentText = "null";
+		std::string ExpectedError;
+
+		SUBCASE("Nothing is selected and nothing is given")
+		{
+			ExpectedError = "No entity is selected and none was given: there is nothing to look at.";
+		}
+		SUBCASE("No entities are given")
+		{
+			Editor.SetSelection({Crate->GetId()});
+			ArgumentText = R"({"Entities": []})";
+			ExpectedError = "Entities is empty: there is nothing to look at.";
+		}
+		SUBCASE("Entities is not a list")
+		{
+			ArgumentText = std::format(R"({{"Entities": {}}})", Crate->GetId());
+			ExpectedError = "Entities must be an array of entity identifiers, but is a number.";
+		}
+		SUBCASE("An entity that does not exist")
+		{
+			ArgumentText = std::format(R"({{"Entities": [{}, 99]}})", Crate->GetId());
+			ExpectedError = "There is no entity with the identifier 99.";
+		}
+		SUBCASE("An entity that is nowhere a camera can look")
+		{
+			Crate->SetWorldLocation(FVector(std::numeric_limits<double>::infinity(), 0.0, 0.0));
+			Editor.SetSelection({Crate->GetId()});
+			ExpectedError = "The entities are not at places that a camera can look at: their positions are not "
+							"finite numbers.";
+		}
+
+		const FCommandResult Result = Editor.ExecuteCommand("Viewport.Focus", ParseTestJson(ArgumentText));
+
+		CHECK_FALSE(Result.HasSucceeded());
+		CHECK(Result.GetError() == ExpectedError);
 		CHECK(Editor.GetViewportCamera() == Before);
 	}
 }

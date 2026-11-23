@@ -19,6 +19,7 @@
 #include "TestSupport/ScopedTempDirectory.h"
 #include "Ui/EditorUi.h"
 #include "Ui/UiRectangle.h"
+#include "Viewport/ViewportCamera.h"
 
 #include <doctest/doctest.h>
 
@@ -183,6 +184,38 @@ TEST_SUITE("FEditorWindow")
 		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Player});
 	}
 
+	TEST_CASE("The window takes the mouse while the viewport's camera is steered, and gives it back after")
+	{
+		FEditorWindowTest Test;
+		Test.RunFrames(3);
+		const std::optional<FUiRectangle> Viewport = Test.Window->GetUi().FindItem("Viewport");
+		REQUIRE(Viewport.has_value());
+		FWindow& Window = Test.Window->GetWindow();
+		FInputState& Input = Window.GetInput();
+		CHECK_FALSE(Window.IsMouseCaptured());
+
+		FPlatform::PollEvents();
+		Input.HandleMouseMove(Viewport->GetCenter());
+		Test.DrawFrame();
+		FPlatform::PollEvents();
+		Input.HandleMouseButtonEvent(EMouseButton::Right, EInputEvent::Pressed);
+		Test.DrawFrame();
+		CHECK(Window.IsMouseCaptured());
+
+		// The mouse that the window has taken turns the camera wherever it goes.
+		const float YawBefore = Test.Editor.GetViewportCamera().Yaw;
+		FPlatform::PollEvents();
+		Input.HandleMouseMove(Viewport->GetCenter() + FVector2D(4000.0, 0.0));
+		Test.DrawFrame();
+		CHECK(Window.IsMouseCaptured());
+		CHECK(Test.Editor.GetViewportCamera().Yaw != YawBefore);
+
+		FPlatform::PollEvents();
+		Input.HandleMouseButtonEvent(EMouseButton::Right, EInputEvent::Released);
+		Test.DrawFrame();
+		CHECK_FALSE(Window.IsMouseCaptured());
+		CHECK(CountLoggedErrors(Test.Capture) == 0);
+	}
 	TEST_CASE("Frames are shown in a window in memory only where the graphics driver can show pictures there")
 	{
 		FEditorWindowTest Test;

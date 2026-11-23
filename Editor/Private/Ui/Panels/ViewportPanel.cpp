@@ -12,8 +12,10 @@
 #include "Ui/UiItems.h"
 #include "Ui/UiTextures.h"
 #include "Ui/UiWorkspace.h"
+#include "Viewport/ViewportCamera.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace
@@ -27,11 +29,29 @@ namespace
 	 * is dim, so that more light is needed for the same grey.
 	 */
 	constexpr FLinearColor EmptySpaceLight(0.044f, 0.044f, 0.044f);
+
+	// How far the camera turns for each pixel that the mouse moves, in degrees: looking around, and going around.
+	constexpr float LookSpeed = 0.2f;
+	constexpr float OrbitSpeed = 0.3f;
+
+	/** The part of its distance to the focus point that the camera moves for each pixel of a dolly. */
+	constexpr double DollySpeed = 0.005;
+
+	/** The part of that distance that it moves for each notch of the wheel. */
+	constexpr double WheelDollyStep = 0.1;
+
+	/** By how much a notch of the wheel multiplies the speed of flying. */
+	constexpr float FlySpeedStep = 1.25f;
 }
 
 bool FViewportPanel::Draw(FUiFrame& Frame, FRenderDevice& Device, std::string& OutError)
 {
 	bIsPictureShown = false;
+
+	// The camera is steered for as long as the picture is laid out with the mouse button down on it, frame after
+	// frame. A frame without the picture ends the steering, whatever takes the picture away.
+	const ENavigation Continued = Navigation;
+	Navigation = ENavigation::None;
 	if (!Frame.Workspace.bShowViewport)
 	{
 		return true;
@@ -63,14 +83,111 @@ bool FViewportPanel::Draw(FUiFrame& Frame, FRenderDevice& Device, std::string& O
 
 		if (bSucceeded)
 		{
-			ImGui::Image(ImTextureRef(Frame.Textures.AddRenderTarget(*Target)),
-				ImVec2(static_cast<float>(Width), static_cast<float>(Height)));
-			Frame.Items.NameLastItem("Viewport");
+			const ImVec2 PictureSize(static_cast<float>(Width), static_cast<float>(Height));
+			const ImVec2 PictureCorner = ImGui::GetCursorScreenPos();
+			ImGui::Image(ImTextureRef(Frame.Textures.AddRenderTarget(*Target)), PictureSize);
 			bIsPictureShown = true;
+
+			// What the mouse does on the picture is the panel's to say. A button that has no look of its own lies
+			// on the picture and takes all three mouse buttons; while one of them is down, the mouse is its.
+			ImGui::SetCursorScreenPos(PictureCorner);
+			ImGui::InvisibleButton("##Picture",
+				PictureSize,
+				ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight |
+					ImGuiButtonFlags_MouseButtonMiddle);
+			Frame.Items.NameLastItem("Viewport");
+			Navigate(Frame, Height, Continued);
 		}
 	}
 	ImGui::End();
 	return bSucceeded;
+}
+
+void FViewportPanel::Navigate(FUiFrame& Frame, int32 PictureHeight, ENavigation Continued)
+{
+	const ImGuiIO& Io = ImGui::GetIO();
+	if (ImGui::IsItemActivated())
+	{
+		// The button that went down, and whether Alt was held, say how the camera is steered until it comes up.
+		if (ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+		{
+			Navigation = ENavigation::Pan;
+		}
+		else if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+		{
+			Navigation = Io.KeyAlt ? ENavigation::Dolly : ENavigation::Fly;
+		}
+		else if (Io.KeyAlt)
+		{
+			Navigation = ENavigation::Orbit;
+		}
+	}
+	else if (ImGui::IsItemActive())
+	{
+		Navigation = Continued;
+	}
+
+	FViewportCamera Camera = Frame.Editor.GetViewportCamera();
+	const ImVec2& Moved = Io.MouseDelta;
+	switch (Navigation)
+	{
+		case ENavigation::Fly:
+		{
+			// The mouse moved to the right looks to the right, which is a turn the other way than the yaw counts;
+			// moved down, it looks down.
+			Camera.Turn(-Moved.x * LookSpeed, -Moved.y * LookSpeed);
+
+			const double Step = static_cast<double>(Camera.FlySpeed) * static_cast<double>(Io.DeltaTime);
+			const auto GetAxis = [](ImGuiKey Positive, ImGuiKey Negative)
+			{
+				return (ImGui::IsKeyDown(Positive) ? 1.0 : 0.0) - (ImGui::IsKeyDown(Negative) ? 1.0 : 0.0);
+			};
+			Camera.Fly(GetAxis(ImGuiKey_D, ImGuiKey_A) * Step,
+				GetAxis(ImGuiKey_E, ImGuiKey_Q) * Step,
+				GetAxis(ImGuiKey_W, ImGuiKey_S) * Step);
+
+			// The wheel makes the flight faster or slower, by the same part of the speed for every notch.
+			if (Io.MouseWheel != 0.0f)
+			{
+				Camera.FlySpeed = std::clamp(Camera.FlySpeed * std::pow(FlySpeedStep, Io.MouseWheel),
+					FViewportCamera::MinFlySpeed,
+					FViewportCamera::MaxFlySpeed);
+			}
+			break;
+		}
+		case ENavigation::Orbit:
+			Camera.Orbit(-Moved.x * OrbitSpeed, -Moved.y * OrbitSpeed);
+			break;
+		case ENavigation::Dolly:
+		{
+			// To the right or upwards is closer, by a part of the distance for every pixel.
+			const double Pixels = static_cast<double>(Moved.x) - static_cast<double>(Moved.y);
+			Camera.Dolly(Pixels * DollySpeed * Camera.FocusDistance);
+			break;
+		}
+		case ENavigation::Pan:
+		{
+			// The scene goes with the mouse, so the camera goes the other way: what was under the mouse at the
+			// distance of the focus point stays under it.
+			const double PixelSize = Camera.GetPixelSizeAtFocus(PictureHeight);
+			Camera.Pan(-static_cast<double>(Moved.x) * PixelSize, static_cast<double>(Moved.y) * PixelSize);
+			break;
+		}
+		case ENavigation::None:
+		default:
+			// The wheel by itself moves the camera closer to what it looks at, or away, a step for every notch.
+			if (ImGui::IsItemHovered() && Io.MouseWheel != 0.0f)
+			{
+				Camera.Dolly(static_cast<double>(Io.MouseWheel) * WheelDollyStep * Camera.FocusDistance);
+			}
+			break;
+	}
+
+	// The camera is the user's eye and not part of the scene: it is set, not changed by a command (D-048).
+	if (!(Camera == Frame.Editor.GetViewportCamera()))
+	{
+		Frame.Editor.SetViewportCamera(Camera);
+	}
 }
 
 bool FViewportPanel::RenderScene(FSceneRenderer& Renderer, const FEditor& Editor, std::string& OutError)

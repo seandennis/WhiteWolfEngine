@@ -12,10 +12,16 @@ class FSceneRenderer;
 struct FUiFrame;
 
 /**
- * The panel that shows the scene being edited, as the editor's viewport camera sees it.
+ * The panel that shows the scene being edited, as the editor's viewport camera sees it, and in which the user
+ * steers that camera.
  *
  * The scene is drawn onto a render target of the panel's own, as large as the panel, and the user interface shows
  * that surface as a picture.
+ *
+ * The camera is steered as in Unreal: with the right mouse button held, the mouse looks around and W, A, S, D, Q
+ * and E fly, at a speed that the wheel changes; with Alt, the left button takes the camera around what it looks
+ * at and the right one moves it closer or away; the middle button moves it sideways and up; and the wheel by
+ * itself moves it closer or away in steps.
  */
 class FViewportPanel
 {
@@ -42,7 +48,42 @@ public:
 	 */
 	bool RenderScene(FSceneRenderer& Renderer, const FEditor& Editor, std::string& OutError);
 
+	/**
+	 * Returns true while the user is steering the camera with a mouse button held down. For that long the mouse
+	 * should be the panel's alone and free to move without end (FWindow::CaptureMouse).
+	 */
+	bool IsNavigating() const
+	{
+		return Navigation != ENavigation::None;
+	}
+
 private:
+	/** The ways the camera is steered while a mouse button is held down. */
+	enum class ENavigation : uint8
+	{
+		None,
+		/** The mouse looks around and the keys move the camera. */
+		Fly,
+		/** The mouse takes the camera around its focus point. */
+		Orbit,
+		/** The mouse moves the camera towards its focus point or away from it. */
+		Dolly,
+		/** The mouse moves the camera sideways and up, and the scene with the mouse. */
+		Pan,
+	};
+
+	/**
+	 * Steers the editor's viewport camera by what the mouse and the keyboard do on the picture, which is the item
+	 * that was laid out last.
+	 *
+	 * @param PictureHeight The height of the picture in pixels.
+	 * @param Continued How the camera was steered in the last frame, which goes on while the button stays down.
+	 */
+	void Navigate(FUiFrame& Frame, int32 PictureHeight, ENavigation Continued);
+
+	/** How the camera is being steered, as of the frame that was laid out last. */
+	ENavigation Navigation = ENavigation::None;
+
 	/** The surface the scene is drawn onto. Null until the panel is first shown. */
 	std::unique_ptr<FRenderTarget> Target;
 

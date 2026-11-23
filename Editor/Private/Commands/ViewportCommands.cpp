@@ -2,13 +2,22 @@
 
 #include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
+#include "Commands/CommandTargets.h"
 #include "Editor.h"
 #include "Json/JsonValue.h"
+#include "Math/Box.h"
+#include "Object/ObjectGlobals.h"
+#include "Object/ObjectPtr.h"
 #include "Reflection/PropertyValueTraits.h"
 #include "Rendering/CameraView.h"
 #include "Rendering/SceneViewMode.h"
+#include "Rendering/StaticMeshComponent.h"
+#include "Scene/Component.h"
+#include "Scene/Entity.h"
+#include "Scene/Scene.h"
 #include "Viewport/ViewportCamera.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <format>
@@ -16,6 +25,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace
 {
@@ -25,6 +35,12 @@ namespace
 		ESceneViewMode Mode;
 		std::string_view Name;
 	};
+
+	/**
+	 * The radius of the smallest ball that the camera is brought to look at, in metres: an entity that shows
+	 * nothing, or something tiny, is looked at from about an arm's length and not from inside it.
+	 */
+	constexpr double MinFocusRadius = 0.5;
 
 	constexpr std::array<FViewModeName, 3> ViewModeNames{{
 		{ESceneViewMode::Lit, "Lit"},
@@ -210,6 +226,75 @@ namespace
 		Editor.SetViewMode(*Mode);
 		return FCommandResult::Success();
 	}
+
+	/** Adds the room that the meshes of an entity, and of everything below it in the tree, take up to a box. */
+	void AddMeshBounds(const WEntity& Entity, FBox& Bounds)
+	{
+		for (const TObjectPtr<WComponent>& Component : Entity.GetComponents())
+		{
+			if (const WStaticMeshComponent* const Mesh = Cast<WStaticMeshComponent>(Component.Get()))
+			{
+				Bounds.Add(Mesh->GetWorldBounds());
+			}
+		}
+		for (const TObjectPtr<WEntity>& Child : Entity.GetChildren())
+		{
+			AddMeshBounds(*Child, Bounds);
+		}
+	}
+
+	/** Adds the place of an entity, and of everything below it in the tree, to a box. */
+	void AddLocations(const WEntity& Entity, FBox& Bounds)
+	{
+		Bounds.Add(Entity.GetWorldLocation());
+		for (const TObjectPtr<WEntity>& Child : Entity.GetChildren())
+		{
+			AddLocations(*Child, Bounds);
+		}
+	}
+
+	FCommandResult Focus(FEditor& Editor, const FCommandArguments& Arguments)
+	{
+		const bool bAreEntitiesGiven = Arguments.Has("Entities");
+		std::vector<int64> EntityIds = Editor.GetSelection();
+		std::string Error;
+		if (bAreEntitiesGiven &&
+			!FCommandTargets::ReadEntityIds(Editor, Arguments.GetJson("Entities"), EntityIds, Error))
+		{
+			return FCommandResult::Failure(std::move(Error));
+		}
+		if (EntityIds.empty())
+		{
+			return FCommandResult::Failure(bAreEntitiesGiven
+					? "Entities is empty: there is nothing to look at."
+					: "No entity is selected and none was given: there is nothing to look at.");
+		}
+
+		// What is looked at is what can be seen of the entities: their meshes. Entities that show nothing, such as
+		// a lamp or an empty one that others are attached to, are looked at where they are.
+		const WScene& Scene = Editor.GetScene();
+		FBox Bounds;
+		for (const int64 EntityId : EntityIds)
+		{
+			AddMeshBounds(*Scene.FindEntityById(EntityId), Bounds);
+		}
+		if (Bounds.bIsEmpty)
+		{
+			for (const int64 EntityId : EntityIds)
+			{
+				AddLocations(*Scene.FindEntityById(EntityId), Bounds);
+			}
+		}
+
+		FViewportCamera Camera = Editor.GetViewportCamera();
+		if (!Camera.Frame(Bounds.GetCenter(), std::max(Bounds.GetRadius(), MinFocusRadius)))
+		{
+			return FCommandResult::Failure(
+				"The entities are not at places that a camera can look at: their positions are not finite numbers.");
+		}
+		Editor.SetViewportCamera(Camera);
+		return FCommandResult::Success();
+	}
 }
 
 void FViewportCommands::Register(FCommandRegistry& Registry)
@@ -250,6 +335,17 @@ void FViewportCommands::Register(FCommandRegistry& Registry)
 					"scene lit with real amounts of light, such as 100000 lux of sunlight, needs a small number.")},
 			ECommandEffect::LeavesScene},
 		SetCamera);
+
+	Registry.Register(
+		{"Viewport.Focus",
+			"Moves the viewport's camera, without turning it, to where it sees entities whole: their meshes and "
+			"those of everything below them in the tree, or the places of the entities if they show no mesh. It is "
+			"how to look at something.",
+			{FCommandParameter::Optional("Entities",
+				ECommandArgumentType::Json,
+				"An array of the identifiers of the entities to look at. The selected entities if left out.")},
+			ECommandEffect::LeavesScene},
+		Focus);
 
 	Registry.Register({"Viewport.GetViewMode",
 						  "Returns how the viewport shades the scene: Lit, Unlit or AmbientOcclusion.",
