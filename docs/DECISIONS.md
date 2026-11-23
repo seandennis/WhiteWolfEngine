@@ -966,3 +966,26 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** Agents cannot yet make several commands one step: a step that an agent begins and forgets to end would swallow everything after it.
 
 **Testing.** That commands in a step are one step with its name, which one undo takes back and one redo brings back; that a step that changed nothing in the end is none; that commands after a step are steps again; that a direct change before a step is a step of its own; that an undo in an open step ends and undoes it, and a redo ends it in place of what could have been redone; that another scene ends an open step with nothing to undo; that ending without beginning does nothing and beginning twice is a fatal error; and `FScopedEditorStep`.
+
+## D-055: The outliner is where the tree of entities is edited
+
+**Status:** Accepted.
+
+**Context.** The specification's outliner shows the scene's entities as a tree, with search, dragging to change parents and a menu on the right mouse button, and its shortcuts are Delete, Ctrl+D and F2. Until now the outliner listed and selected; nothing in the editor's window could create or change an entity.
+
+**Decision.**
+
+- **A right click opens a menu about what is selected,** after selecting the row it was on if that was not selected: Create Child Entity, Rename, Duplicate, Delete. On the empty part of the panel the menu creates an entity at the root. A new entity is called "Entity" and is selected, as copies are after a duplication: what was made is what the user goes on to work with.
+- **F2, Ctrl+D and Delete are entries of the Edit menu** and work wherever the keyboard is, except in a text field, which keeps Delete for its letters.
+- **A name is typed where it stands.** F2, or Rename, turns the row into a text field with the old name selected. Enter gives the entity the name, and so does going elsewhere; Escape leaves it. A name confirmed as it was changes nothing and is no step.
+- **Dragging a row onto another makes it that entity's child,** in the same place in the world, and dragging it onto the empty part of the panel gives it no parent. One of several selected rows takes the others along. A row cannot be dropped on itself or on what is below it, and such a place does not light up as one where it could.
+- **Pressing the mouse button on a row that is selected with others does not yet select it alone,** because the press may begin a drag of all of them; the release does, if the mouse has not moved.
+- **Each of these is one step of the history, named for what was done** ("Create Entity", "Rename", "Duplicate", "Delete", "Attach"), whatever number of commands it took (D-054). Where the selection holds an entity and something below it, the entity is acted on and takes what is below it along.
+- **The keyboard moves through menus and panels** as it does elsewhere: the library's keyboard navigation is on, which is also what makes Escape close a menu.
+- **Text fields work on `std::string`,** through the part of the library made for it, so that a name is as long as it is.
+
+**Alternatives considered.** A dialog for a name is one more window to answer for the commonest change. Deleting and duplicating with one command per entity would leave three steps to undo for one key. Selecting on the press in every case is simpler and makes it impossible to drag several rows.
+
+**Limits.** The outliner has no toggles for visibility yet, no way to select a range with Shift, and no way to put an entity between two others: a dropped entity becomes the last child. A copy has the name of its original.
+
+**Testing.** With the mouse and keyboard of `FEditorUiTest`: the menu of a row, which selects it, and of several selected rows, which stay selected; creating below a row and at the root, with the selection and the names of the steps; renaming by F2 and by the menu, onto the end of the old name, cancelled by Escape, confirmed by a click elsewhere, confirmed unchanged, and with the entity taken away meanwhile; Delete with a parent and its child among what is selected, as one step that one undo takes back; Delete with nothing selected and in a text field; Ctrl+D with the copies selected; dragging onto a row and onto the empty part, with the place in the world kept; a drop refused on what is below the dragged row; several selected rows dragged by one; a click on one of several selected rows; and the entries of the Edit menu, with and without a selection.

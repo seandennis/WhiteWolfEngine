@@ -6,6 +6,7 @@
 #include "Ui/UiCommands.h"
 #include "Ui/UiFrame.h"
 #include "Ui/UiItems.h"
+#include "Ui/UiRequests.h"
 #include "Ui/UiWorkspace.h"
 
 #include <format>
@@ -60,6 +61,16 @@ namespace
 	{
 		return ImGui::Shortcut(Keys, ImGuiInputFlags_RouteGlobal);
 	}
+
+	/** Asks the outliner to let the user type a new name for the entity that was selected last. */
+	void RenameSelection(FUiFrame& Frame)
+	{
+		const std::vector<int64> Selection = Frame.Editor.GetSelection();
+		if (!Selection.empty())
+		{
+			Frame.Requests.EntityToRename = Selection.back();
+		}
+	}
 }
 
 void FMainMenuBar::Draw(FUiFrame& Frame)
@@ -82,6 +93,18 @@ void FMainMenuBar::Draw(FUiFrame& Frame)
 				IsShortcutPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z))
 			{
 				FUiCommands::Redo(Frame.Editor);
+			}
+			if (IsShortcutPressed(ImGuiMod_Ctrl | ImGuiKey_D))
+			{
+				FUiCommands::DuplicateEntities(Frame.Editor, Frame.Editor.GetSelection());
+			}
+			if (IsShortcutPressed(ImGuiKey_Delete))
+			{
+				FUiCommands::DeleteEntities(Frame.Editor, Frame.Editor.GetSelection());
+			}
+			if (IsShortcutPressed(ImGuiKey_F2))
+			{
+				RenameSelection(Frame);
 			}
 		}
 
@@ -135,6 +158,23 @@ void FMainMenuBar::DrawEditMenu(FUiFrame& Frame)
 		FUiCommands::Redo(Frame.Editor);
 	}
 	Frame.Items.NameLastItem("Menu/Edit/Redo");
+
+	// What follows is about the entities that are selected.
+	ImGui::Separator();
+	const std::vector<int64> Selection = Frame.Editor.GetSelection();
+	const bool bHasSelection = !Selection.empty();
+	if (MenuEntry(Frame, "Edit", "Duplicate", "Ctrl+D", bHasSelection))
+	{
+		FUiCommands::DuplicateEntities(Frame.Editor, Selection);
+	}
+	if (MenuEntry(Frame, "Edit", "Delete", "Del", bHasSelection))
+	{
+		FUiCommands::DeleteEntities(Frame.Editor, Selection);
+	}
+	if (MenuEntry(Frame, "Edit", "Rename", "F2", bHasSelection))
+	{
+		RenameSelection(Frame);
+	}
 	ImGui::EndMenu();
 }
 

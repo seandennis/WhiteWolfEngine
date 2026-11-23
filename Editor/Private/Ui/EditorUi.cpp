@@ -15,6 +15,7 @@
 #include "Ui/UiFrame.h"
 #include "Ui/UiInput.h"
 #include "Ui/UiItems.h"
+#include "Ui/UiRequests.h"
 #include "Ui/UiTextures.h"
 #include "Ui/UiTheme.h"
 #include "Ui/UiWorkspace.h"
@@ -80,7 +81,7 @@ struct FEditorUi::FImplementation
 	 */
 	bool LayOut(std::string& OutError)
 	{
-		FUiFrame Frame{Editor, Items, Textures, Workspace};
+		FUiFrame Frame{Editor, Items, Textures, Workspace, Requests};
 		MenuBar.Draw(Frame);
 
 		const ImGuiViewport* const MainViewport = ImGui::GetMainViewport();
@@ -109,6 +110,7 @@ struct FEditorUi::FImplementation
 	FUiTextures Textures;
 	FUiItems Items;
 	FUiWorkspace Workspace;
+	FUiRequests Requests;
 
 	/** By how much the sizes of the user interface are multiplied; see FEditorUi::SetScale. */
 	float Scale = 1.0f;
@@ -148,7 +150,8 @@ std::unique_ptr<FEditorUi> FEditorUi::Create(FEditor& Editor, FRenderDevice& Dev
 	Io.BackendRendererName = "White Wolf Engine";
 	// Dear ImGui may create, update and destroy textures as it goes: FUiTextures does what it asks.
 	Io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
-	Io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	// The keyboard moves through menus and panels as it does in other programs: arrows, Enter, and Escape to close.
+	Io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_NavEnableKeyboard;
 	// A panel is moved by its tab; dragging inside it is for what the panel shows.
 	Io.ConfigWindowsMoveFromTitleBarOnly = true;
 

@@ -5,6 +5,7 @@
 class FEditor;
 class FUiItems;
 class FUiTextures;
+struct FUiRequests;
 struct FUiWorkspace;
 
 /** What the parts of the user interface work with while a frame is laid out. */
@@ -20,4 +21,7 @@ struct FUiFrame
 	FUiTextures& Textures;
 
 	FUiWorkspace& Workspace;
+
+	/** What the parts of the user interface ask of one another. */
+	FUiRequests& Requests;
 };

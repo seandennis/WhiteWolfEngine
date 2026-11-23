@@ -115,6 +115,26 @@ public:
 		ClickAt(RequireItem(Name).GetCenter(), Button);
 	}
 
+	/** Drags with the left mouse button from the middle of one item to the middle of another, and lets go there. */
+	void Drag(std::string_view FromName, std::string_view ToName)
+	{
+		const FVector2D From = RequireItem(FromName).GetCenter();
+		const FVector2D To = RequireItem(ToName).GetCenter();
+		MoveMouse(From);
+		Input.HandleMouseButtonEvent(EMouseButton::Left, EInputEvent::Pressed);
+		DrawFrame();
+
+		// The mouse crosses the distance over several frames, as a hand does: a drag begins once it has moved
+		// some way with the button down, and what it is over has to see it arrive.
+		for (int32 Step = 1; Step <= DragStepCount; ++Step)
+		{
+			MoveMouse(From + (To - From) * (static_cast<double>(Step) / DragStepCount));
+		}
+		DrawFrame();
+		Input.HandleMouseButtonEvent(EMouseButton::Left, EInputEvent::Released);
+		DrawFrames(SettlingFrameCount);
+	}
+
 	/** Presses and releases a key while the given other keys, such as Ctrl, are held down. */
 	void PressKey(EKey Key, std::initializer_list<EKey> HeldKeys = {})
 	{
@@ -157,6 +177,9 @@ private:
 	 * that opens is measured in one frame and placed in the next.
 	 */
 	static constexpr int32 SettlingFrameCount = 3;
+
+	/** In how many steps a dragged mouse crosses the distance. */
+	static constexpr int32 DragStepCount = 5;
 
 	// Declared in the order they are created, and destroyed in the opposite one: the user interface before the
 	// editor and the render device that it uses.

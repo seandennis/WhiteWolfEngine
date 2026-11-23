@@ -152,6 +152,8 @@ set_target_properties(cgltf PROPERTIES POSITION_INDEPENDENT_CODE ON FOLDER "Thir
 #    cannot come to depend on them, and so are the demonstration windows.
 #  - Characters beyond U+FFFF are text like any other, and indices are 32 bits wide, as in the
 #    engine's FUiDrawList.
+# misc/cpp/imgui_stdlib.cpp is the library's own text fields for std::string, which grow with what
+# is typed into them.
 FetchContent_Declare(imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
     GIT_TAG b916186e66aa3c02b72c6ca17455516512ed8049
@@ -180,7 +182,8 @@ add_library(imgui STATIC
     "${imgui_SOURCE_DIR}/imgui_demo.cpp"
     "${imgui_SOURCE_DIR}/imgui_draw.cpp"
     "${imgui_SOURCE_DIR}/imgui_tables.cpp"
-    "${imgui_SOURCE_DIR}/imgui_widgets.cpp")
+    "${imgui_SOURCE_DIR}/imgui_widgets.cpp"
+    "${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp")
 target_include_directories(imgui SYSTEM PUBLIC "${imgui_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/ThirdParty")
 target_compile_definitions(imgui PUBLIC "IMGUI_USER_CONFIG=\"WhiteWolfImGuiConfiguration.h\"")
 set_target_properties(imgui PROPERTIES POSITION_INDEPENDENT_CODE ON FOLDER "ThirdParty")

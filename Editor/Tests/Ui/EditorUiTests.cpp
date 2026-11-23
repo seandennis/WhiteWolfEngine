@@ -1,5 +1,6 @@
 #include "Ui/EditorUi.h"
 
+#include "Assets/TestAssets.h"
 #include "Core/FileHelper.h"
 #include "Math/Color.h"
 #include "Math/LinearColor.h"
@@ -349,6 +350,19 @@ TEST_SUITE("FEditorUi")
 		Test.SetKeyDown(EKey::LeftControl, false);
 	}
 
+	TEST_CASE("A click on one of several selected rows selects that one alone")
+	{
+		FEditorUiTest Test;
+		const int64 Player = Test.Editor.GetScene().CreateEntity("Player")->GetId();
+		const int64 Ground = Test.Editor.GetScene().CreateEntity("Ground")->GetId();
+		Test.Editor.SetSelection({Player, Ground});
+		Test.DrawFrame();
+
+		Test.Click(std::format("Outliner/{}", Player));
+
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Player});
+	}
+
 	TEST_CASE("A click on the empty part of the outliner selects nothing")
 	{
 		FEditorUiTest Test;
@@ -398,6 +412,366 @@ TEST_SUITE("FEditorUi")
 		// What is found can be selected like any row.
 		Test.Click(std::format("Outliner/{}", Camera));
 		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Camera});
+	}
+
+	TEST_CASE("A right click on a row selects its entity and opens a menu about it")
+	{
+		FEditorUiTest Test;
+		const int64 Player = Test.Editor.GetScene().CreateEntity("Player")->GetId();
+		const int64 Ground = Test.Editor.GetScene().CreateEntity("Ground")->GetId();
+		Test.DrawFrame();
+		Test.Click(std::format("Outliner/{}", Ground));
+		CHECK_FALSE(Test.HasItem("Outliner/Menu/Delete"));
+
+		Test.Click(std::format("Outliner/{}", Player), EMouseButton::Right);
+
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Player});
+		CHECK(Test.HasItem("Outliner/Menu/Create Child Entity"));
+		CHECK(Test.HasItem("Outliner/Menu/Rename"));
+		CHECK(Test.HasItem("Outliner/Menu/Duplicate"));
+		CHECK(Test.HasItem("Outliner/Menu/Delete"));
+
+		// Escape closes the menu and changes nothing.
+		Test.PressKey(EKey::Escape);
+		CHECK_FALSE(Test.HasItem("Outliner/Menu/Delete"));
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 2);
+	}
+
+	TEST_CASE("A right click on a row that is selected with others leaves them all selected")
+	{
+		FEditorUiTest Test;
+		const int64 Player = Test.Editor.GetScene().CreateEntity("Player")->GetId();
+		const int64 Ground = Test.Editor.GetScene().CreateEntity("Ground")->GetId();
+		Test.Editor.SetSelection({Player, Ground});
+		Test.DrawFrame();
+
+		Test.Click(std::format("Outliner/{}", Player), EMouseButton::Right);
+		const std::vector<int64> Both = {Player, Ground};
+		CHECK(Test.Editor.GetSelection() == Both);
+
+		// The menu's entries are about everything that is selected.
+		Test.Click("Outliner/Menu/Delete");
+		CHECK(Test.Editor.GetScene().GetAllEntities().empty());
+	}
+
+	TEST_CASE("The menu of a row creates an entity below it, and the menu of the empty part one at the root")
+	{
+		FEditorUiTest Test;
+		WEntity* const Player = Test.Editor.GetScene().CreateEntity("Player");
+		Test.DrawFrame();
+
+		Test.Click(std::format("Outliner/{}", Player->GetId()), EMouseButton::Right);
+		Test.Click("Outliner/Menu/Create Child Entity");
+
+		REQUIRE(Player->GetChildren().size() == 1);
+		const int64 Child = Player->GetChildren()[0]->GetId();
+		CHECK(Player->GetChildren()[0]->GetName() == "Entity");
+		// What was created is what the user goes on to work with.
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Child});
+		CHECK(Test.HasItem(std::format("Outliner/{}", Child)));
+
+		Test.Click("Outliner/Empty", EMouseButton::Right);
+		CHECK_FALSE(Test.HasItem("Outliner/Menu/Delete"));
+		Test.Click("Outliner/Menu/Create Entity");
+
+		REQUIRE(Test.Editor.GetScene().GetRootEntities().size() == 2);
+		const WEntity* const Created = Test.Editor.GetScene().GetRootEntities()[1];
+		CHECK(Created->GetName() == "Entity");
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Created->GetId()});
+
+		// Each was one step of the history, named for what the user did.
+		const std::vector<std::string> ExpectedSteps = {
+			"Create Entity", "Create Entity", std::string(FEditor::DirectChangeStepName)};
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames() == ExpectedSteps);
+	}
+
+	TEST_CASE("F2 turns the row of the selected entity into a text field, and Enter gives the entity what was typed")
+	{
+		FEditorUiTest Test;
+		const WEntity* const Player = Test.Editor.GetScene().CreateEntity("Player");
+		const int64 PlayerId = Player->GetId();
+		Test.DrawFrame();
+		Test.Click(std::format("Outliner/{}", PlayerId));
+		CHECK_FALSE(Test.HasItem("Outliner/Rename"));
+
+		Test.PressKey(EKey::F2);
+		REQUIRE(Test.HasItem("Outliner/Rename"));
+		// The old name is selected, so what is typed takes its place.
+		Test.Type("Hero");
+		Test.PressKey(EKey::Enter);
+
+		CHECK(Test.Editor.GetScene().FindEntityById(PlayerId)->GetName() == "Hero");
+		CHECK_FALSE(Test.HasItem("Outliner/Rename"));
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames().front() == "Rename");
+
+		// One undo gives the entity its old name back.
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		CHECK(Test.Editor.GetScene().FindEntityById(PlayerId)->GetName() == "Player");
+	}
+
+	TEST_CASE("Rename in the menu of a row does what F2 does, and a name can be typed onto the end of the old one")
+	{
+		FEditorUiTest Test;
+		const int64 Player = Test.Editor.GetScene().CreateEntity("Player")->GetId();
+		Test.DrawFrame();
+
+		Test.Click(std::format("Outliner/{}", Player), EMouseButton::Right);
+		Test.Click("Outliner/Menu/Rename");
+		REQUIRE(Test.HasItem("Outliner/Rename"));
+		Test.PressKey(EKey::End);
+		Test.Type(" 2");
+		Test.PressKey(EKey::Enter);
+
+		CHECK(Test.Editor.GetScene().FindEntityById(Player)->GetName() == "Player 2");
+	}
+
+	TEST_CASE("Escape ends the typing of a name and leaves the entity its name")
+	{
+		FEditorUiTest Test;
+		const int64 Player = Test.Editor.GetScene().CreateEntity("Player")->GetId();
+		Test.Editor.SetSelection({Player});
+		Test.DrawFrame();
+		Test.PressKey(EKey::F2);
+		REQUIRE(Test.HasItem("Outliner/Rename"));
+		Test.Type("Villain");
+
+		Test.PressKey(EKey::Escape);
+
+		CHECK_FALSE(Test.HasItem("Outliner/Rename"));
+		CHECK(Test.Editor.GetScene().FindEntityById(Player)->GetName() == "Player");
+		// Nothing was renamed, so nothing is there to undo.
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames().empty());
+	}
+
+	TEST_CASE("A click elsewhere gives the entity the name that was typed")
+	{
+		FEditorUiTest Test;
+		const int64 Player = Test.Editor.GetScene().CreateEntity("Player")->GetId();
+		Test.Editor.SetSelection({Player});
+		Test.DrawFrame();
+		Test.PressKey(EKey::F2);
+		REQUIRE(Test.HasItem("Outliner/Rename"));
+		Test.Type("Hero");
+
+		Test.Click("Outliner/Search");
+
+		CHECK_FALSE(Test.HasItem("Outliner/Rename"));
+		CHECK(Test.Editor.GetScene().FindEntityById(Player)->GetName() == "Hero");
+	}
+
+	TEST_CASE("A name that is confirmed as it was is not a step of the history")
+	{
+		FEditorUiTest Test;
+		const int64 Player = Test.Editor.GetScene().CreateEntity("Player")->GetId();
+		Test.Editor.SetSelection({Player});
+		Test.DrawFrame();
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		Test.PressKey(EKey::Y, {EKey::LeftControl});
+		const std::size_t StepCountBefore = Test.Editor.GetHistory().GetUndoStepNames().size();
+
+		Test.PressKey(EKey::F2);
+		REQUIRE(Test.HasItem("Outliner/Rename"));
+		Test.PressKey(EKey::Enter);
+
+		CHECK(Test.Editor.GetScene().FindEntityById(Player)->GetName() == "Player");
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames().size() == StepCountBefore);
+	}
+
+	TEST_CASE("The text field for a name goes away with the entity")
+	{
+		FEditorUiTest Test;
+		REQUIRE(Test.Editor.ExecuteCommand("Entity.Create", ParseTestJson(R"({"Name": "Player"})")).HasSucceeded());
+		const int64 Player = Test.Editor.GetScene().FindEntityByName("Player")->GetId();
+		Test.Editor.SetSelection({Player});
+		Test.DrawFrame();
+		Test.PressKey(EKey::F2);
+		REQUIRE(Test.HasItem("Outliner/Rename"));
+
+		// An agent, or another window, undoes the creation while the name is being typed.
+		REQUIRE(Test.Editor.ExecuteCommand("Edit.Undo", FJsonValue()).HasSucceeded());
+		Test.DrawFrames(2);
+
+		CHECK_FALSE(Test.HasItem("Outliner/Rename"));
+		CHECK(Test.Editor.GetScene().GetAllEntities().empty());
+		CHECK(CountLoggedErrors(Test.Capture) == 0);
+	}
+
+	TEST_CASE("Delete deletes everything that is selected, as one step")
+	{
+		FEditorUiTest Test;
+		WScene& Scene = Test.Editor.GetScene();
+		WEntity* const Player = Scene.CreateEntity("Player");
+		const int64 Camera = Scene.CreateEntity("Camera", Player)->GetId();
+		const int64 Ground = Scene.CreateEntity("Ground")->GetId();
+		const int64 Tree = Scene.CreateEntity("Tree")->GetId();
+		// The camera goes with the player, whose child it is; that it is selected too changes nothing.
+		Test.Editor.SetSelection({Player->GetId(), Camera, Ground});
+		Test.DrawFrame();
+
+		Test.PressKey(EKey::Delete);
+
+		REQUIRE(Test.Editor.GetScene().GetAllEntities().size() == 1);
+		CHECK(Test.Editor.GetScene().GetAllEntities()[0]->GetId() == Tree);
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames().front() == "Delete");
+
+		// One undo brings all of them back, and they are selected as they were.
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 4);
+		CHECK(Test.Editor.GetSelection().size() == 3);
+	}
+
+	TEST_CASE("Delete with nothing selected, or in a text field, deletes no entity")
+	{
+		FEditorUiTest Test;
+		const int64 Player = Test.Editor.GetScene().CreateEntity("Player")->GetId();
+		Test.DrawFrame();
+
+		Test.PressKey(EKey::Delete);
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 1);
+
+		Test.Editor.SetSelection({Player});
+		Test.Click("Outliner/Search");
+		Test.Type("Pl");
+		Test.PressKey(EKey::Home);
+		Test.PressKey(EKey::Delete);
+
+		// The key took a letter out of the search field: "l" still finds the player.
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 1);
+		CHECK(Test.HasItem(std::format("Outliner/{}", Player)));
+	}
+
+	TEST_CASE("Ctrl+D copies what is selected, as one step, and selects the copies")
+	{
+		FEditorUiTest Test;
+		WScene& Scene = Test.Editor.GetScene();
+		WEntity* const Player = Scene.CreateEntity("Player");
+		const int64 Camera = Scene.CreateEntity("Camera", Player)->GetId();
+		const int64 Ground = Scene.CreateEntity("Ground")->GetId();
+		Test.Editor.SetSelection({Player->GetId(), Camera, Ground});
+		Test.DrawFrame();
+
+		Test.PressKey(EKey::D, {EKey::LeftControl});
+
+		// The player with its camera, and the ground: the camera is copied with the player, not once more.
+		REQUIRE(Scene.GetRootEntities().size() == 4);
+		const WEntity* const PlayerCopy = Scene.GetRootEntities()[2];
+		const WEntity* const GroundCopy = Scene.GetRootEntities()[3];
+		CHECK(PlayerCopy->GetName() == "Player");
+		CHECK(PlayerCopy->GetChildren().size() == 1);
+		CHECK(GroundCopy->GetName() == "Ground");
+		CHECK(Scene.GetAllEntities().size() == 6);
+		const std::vector<int64> Copies = {PlayerCopy->GetId(), GroundCopy->GetId()};
+		CHECK(Test.Editor.GetSelection() == Copies);
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames().front() == "Duplicate");
+
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 3);
+	}
+
+	TEST_CASE("A row that is dragged onto another becomes its child, where it is in the world")
+	{
+		FEditorUiTest Test;
+		WScene& Scene = Test.Editor.GetScene();
+		WEntity* const Player = Scene.CreateEntity("Player");
+		Player->SetWorldLocation(FVector(10.0, 0.0, 0.0));
+		WEntity* const Sword = Scene.CreateEntity("Sword");
+		Sword->SetWorldLocation(FVector(11.0, 1.0, 0.0));
+		const int64 PlayerId = Player->GetId();
+		const int64 SwordId = Sword->GetId();
+		Test.DrawFrame();
+
+		Test.Drag(std::format("Outliner/{}", SwordId), std::format("Outliner/{}", PlayerId));
+
+		const WEntity* const MovedSword = Test.Editor.GetScene().FindEntityById(SwordId);
+		REQUIRE(MovedSword->GetParent() != nullptr);
+		CHECK(MovedSword->GetParent()->GetId() == PlayerId);
+		CHECK(MovedSword->GetWorldLocation() == FVector(11.0, 1.0, 0.0));
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames().front() == "Attach");
+
+		// Dragged onto the empty part of the panel, it has no parent again.
+		Test.Drag(std::format("Outliner/{}", SwordId), "Outliner/Empty");
+
+		CHECK(Test.Editor.GetScene().FindEntityById(SwordId)->GetParent() == nullptr);
+		CHECK(Test.Editor.GetScene().FindEntityById(SwordId)->GetWorldLocation() == FVector(11.0, 1.0, 0.0));
+	}
+
+	TEST_CASE("A row cannot be dropped on itself or on what is below it")
+	{
+		FEditorUiTest Test;
+		WScene& Scene = Test.Editor.GetScene();
+		WEntity* const Player = Scene.CreateEntity("Player");
+		const int64 Arm = Scene.CreateEntity("Arm", Player)->GetId();
+		const int64 PlayerId = Player->GetId();
+		Test.DrawFrame();
+		const std::size_t StepCountBefore = Test.Editor.GetHistory().GetUndoStepNames().size();
+
+		Test.Drag(std::format("Outliner/{}", PlayerId), std::format("Outliner/{}", Arm));
+
+		CHECK(Test.Editor.GetScene().FindEntityById(PlayerId)->GetParent() == nullptr);
+		CHECK(Test.Editor.GetScene().FindEntityById(Arm)->GetParent()->GetId() == PlayerId);
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames().size() == StepCountBefore);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("Dragging one of several selected rows moves all of them, as one step")
+	{
+		FEditorUiTest Test;
+		WScene& Scene = Test.Editor.GetScene();
+		const int64 Crate = Scene.CreateEntity("Crate")->GetId();
+		const int64 Sword = Scene.CreateEntity("Sword")->GetId();
+		const int64 Shield = Scene.CreateEntity("Shield")->GetId();
+		Test.DrawFrame();
+		Test.Click(std::format("Outliner/{}", Sword));
+		Test.SetKeyDown(EKey::LeftControl, true);
+		Test.Click(std::format("Outliner/{}", Shield));
+		Test.SetKeyDown(EKey::LeftControl, false);
+
+		Test.Drag(std::format("Outliner/{}", Shield), std::format("Outliner/{}", Crate));
+
+		const WScene& After = Test.Editor.GetScene();
+		REQUIRE(After.FindEntityById(Sword)->GetParent() != nullptr);
+		REQUIRE(After.FindEntityById(Shield)->GetParent() != nullptr);
+		CHECK(After.FindEntityById(Sword)->GetParent()->GetId() == Crate);
+		CHECK(After.FindEntityById(Shield)->GetParent()->GetId() == Crate);
+
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		CHECK(Test.Editor.GetScene().FindEntityById(Sword)->GetParent() == nullptr);
+		CHECK(Test.Editor.GetScene().FindEntityById(Shield)->GetParent() == nullptr);
+	}
+
+	TEST_CASE("The Edit menu duplicates, deletes and renames what is selected, and nothing when nothing is")
+	{
+		FEditorUiTest Test;
+		const int64 Player = Test.Editor.GetScene().CreateEntity("Player")->GetId();
+		Test.DrawFrame();
+
+		// Without a selection the entries are there and do nothing.
+		Test.Click("Menu/Edit");
+		Test.Click("Menu/Edit/Duplicate");
+		Test.Click("Menu/Edit/Delete");
+		Test.Click("Menu/Edit/Rename");
+		Test.PressKey(EKey::Escape);
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 1);
+		CHECK_FALSE(Test.HasItem("Outliner/Rename"));
+
+		Test.Click(std::format("Outliner/{}", Player));
+		Test.Click("Menu/Edit");
+		Test.Click("Menu/Edit/Duplicate");
+		REQUIRE(Test.Editor.GetScene().GetAllEntities().size() == 2);
+		const int64 Copy = Test.Editor.GetScene().GetRootEntities()[1]->GetId();
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Copy});
+
+		Test.Click("Menu/Edit");
+		Test.Click("Menu/Edit/Rename");
+		REQUIRE(Test.HasItem("Outliner/Rename"));
+		Test.Type("Twin");
+		Test.PressKey(EKey::Enter);
+		CHECK(Test.Editor.GetScene().FindEntityById(Copy)->GetName() == "Twin");
+
+		Test.Click("Menu/Edit");
+		Test.Click("Menu/Edit/Delete");
+		REQUIRE(Test.Editor.GetScene().GetAllEntities().size() == 1);
+		CHECK(Test.Editor.GetScene().GetAllEntities()[0]->GetId() == Player);
 	}
 
 	TEST_CASE("Ctrl+Z undoes the last change to the scene and Ctrl+Y redoes it")
