@@ -5,7 +5,8 @@
 class FCommandRegistry;
 
 /**
- * The commands that act on entities: Entity.Create, Entity.Delete, Entity.Rename and Entity.SetParent.
+ * The commands that act on entities: Entity.Create, Entity.Delete, Entity.Duplicate, Entity.Rename and
+ * Entity.SetParent.
  */
 class FEntityCommands
 {

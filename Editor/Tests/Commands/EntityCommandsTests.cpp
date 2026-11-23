@@ -284,4 +284,84 @@ TEST_SUITE("Entity commands")
 		CHECK(Result.GetError() == "There is no entity with the identifier 99.");
 		CHECK(Entity->GetParent() == nullptr);
 	}
+
+	TEST_CASE("Entity.Duplicate copies an entity with its components and descendants, and returns the copy")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		WScene& Scene = Editor.GetScene();
+		WEntity* const Player = Scene.CreateEntity("Player");
+		WEntity* const Camera = Scene.CreateEntity("Camera", Player);
+		WEditorTestComponent* const Component = Player->AddComponent<WEditorTestComponent>();
+		Component->Health = 55;
+		Component->TargetEntity = Camera;
+
+		const FCommandResult Result = Editor.ExecuteCommand(
+			"Entity.Duplicate", ParseTestJson(std::format(R"({{"Entity": {}}})", Player->GetId())));
+
+		REQUIRE(Result.HasSucceeded());
+		REQUIRE(Scene.GetRootEntities().size() == 2);
+		const WEntity* const Copy = Scene.GetRootEntities()[1];
+		CHECK(WriteTestJson(Result.GetValue()) == std::format(R"({{"Id":{}}})", Copy->GetId()));
+		CHECK(Copy->GetName() == "Player");
+		CHECK(Copy->GetId() != Player->GetId());
+		REQUIRE(Copy->GetChildren().size() == 1);
+		CHECK(Copy->GetChildren()[0]->GetName() == "Camera");
+		const WEditorTestComponent* const ComponentCopy = Copy->FindComponent<WEditorTestComponent>();
+		REQUIRE(ComponentCopy != nullptr);
+		CHECK(ComponentCopy->Health == 55);
+		// The copy's component looks at the copy's camera, not at the original's.
+		CHECK(ComponentCopy->TargetEntity == Copy->GetChildren()[0]);
+		CHECK(Component->TargetEntity == Camera);
+	}
+
+	TEST_CASE("Entity.Duplicate is one step of the history, which an undo takes back whole")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		REQUIRE(Editor.ExecuteCommand("Entity.Create", ParseTestJson(R"({"Name": "Player"})")).HasSucceeded());
+		const int64 Player = Editor.GetScene().FindEntityByName("Player")->GetId();
+		REQUIRE(Editor
+					.ExecuteCommand(
+						"Entity.Create", ParseTestJson(std::format(R"({{"Name": "Camera", "Parent": {}}})", Player)))
+					.HasSucceeded());
+
+		REQUIRE(Editor.ExecuteCommand("Entity.Duplicate", ParseTestJson(std::format(R"({{"Entity": {}}})", Player)))
+					.HasSucceeded());
+		CHECK(Editor.GetScene().GetAllEntities().size() == 4);
+		CHECK(Editor.GetHistory().GetUndoStepNames().front() == "Entity.Duplicate");
+
+		REQUIRE(Editor.Undo().has_value());
+		CHECK(Editor.GetScene().GetAllEntities().size() == 2);
+
+		REQUIRE(Editor.Redo().has_value());
+		CHECK(Editor.GetScene().GetAllEntities().size() == 4);
+	}
+
+	TEST_CASE("Entity.Duplicate of an entity that does not exist fails and copies nothing")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		WEntity* const Player = Editor.GetScene().CreateEntity("Player");
+		const int64 Component = Player->AddComponent<WEditorTestComponent>()->GetId();
+		std::string ArgumentText;
+		std::string ExpectedError;
+
+		SUBCASE("An identifier that nothing has")
+		{
+			ArgumentText = R"({"Entity": 99})";
+			ExpectedError = "There is no entity with the identifier 99.";
+		}
+		SUBCASE("The identifier of a component")
+		{
+			ArgumentText = std::format(R"({{"Entity": {}}})", Component);
+			ExpectedError = std::format("There is no entity with the identifier {}.", Component);
+		}
+
+		const FCommandResult Result = Editor.ExecuteCommand("Entity.Duplicate", ParseTestJson(ArgumentText));
+
+		CHECK_FALSE(Result.HasSucceeded());
+		CHECK(Result.GetError() == ExpectedError);
+		CHECK(Editor.GetScene().GetAllEntities().size() == 1);
+	}
 }

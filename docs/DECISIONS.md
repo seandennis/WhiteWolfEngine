@@ -925,3 +925,24 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** Pictures that are not letters or shapes, such as icons and thumbnails, will need to exist at the sizes that scales ask for when the editor gets them. The scale of the display is the only scale: the user cannot add one of their own.
 
 **Testing.** A window in memory has a scale of one and can be opened maximised. The user interface: at twice the scale its items are twice as large, within the tenth that letters drawn for their size differ by, and the panels still share the surface; set back, it draws the picture it drew at first, to the pixel; a scale beyond the limits is the nearest limit and one that is no number is one, and at both limits it is still drawn without an error. The editor's window gives the user interface its own scale in every frame, whatever the user interface was set to, and can be opened maximised. On a display set to 125 % the executable was started by hand: its window opened maximised with the user interface a quarter larger and sharp.
+
+## D-053: Entities are copied through their saved properties
+
+**Status:** Accepted.
+
+**Context.** The specification's editor duplicates entities (Ctrl+D, Alt + drag), copies and pastes them, and scripts will spawn entities from prefabs. All of these make new entities that are like existing ones. A scene is already written down and read back by reflection (D-024), with no code per component type.
+
+**Decision.**
+
+- **`FSceneSerializer::DuplicateEntity` copies an entity with its components and all its descendants** within its scene. The copy has the name and transform of the original, becomes the last child of the same parent, and every copy has an identifier of its own.
+- **What is copied is what is saved:** each `WPROPERTY()` that is not `Transient` is written by the original's property and read by the copy's, exactly as a scene file is, except that nothing goes through text. A component type is therefore copied without code of its own, and what copying misses is what saving would miss, which the tests of saving already guard.
+- **References are followed by object, not by identifier.** Where a copy refers to an entity or component that was copied with it, it refers to that one's copy, so that a copied character's camera arm looks at the copied character. A reference to anything else is to the same object as the original's: an entity outside the copied tree, or an asset, including one that was made in code and has no path, which a scene file could not hold.
+- **Components hear that they are attached once every property of every copy is set,** as when a scene is loaded.
+- **A component whose class is not available** (D-024) is copied as the data the scene file had for it.
+- **The editor's command is `Entity.Duplicate`,** which returns the identifier of the copy.
+
+**Alternatives considered.** A virtual `Clone` function on components is code per component type, and the first one that forgets a member copies wrongly without anyone noticing. Writing the entities as scene text and reading that back would reuse more of the loader, but identifiers in text mean the scene they were written in: the same text read into another place needs every identifier replaced and every reference decided on again, which following the objects does directly.
+
+**Limits.** A copy is made in the scene of the original. Copy and paste between scenes, and prefabs, need the copied entities as a document that outlives the scene; they will share the property copying and add that document.
+
+**Testing.** That a copy has the name, the transform, at a location far from the origin, and an identifier of its own; where it is put among its siblings and at the root; that components are copied with their saved properties, of a derived class too, and without the ones that are not saved, leaving the original as it was; that descendants are copied in order with their components; that references inside the copied tree, strong, weak and in an array, lead to the copies and those outside it to the same objects; that an asset without a path is shared, without a warning; that components are attached after their properties are set; that a component of a missing class keeps its data; that a copy of a copy is its own; and that a destroyed entity is refused with a warning. For the command: the copy and its identifier, one step of the history that an undo takes back whole, and the reasons for refusing.

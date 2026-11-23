@@ -8,6 +8,7 @@
 #include <vector>
 
 class FJsonValue;
+class WEntity;
 class WScene;
 
 /**
@@ -88,7 +89,23 @@ public:
 	ENGINE_API static WScene* LoadFromFile(
 		const std::filesystem::path& Path, std::string& OutError, std::vector<std::string>* OutWarnings = nullptr);
 
+	/**
+	 * Creates a copy of an entity in the entity's scene, with copies of its components and of all its descendants
+	 * with theirs. What is copied is what is saved with a scene: every WPROPERTY() that is not Transient, by
+	 * reflection, so a component type needs no code of its own to be copied.
+	 *
+	 * The copy has the name and the transform of the original and becomes the last child of the original's parent.
+	 * Every copy gets an identifier of its own. Where a copy refers to an entity or component that was copied with
+	 * it, it refers to that one's copy; a reference to anything else, such as an entity outside the copied tree or
+	 * an asset, is to the same object as in the original. Components are told that they are attached (OnAttached)
+	 * only after every property of every copy has been set.
+	 *
+	 * @return The copy of Source, or null, with a warning in the log, if Source has been destroyed.
+	 */
+	ENGINE_API static WEntity* DuplicateEntity(const WEntity& Source);
+
 private:
+	class FDuplicator;
 	class FLoader;
 	class FSaver;
 };

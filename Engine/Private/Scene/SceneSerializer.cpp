@@ -691,6 +691,166 @@ private:
 	std::unordered_set<int64> UsedIds;
 };
 
+/**
+ * Copies one entity with everything below it, within its scene. It is also the context through which the
+ * properties of the originals write their object references and those of the copies read them: a reference is
+ * written as a place in a list of the objects referred to, which lasts no longer than the copying of one property.
+ */
+class FSceneSerializer::FDuplicator final : private IPropertyJsonContext
+{
+public:
+	explicit FDuplicator(WScene& InScene)
+		: Scene(InScene)
+	{
+	}
+
+	WEntity* Duplicate(const WEntity& Source)
+	{
+		// Every copy exists before any property is copied, so that a copy can refer to a copy that is made later.
+		// Components hear that they are attached last, when their data is complete.
+		WEntity* const Copy = CopyEntityTree(Source, Source.GetParent());
+		CopyComponents();
+		CopyAllProperties();
+		NotifyComponentsAttached();
+		return Copy;
+	}
+
+private:
+	/** An entity or a component, and the copy that was made of it. */
+	template <typename ObjectType>
+	struct TCopied
+	{
+		const ObjectType* Original = nullptr;
+		ObjectType* Copy = nullptr;
+	};
+
+	/** Creates the copy of an entity under CopyParent, and below it the copies of the entity's descendants. */
+	WEntity* CopyEntityTree(const WEntity& Original, WEntity* CopyParent)
+	{
+		WEntity* const Copy = Scene.CreateEntity(std::string(), CopyParent);
+		Entities.push_back({&Original, Copy});
+		Copies.emplace(&Original, Copy);
+
+		// The copies are added to the children of other copies, never to the list that is gone through here.
+		for (const TObjectPtr<WEntity>& Child : Original.GetChildren())
+		{
+			if (Child != nullptr)
+			{
+				CopyEntityTree(*Child, Copy);
+			}
+		}
+		return Copy;
+	}
+
+	void CopyComponents()
+	{
+		for (const TCopied<WEntity>& Entity : Entities)
+		{
+			for (const TObjectPtr<WComponent>& Original : Entity.Original->GetComponents())
+			{
+				if (Original == nullptr)
+				{
+					continue;
+				}
+
+				WComponent* const Copy = Entity.Copy->CreateComponentWithId(Original->GetClass(), Scene.AllocateId());
+				Components.push_back({Original.Get(), Copy});
+				Copies.emplace(Original.Get(), Copy);
+
+				// A component whose class is not available has no properties to copy by reflection: it is what
+				// the scene file said, and so is its copy.
+				if (const WMissingComponent* const Missing = Cast<WMissingComponent>(Original.Get()))
+				{
+					WMissingComponent* const MissingCopy = static_cast<WMissingComponent*>(Copy);
+					MissingCopy->MissingClassName = Missing->MissingClassName;
+					MissingCopy->SavedProperties = Missing->SavedProperties;
+				}
+			}
+		}
+	}
+
+	void CopyAllProperties()
+	{
+		for (const TCopied<WEntity>& Entity : Entities)
+		{
+			CopyProperties(*Entity.Original, *Entity.Copy);
+		}
+		for (const TCopied<WComponent>& Component : Components)
+		{
+			if (Cast<WMissingComponent>(Component.Original) == nullptr)
+			{
+				CopyProperties(*Component.Original, *Component.Copy);
+			}
+		}
+	}
+
+	/** Gives Copy the value of every saved property of Original, which is of the same class. */
+	void CopyProperties(const WObject& Original, WObject& Copy)
+	{
+		for (const FProperty* const Property : GetSavedProperties(*Original.GetClass()))
+		{
+			References.clear();
+			const FJsonValue Value = Property->ExportJson(Property->GetValuePtr(&Original), *this);
+
+			// A value that a property has just written is one that it can read.
+			std::string Error;
+			const bool bCopied = Property->ImportJson(Property->GetValuePtr(&Copy), Value, *this, Error);
+			WW_CHECKF(bCopied,
+				"The property {} of a {} could not be copied: {}",
+				Property->GetName(),
+				Original.GetClass()->GetName(),
+				Error);
+		}
+	}
+
+	void NotifyComponentsAttached()
+	{
+		for (const TCopied<WEntity>& Entity : Entities)
+		{
+			for (const TObjectPtr<WComponent>& Component : Entity.Copy->GetComponents())
+			{
+				Entity.Copy->NotifyComponentAttached(*Component);
+			}
+		}
+	}
+
+	// IPropertyJsonContext
+	FJsonValue ExportObjectReference(const WObject& Object) override
+	{
+		References.push_back(&Object);
+		return FJsonValue(static_cast<int64>(References.size() - 1));
+	}
+
+	bool ImportObjectReference(const FJsonValue& Json, WObject*& OutObject, std::string& OutError) override
+	{
+		const bool bIsKnown = Json.IsInteger() && Json.GetInteger() >= 0 &&
+			static_cast<std::size_t>(Json.GetInteger()) < References.size();
+		if (!bIsKnown)
+		{
+			OutError = "the reference is not one that was written while the property was copied";
+			return false;
+		}
+
+		const WObject* const Original = References[static_cast<std::size_t>(Json.GetInteger())];
+		const auto Copied = Copies.find(Original);
+		// What was not copied is referred to as the original refers to it, which is through a property that does
+		// not hold its object as constant.
+		OutObject = Copied != Copies.end() ? Copied->second : const_cast<WObject*>(Original);
+		return true;
+	}
+
+	WScene& Scene;
+
+	/** The copies that were made, in the order of the tree: parents before children. */
+	std::vector<TCopied<WEntity>> Entities;
+	std::vector<TCopied<WComponent>> Components;
+
+	/** The copy of every entity and component that was copied. */
+	std::unordered_map<const WObject*, WObject*> Copies;
+
+	/** The objects that the property being copied refers to, in the order it wrote them. */
+	std::vector<const WObject*> References;
+};
 FJsonValue FSceneSerializer::SaveToJson(const WScene& Scene)
 {
 	FSaver Saver(Scene);
@@ -744,4 +904,17 @@ WScene* FSceneSerializer::LoadFromFile(
 		OutError = std::format("{}: {}", FFileHelper::PathToUtf8(Path), LoadError);
 	}
 	return Scene;
+}
+
+WEntity* FSceneSerializer::DuplicateEntity(const WEntity& Source)
+{
+	WScene* const Scene = IsValid(&Source) ? Source.GetScene() : nullptr;
+	if (Scene == nullptr)
+	{
+		WW_LOG(LogScene, Warning, "An entity that has been destroyed cannot be copied");
+		return nullptr;
+	}
+
+	FDuplicator Duplicator(*Scene);
+	return Duplicator.Duplicate(Source);
 }

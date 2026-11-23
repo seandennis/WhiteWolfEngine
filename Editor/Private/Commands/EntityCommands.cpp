@@ -6,6 +6,7 @@
 #include "Json/JsonValue.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneSerializer.h"
 #include "Scene/TransformRule.h"
 
 #include <format>
@@ -49,6 +50,26 @@ namespace
 
 		Entity->Destroy();
 		return FCommandResult::Success();
+	}
+
+	FCommandResult DuplicateEntity(FEditor& Editor, const FCommandArguments& Arguments)
+	{
+		std::string Error;
+		const WEntity* const Entity = FCommandTargets::FindEntity(Editor, Arguments.GetInteger("Entity"), Error);
+		if (Entity == nullptr)
+		{
+			return FCommandResult::Failure(std::move(Error));
+		}
+
+		const WEntity* const Copy = FSceneSerializer::DuplicateEntity(*Entity);
+		if (Copy == nullptr)
+		{
+			return FCommandResult::Failure("The scene refused to copy the entity; the log says why.");
+		}
+
+		FJsonValue Value = FJsonValue::MakeObject();
+		Value.SetMember("Id", Copy->GetId());
+		return FCommandResult::Success(std::move(Value));
 	}
 
 	FCommandResult RenameEntity(FEditor& Editor, const FCommandArguments& Arguments)
@@ -120,6 +141,15 @@ void FEntityCommands::Register(FCommandRegistry& Registry)
 			"Destroys an entity together with its components and all its descendants.",
 			{FCommandParameter::Required("Entity", ECommandArgumentType::Integer, "The identifier of the entity.")}},
 		DeleteEntity);
+
+	Registry.Register(
+		{"Entity.Duplicate",
+			"Makes a copy of an entity, with copies of its components and of all its descendants and their "
+			"components. The copy has the same name and transform and becomes the last child of the same parent. "
+			"Where a copy refers to something that was copied with it, it refers to that copy; any other reference is "
+			"to the same object as the original's. Returns the identifier of the copy.",
+			{FCommandParameter::Required("Entity", ECommandArgumentType::Integer, "The identifier of the entity.")}},
+		DuplicateEntity);
 
 	Registry.Register(
 		{"Entity.Rename",

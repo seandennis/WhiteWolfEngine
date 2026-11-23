@@ -85,6 +85,7 @@ TEST_SUITE("FEditor")
 			"Editor.ListCommands",
 			"Entity.Create",
 			"Entity.Delete",
+			"Entity.Duplicate",
 			"Entity.Rename",
 			"Entity.SetParent",
 			"Object.GetProperties",
