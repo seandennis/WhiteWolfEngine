@@ -157,6 +157,72 @@ TEST_SUITE("FSceneRenderer")
 		CHECK(Test.Render(FromBehind).GetPixel(32, 32) == Red);
 	}
 
+	TEST_CASE("A mesh that its entity mirrors shows the side that is its front in the mirror")
+	{
+		FSceneRenderTest Test;
+		// The square faces +Z, towards the camera. A scale below zero along one axis, or along all three, makes
+		// its mirror image; along two, it is a half turn and no mirror. Either way, which side the square shows
+		// depends on the axis that it faces along alone.
+		FVector3f Scale(1.0f);
+		bool bFacesCamera = true;
+
+		SUBCASE("Mirrored from left to right, it faces the camera as before")
+		{
+			Scale = FVector3f(-1.0f, 1.0f, 1.0f);
+		}
+		SUBCASE("Mirrored from top to bottom, it faces the camera as before")
+		{
+			Scale = FVector3f(1.0f, -1.0f, 1.0f);
+		}
+		SUBCASE("Mirrored from front to back, it faces away")
+		{
+			Scale = FVector3f(1.0f, 1.0f, -1.0f);
+			bFacesCamera = false;
+		}
+		SUBCASE("Mirrored along all three axes, it faces away")
+		{
+			Scale = FVector3f(-1.0f, -1.0f, -1.0f);
+			bFacesCamera = false;
+		}
+		SUBCASE("Turned half around in its own plane, it faces the camera as before")
+		{
+			Scale = FVector3f(-1.0f, -1.0f, 1.0f);
+		}
+		SUBCASE("Turned half around its upright axis, it faces away")
+		{
+			Scale = FVector3f(-1.0f, 1.0f, -1.0f);
+			bFacesCamera = false;
+		}
+
+		AddSquare(
+			*Test.Scene.Get(), MakeTransform(FVector(0.0, 0.0, -2.0), FQuat(1.0f, 0.0f, 0.0f, 0.0f), Scale), LinearRed);
+		FCameraView FromBehind = MakeWideView(FVector(0.0, 0.0, -4.0));
+		FromBehind.Rotation = Turn(180.0f, AxisY);
+
+		CHECK(Test.Render(MakeWideView()).GetPixel(32, 32) == (bFacesCamera ? Red : Magenta));
+		CHECK(Test.Render(FromBehind).GetPixel(32, 32) == (bFacesCamera ? Magenta : Red));
+		CHECK(CountLoggedErrors(Test.Capture) == 0);
+	}
+
+	TEST_CASE("A mirror above a mesh mirrors the mesh, and two mirrors make it as it was")
+	{
+		FSceneRenderTest Test;
+		WEntity* const Mirror = Test.Scene->CreateEntity("Mirror");
+		Mirror->SetRelativeTransform(
+			MakeTransform(FVector(0.0), FQuat(1.0f, 0.0f, 0.0f, 0.0f), FVector3f(1.0f, 1.0f, -1.0f)));
+		// Two metres behind the camera as its parent has it, which the mirror makes two metres ahead, facing away.
+		WStaticMeshComponent* const Square =
+			AddSquare(*Test.Scene.Get(), MakeTransform(FVector(0.0, 0.0, 2.0)), LinearGreen, Mirror);
+
+		CHECK(Test.Render(MakeWideView()).GetPixel(32, 32) == Magenta);
+
+		// Mirrored once more by its own entity, it faces the camera again.
+		Square->GetOwner()->SetRelativeTransform(
+			MakeTransform(FVector(0.0, 0.0, 2.0), FQuat(1.0f, 0.0f, 0.0f, 0.0f), FVector3f(1.0f, 1.0f, -1.0f)));
+
+		CHECK(Test.Render(MakeWideView()).GetPixel(32, 32) == Green);
+	}
+
 	TEST_CASE("A nearer surface hides a farther one, whichever was added to the scene first")
 	{
 		for (const bool bNearFirst : {false, true})

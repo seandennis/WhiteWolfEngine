@@ -82,6 +82,9 @@ namespace
 		/** For each mesh, whether it casts a shadow. */
 		std::vector<bool> CastsShadows;
 
+		/** For each mesh, whether its entity mirrors it, which turns the corners of its triangles around. */
+		std::vector<bool> IsMirrored;
+
 		/** For each directional light in ViewConstants, whether it casts shadows, and its rotation. */
 		std::array<bool, FSceneRenderer::MaxDirectionalLights> bLightCastsShadows{};
 		std::array<FQuat, FSceneRenderer::MaxDirectionalLights> LightRotations{};
@@ -128,6 +131,18 @@ namespace
 		return Matrix;
 	}
 
+	/**
+	 * Returns true if a scale turns a shape into its mirror image: it is below zero along one axis or along all
+	 * three. Below zero along two axes, it is a half turn and no mirror.
+	 */
+	bool IsMirroring(const FVector3f& Scale)
+	{
+		const bool bMirrorsX = Scale.x < 0.0f;
+		const bool bMirrorsY = Scale.y < 0.0f;
+		const bool bMirrorsZ = Scale.z < 0.0f;
+		return (bMirrorsX != bMirrorsY) != bMirrorsZ;
+	}
+
 	/** Adds the draw of a mesh component to Contents, if the component shows anything. */
 	void CollectMesh(const WStaticMeshComponent& Component,
 		const FTransform& WorldTransform,
@@ -169,6 +184,7 @@ namespace
 		Contents.Materials.push_back(Material);
 		Contents.DrawData.push_back(Data);
 		Contents.CastsShadows.push_back(Component.bCastShadows);
+		Contents.IsMirrored.push_back(IsMirroring(WorldTransform.Scale));
 	}
 
 	/** Adds a directional light to Contents, if it shines and there is room for it. */
@@ -345,15 +361,15 @@ namespace
 	}
 
 	/**
-	 * Creates a pipeline that draws static meshes with the given fragment shader, with depth testing and without
-	 * the backs of triangles.
+	 * Creates the pipelines that draw static meshes with the given fragment shader, with depth testing and without
+	 * the backs of triangles: one for meshes as they are made and one for mirrored meshes.
 	 *
 	 * @param BindingLayouts The layouts of what the shaders read, in the order of their descriptor sets: the
 	 * scene's data, then the material's textures, then what belongs to the render target.
-	 * @param ColorFormat The format of the surface the pipeline draws on.
+	 * @param ColorFormat The format of the surface the pipelines draw on.
 	 * @param DepthFormat The format of the depth buffer that goes with it.
 	 */
-	nvrhi::GraphicsPipelineHandle CreateMeshPipeline(nvrhi::IDevice& Device,
+	FMeshPipelines CreateMeshPipelines(nvrhi::IDevice& Device,
 		nvrhi::IInputLayout* InputLayout,
 		nvrhi::IShader* VertexShader,
 		nvrhi::IShader* FragmentShader,
@@ -370,9 +386,7 @@ namespace
 		{
 			Description.bindingLayouts.push_back(BindingLayout);
 		}
-		// Triangles face the viewer when their corners run counter-clockwise, and the backs are not drawn.
 		Description.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Back;
-		Description.renderState.rasterState.frontCounterClockwise = true;
 		Description.renderState.rasterState.depthClipEnable = true;
 		Description.renderState.depthStencilState.depthTestEnable = true;
 		Description.renderState.depthStencilState.depthWriteEnable = true;
@@ -381,7 +395,15 @@ namespace
 		nvrhi::FramebufferInfo TargetFormats;
 		TargetFormats.addColorFormat(ColorFormat);
 		TargetFormats.setDepthFormat(DepthFormat);
-		return Device.createGraphicsPipeline(Description, TargetFormats);
+
+		// Triangles face the viewer when their corners run counter-clockwise, and the backs are not drawn. A
+		// mirror turns the corners around, so for a mirrored mesh the front is the side that has them clockwise.
+		FMeshPipelines Pipelines;
+		Description.renderState.rasterState.frontCounterClockwise = true;
+		Pipelines.AsMade = Device.createGraphicsPipeline(Description, TargetFormats);
+		Description.renderState.rasterState.frontCounterClockwise = false;
+		Pipelines.Mirrored = Device.createGraphicsPipeline(Description, TargetFormats);
+		return Pipelines;
 	}
 
 	/**
@@ -583,21 +605,21 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 	const std::array<nvrhi::IBindingLayout*, 2> UnlitLayouts{SceneLayout, MaterialLayout};
 	const std::array<nvrhi::IBindingLayout*, 1> PrepassLayouts{SceneLayout};
 
-	NewImplementation->LitPipeline = CreateMeshPipeline(RenderInterface,
+	NewImplementation->LitPipelines = CreateMeshPipelines(RenderInterface,
 		InputLayout,
 		VertexShader,
 		LitShader,
 		LitLayouts,
 		FRenderTarget::FImplementation::SceneColorFormat,
 		FRenderTarget::FImplementation::DepthFormat);
-	NewImplementation->UnlitPipeline = CreateMeshPipeline(RenderInterface,
+	NewImplementation->UnlitPipelines = CreateMeshPipelines(RenderInterface,
 		InputLayout,
 		VertexShader,
 		UnlitShader,
 		UnlitLayouts,
 		FRenderTarget::FImplementation::ColorFormat,
 		FRenderTarget::FImplementation::DepthFormat);
-	NewImplementation->PrepassPipeline = CreateMeshPipeline(RenderInterface,
+	NewImplementation->PrepassPipelines = CreateMeshPipelines(RenderInterface,
 		InputLayout,
 		VertexShader,
 		PrepassShader,
@@ -610,8 +632,9 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 		NewImplementation->SceneBindingLayout,
 		FRenderTarget::FImplementation::SceneColorFormat,
 		FRenderTarget::FImplementation::DepthFormat);
-	if (NewImplementation->LitPipeline == nullptr || NewImplementation->UnlitPipeline == nullptr ||
-		NewImplementation->PrepassPipeline == nullptr || NewImplementation->TonemapPipeline == nullptr ||
+	const bool bHasMeshPipelines = NewImplementation->LitPipelines.IsComplete() &&
+		NewImplementation->UnlitPipelines.IsComplete() && NewImplementation->PrepassPipelines.IsComplete();
+	if (!bHasMeshPipelines || NewImplementation->TonemapPipeline == nullptr ||
 		NewImplementation->SkyPipeline == nullptr)
 	{
 		OutError = "the graphics card could not create the pipelines that draw and light meshes";
@@ -1020,15 +1043,15 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 	CommandList.clearDepthStencilTexture(
 		TargetData.DepthTexture, nvrhi::AllSubresources, bClearDepth, FarthestDepth, bClearStencil, 0);
 
-	// Draws every mesh of the picture with one pipeline. MaterialBindings is false for a pipeline that does not
-	// read materials, and TargetBindings null for one that reads nothing of the render target.
-	const auto DrawMeshes = [&](nvrhi::IGraphicsPipeline* Pipeline,
+	// Draws every mesh of the picture in one way, each with the pipeline for meshes as they are made or the one
+	// for mirrored meshes. MaterialBindings is false for pipelines that do not read materials, and TargetBindings
+	// null for ones that read nothing of the render target.
+	const auto DrawMeshes = [&](const FMeshPipelines& Pipelines,
 								nvrhi::IFramebuffer* Framebuffer,
 								bool bMaterialBindings,
 								nvrhi::IBindingSet* TargetBindings)
 	{
 		nvrhi::GraphicsState State;
-		State.pipeline = Pipeline;
 		State.framebuffer = Framebuffer;
 		State.viewport.addViewportAndScissorRect(Viewport);
 		State.bindings.push_back(Implementation->SceneBindingSet);
@@ -1056,6 +1079,8 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 			{
 				State.bindings[1] = MaterialBindingSets[static_cast<std::size_t>(DrawIndex)];
 			}
+			const bool bIsMirrored = Contents.IsMirrored[static_cast<std::size_t>(DrawIndex)];
+			State.pipeline = bIsMirrored ? Pipelines.Mirrored : Pipelines.AsMade;
 			CommandList.setGraphicsState(State);
 
 			// The instance number is how the shaders find this mesh's FDrawData.
@@ -1072,7 +1097,7 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		const nvrhi::Color NoSurface(0.5f, 0.5f, 1.0f, 1.0f);
 		CommandList.clearTextureFloat(TargetData.NormalTexture, nvrhi::AllSubresources, NoSurface);
 		const bool bPrepassReadsMaterials = false;
-		DrawMeshes(Implementation->PrepassPipeline, TargetData.PrepassFramebuffer, bPrepassReadsMaterials, nullptr);
+		DrawMeshes(Implementation->PrepassPipelines, TargetData.PrepassFramebuffer, bPrepassReadsMaterials, nullptr);
 		Implementation->Occlusion.Draw(CommandList,
 			TargetData.OcclusionBindings,
 			TargetData.OcclusionFramebuffers[0],
@@ -1109,11 +1134,11 @@ bool FSceneRenderer::Render(const WScene& Scene, const FCameraView& View, FRende
 		if (bIsLit)
 		{
 			DrawMeshes(
-				Implementation->LitPipeline, TargetData.SceneFramebuffer, bReadsMaterials, TargetData.LitBindingSet);
+				Implementation->LitPipelines, TargetData.SceneFramebuffer, bReadsMaterials, TargetData.LitBindingSet);
 		}
 		else
 		{
-			DrawMeshes(Implementation->UnlitPipeline, TargetData.Framebuffer, bReadsMaterials, nullptr);
+			DrawMeshes(Implementation->UnlitPipelines, TargetData.Framebuffer, bReadsMaterials, nullptr);
 		}
 	}
 

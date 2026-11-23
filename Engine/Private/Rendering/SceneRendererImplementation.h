@@ -5,6 +5,7 @@
 #include "Rendering/AmbientOcclusion.h"
 #include "Rendering/EnvironmentCache.h"
 #include "Rendering/MaterialBindings.h"
+#include "Rendering/MeshPipelines.h"
 #include "Rendering/RenderContext.h"
 #include "Rendering/SceneRenderStatistics.h"
 #include "Rendering/SceneRenderer.h"
@@ -55,8 +56,8 @@ struct FSceneRenderer::FImplementation
 	/** Draws the sky light's environment behind the scene. */
 	nvrhi::GraphicsPipelineHandle SkyPipeline;
 
-	/** Draws the depth of the scene and the way its surfaces face, ahead of the lit pass, for ambient occlusion. */
-	nvrhi::GraphicsPipelineHandle PrepassPipeline;
+	/** Draw the depth of the scene and the way its surfaces face, ahead of the lit pass, for ambient occlusion. */
+	FMeshPipelines PrepassPipelines;
 
 	/** The ambient occlusion passes. */
 	FAmbientOcclusion Occlusion;
@@ -64,11 +65,11 @@ struct FSceneRenderer::FImplementation
 	/** How what belongs to a render target reaches the lit pass: its ambient occlusion, and a sampler. */
 	nvrhi::BindingLayoutHandle TargetBindingLayout;
 
-	/** Draws meshes lit, into the high dynamic range buffer of a render target. */
-	nvrhi::GraphicsPipelineHandle LitPipeline;
+	/** Draw meshes lit, into the high dynamic range buffer of a render target. */
+	FMeshPipelines LitPipelines;
 
-	/** Draws meshes in their base colour, straight onto the surface of a render target. */
-	nvrhi::GraphicsPipelineHandle UnlitPipeline;
+	/** Draw meshes in their base colour, straight onto the surface of a render target. */
+	FMeshPipelines UnlitPipelines;
 
 	/** Fits the lit scene to the display. Its binding layout gives it the lit scene and the exposure. */
 	nvrhi::BindingLayoutHandle TonemapBindingLayout;

@@ -1180,3 +1180,21 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** The directory for a new project has to be typed, or left as it is suggested: there is nothing to browse the disk with. A project starts empty; there are no templates. Opening or making a project does not ask about changes to the scene that were not saved, and begins with an empty scene, not with the one that was worked on last. A project cannot be named on the command line. That the window asks when the editor starts on the desktop is not covered by the tests, which cannot open a window there; what it calls is.
 
 **Testing.** In the user interface, with projects in a temporary directory: Open Project with a click and Open, with a double click, with the file and with the directory typed, with a project that is not there, cancelled with the button and with the key, with a project that was moved away and came back, and before any project was opened; New Project from it; `AskForProject`, and that it does nothing while another window has to be answered. New Project with a name and a place, with the place it suggests, with Enter in either field, with a name that cannot be a file's, with a place that holds a project already, without a name, without a place, cancelled, and for a first project. `FProject::GetDefaultLocation`. `FUiText::FitEnd` with a text that fits, the longest end that fits, no room at all, a character of several bytes, and a measure under which the dots are wider than letters.
+
+## D-065: A mirrored mesh is drawn by pipelines of its own
+
+**Status:** Accepted.
+
+**Context.** An entity whose scale is below zero along one axis, or along all three, shows the mirror image of its mesh: a left glove made of a right one. The renderer drew such a mesh inside out. A mirror turns the order of a triangle's corners around, as the viewer sees them, and the one pipeline there was took counter-clockwise for the front and left the rest out: of a mirrored mesh, what it left out was the outside.
+
+**Decision.**
+
+- **Each way of drawing meshes has two pipelines** (`FMeshPipelines`): the lit one, the unlit one and the pass ahead of ambient occlusion. One takes corners that run counter-clockwise for the front, for meshes as they are made, and the other corners that run clockwise, for mirrored ones.
+- **The renderer chooses for each mesh by the scale that the entity has in the world:** below zero along one axis or along all three is a mirror; below zero along two is a half turn, and no mirror. The scales of the entities above count, as they do for everything else: a mirror above a mirror makes a mesh as it was.
+- **Nothing else had to change.** Normals are scaled by the inverse of the scale, sign and all, so a mirrored surface was lit from the right side already. Shadow maps are drawn without leaving a side out.
+
+**Alternatives considered.** Drawing both sides of a mirrored mesh shows its outside, and also its inside wherever the outside does not hide it, lit as if it faced the other way. A second list of indices for each mirrored mesh, with the corners the other way round, is more memory on the graphics card and more to keep in step with the mesh. Vulkan can change which order is the front from one draw to the next without another pipeline; NVRHI does not offer that.
+
+**Limits.** A scale of zero along an axis flattens a mesh into a sheet that is seen from one side, as before.
+
+**Testing.** A square two metres ahead, with every combination of signs that matters, seen from the front and from behind in the unlit view mode: mirrored along the axis it faces along or along all three, it faces away, and otherwise it faces the camera as before; a square below a mirrored entity, and mirrored once more itself. In the lit view mode, a mirrored surface is as bright as the surface it mirrors, and is not seen where it faces away. A corner of mirrored surfaces is as dark in its crease as any other. Each of these fails when mirrored meshes are given the pipeline of the others.

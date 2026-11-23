@@ -203,6 +203,29 @@ TEST_SUITE("FSceneRenderer lighting")
 			ReferencePixel(ReferenceReflect(Surface, FVector(0.0, 0.0, 1.0), ReferenceWhite * std::numbers::pi)));
 	}
 
+	TEST_CASE("A mirrored surface is lit like the surface that it is the mirror image of")
+	{
+		FSceneRenderTest Test(ESceneViewMode::Lit);
+		FReferenceSurface Surface;
+		Surface.BaseColor = FReferenceColor(0.8, 0.4, 0.1);
+		const WStaticMeshComponent* const Square = AddSurface(*Test.Scene.Get(), Surface);
+		// From above and from one side, not straight on.
+		AddSun(*Test.Scene.Get(), Turn(-30.0f, AxisY) * Turn(-20.0f, AxisX));
+		const FColor AsMade = RenderPicture(Test).GetPixel(Middle, Middle);
+		REQUIRE_FALSE(AsMade == Black);
+
+		// From top to bottom the square is its own mirror image, and the sun is where it was.
+		Square->GetOwner()->SetRelativeTransform(
+			MakeTransform(SquareLocation, FQuat(1.0f, 0.0f, 0.0f, 0.0f), FVector3f(1.0f, -1.0f, 1.0f)));
+		CheckPixel(RenderPicture(Test), Middle, Middle, AsMade);
+
+		// Mirrored from front to back, it faces away from the camera and is not seen.
+		Square->GetOwner()->SetRelativeTransform(
+			MakeTransform(SquareLocation, FQuat(1.0f, 0.0f, 0.0f, 0.0f), FVector3f(1.0f, 1.0f, -1.0f)));
+		CHECK(RenderPicture(Test).GetPixel(Middle, Middle) == Black);
+		CHECK(CountLoggedErrors(Test.Capture) == 0);
+	}
+
 	TEST_CASE("A point light gets weaker with the square of the distance")
 	{
 		const FReferenceSurface Surface;

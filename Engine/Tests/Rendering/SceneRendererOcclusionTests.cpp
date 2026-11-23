@@ -192,6 +192,29 @@ TEST_SUITE("FSceneRenderer ambient occlusion")
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 
+	TEST_CASE("Mirrored surfaces occlude each other like the surfaces that they are the mirror images of")
+	{
+		FSceneRenderTest Test;
+		// The floor and the wall of the corner, each mirrored from left to right. A square is its own mirror
+		// image, so the corner is the same corner.
+		AddSquare(*Test.Scene.Get(),
+			MakeTransform(FVector(0.0, -1.0, 0.0), FacingUp, FVector3f(-40.0f, 40.0f, 40.0f)),
+			LinearRed);
+		AddSquare(*Test.Scene.Get(),
+			MakeTransform(FVector(0.0, 9.0, -3.0), FQuat(1.0f, 0.0f, 0.0f, 0.0f), FVector3f(-20.0f, 20.0f, 20.0f)),
+			LinearGreen);
+
+		const FImage Image = RenderOcclusion(Test);
+
+		// Dark at the crease, and untouched where the other surface is more than the radius away.
+		CHECK(GetDarkest(Image, CreaseRow) < 190);
+		CHECK(Image.GetPixel(64, CreaseRow - 2).R < 225);
+		CHECK(Image.GetPixel(64, CreaseRow + 1).R < 225);
+		CHECK(Image.GetPixel(64, OpenWallRow) == White);
+		CHECK(Image.GetPixel(64, OpenFloorRow) == White);
+		CHECK(CountLoggedErrors(Test.Capture) == 0);
+	}
+
 	TEST_CASE("Occlusion is smooth: no grain along a crease and no ripples on the way from it")
 	{
 		// Every pixel takes its samples at one of sixteen angles, in a pattern that repeats every four pixels.
