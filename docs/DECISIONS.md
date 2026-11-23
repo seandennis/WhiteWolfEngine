@@ -665,7 +665,7 @@ The formatter is pinned to **clang-format major version 18**. `Tools/Format.cmak
 
 **Decision.**
 
-- **A step of the history is a state of the whole scene.** After every command that can change the scene, the editor writes the scene down as the JSON text of a scene file (D-024), without the layout, and compares it with the last state. If it differs, that is a step, named after the command. `FUndoHistory` keeps the states and knows nothing about scenes.
+- **A step of the history is a state of the whole scene.** After every command that can change the scene, the editor writes the scene down as the JSON text of a scene file (D-024), without the layout, and compares it with the last state. If it differs, that is a step, named after the command. (Since D-054 a step can also take several commands.) `FUndoHistory` keeps the states and knows nothing about scenes.
 - **Undo and redo load a state.** The scene object is replaced by one loaded from the state's text, as when a scene file is opened, so undo is exactly as good as saving and loading, which has to be right anyway and has its own tests.
 - **Commands have nothing to do to be undoable,** and cannot get it wrong: not the editor's own, and not the ones plugins will add. A command that changes nothing is not a step.
 - **A command that only reads says so,** with `ECommandEffect::LeavesScene` in its description, and the editor then does not write the scene down after it. That is for speed only. If such a command changes the scene after all, the change is recorded with the next step, like a change made without a command.
@@ -946,3 +946,23 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** A copy is made in the scene of the original. Copy and paste between scenes, and prefabs, need the copied entities as a document that outlives the scene; they will share the property copying and add that document.
 
 **Testing.** That a copy has the name, the transform, at a location far from the origin, and an identifier of its own; where it is put among its siblings and at the root; that components are copied with their saved properties, of a derived class too, and without the ones that are not saved, leaving the original as it was; that descendants are copied in order with their components; that references inside the copied tree, strong, weak and in an array, lead to the copies and those outside it to the same objects; that an asset without a path is shared, without a warning; that components are attached after their properties are set; that a component of a missing class keeps its data; that a copy of a copy is its own; and that a destroyed entity is refused with a warning. For the command: the copy and its identifier, one step of the history that an undo takes back whole, and the reasons for refusing.
+
+## D-054: A step of the history can take several commands
+
+**Status:** Accepted.
+
+**Context.** Every command that changes the scene is a step of the history (D-041). What a user does as one thing is not always one command: Delete with three entities selected is three `Entity.Delete` commands, and dragging an entity with the gizmo sets its transform in every frame of the drag. Undo has to take such a thing back at once.
+
+**Decision.**
+
+- **`FEditor::BeginStep(Name)` and `EndStep()` make the commands between them one step.** In between, commands change the scene as always but are not recorded one by one; `EndStep` writes the scene down once, and what differs from before the step is one step with the given name. Because a step is a state of the whole scene, nothing else is needed: there are no commands to gather or to reverse in order.
+- **A step in which nothing came out different is no step,** as with a command.
+- **Steps do not nest.** Beginning one while another is open is a mistake in the code and a fatal error. A function that wants its commands in one step is told so by its caller, or uses `FScopedEditorStep` at the one place that knows it is the outermost.
+- **What ends a step besides `EndStep`:** `Undo` and `Redo`, which first make what the open step has changed so far a step, so that pressing Ctrl+Z in the middle of a drag undoes the drag; and a scene that replaces the one being edited, which leaves nothing to undo.
+- **What changed without a command before the step** is recorded first, as a step of its own, as it is before an undo.
+
+**Alternatives considered.** Commands that take a list, such as `Entity.Delete` with several entities, would cover the first case and not the drag, and every command would need its list form. Merging steps afterwards by name and time, as text editors merge typing, guesses at what the user meant.
+
+**Limits.** Agents cannot yet make several commands one step: a step that an agent begins and forgets to end would swallow everything after it.
+
+**Testing.** That commands in a step are one step with its name, which one undo takes back and one redo brings back; that a step that changed nothing in the end is none; that commands after a step are steps again; that a direct change before a step is a step of its own; that an undo in an open step ends and undoes it, and a redo ends it in place of what could have been redone; that another scene ends an open step with nothing to undo; that ending without beginning does nothing and beginning twice is a fatal error; and `FScopedEditorStep`.

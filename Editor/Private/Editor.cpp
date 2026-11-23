@@ -74,8 +74,9 @@ FCommandResult FEditor::ExecuteCommand(std::string_view Name, const FJsonValue& 
 	}
 
 	// Whatever the command changed is a step, whether it succeeded or not: a command that fails should leave the
-	// scene as it was, and if one does not, what it left behind can at least be undone.
-	if (bCanChangeScene)
+	// scene as it was, and if one does not, what it left behind can at least be undone. Inside a step that takes
+	// several commands, it is that step's to record.
+	if (bCanChangeScene && !OpenStepName.has_value())
 	{
 		RecordChanges(Name);
 	}
@@ -101,6 +102,8 @@ void FEditor::SetScene(WScene& NewScene, std::filesystem::path NewScenePath)
 
 	ReplaceScene(NewScene);
 	History.Reset(WriteSceneState());
+	// A step that was open was a step of the scene that is gone.
+	OpenStepName.reset();
 
 	// The identifiers of the old scene's entities mean nothing in the new one, or other entities.
 	SelectedEntityIds.clear();
@@ -171,8 +174,32 @@ std::filesystem::path FEditor::ResolveFilePath(const std::filesystem::path& Path
 	return Path;
 }
 
+void FEditor::BeginStep(std::string StepName)
+{
+	WW_CHECKF(!OpenStepName.has_value(),
+		"The step '{}' of the history was begun while the step '{}' was still open",
+		StepName,
+		*OpenStepName);
+
+	// What changed without a command before the step is not part of it.
+	RecordChanges(DirectChangeStepName);
+	OpenStepName = std::move(StepName);
+}
+
+void FEditor::EndStep()
+{
+	if (OpenStepName.has_value())
+	{
+		const std::string StepName = std::move(*OpenStepName);
+		OpenStepName.reset();
+		RecordChanges(StepName);
+	}
+}
+
 std::optional<std::string> FEditor::Undo()
 {
+	// What an open step has changed so far is what there is to undo.
+	EndStep();
 	RecordChanges(DirectChangeStepName);
 	if (!History.CanUndo())
 	{
@@ -187,6 +214,7 @@ std::optional<std::string> FEditor::Undo()
 std::optional<std::string> FEditor::Redo()
 {
 	// A change made since the undo is a step that takes the place of the ones that could have been redone.
+	EndStep();
 	RecordChanges(DirectChangeStepName);
 	if (!History.CanRedo())
 	{

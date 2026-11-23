@@ -111,6 +111,30 @@ public:
 	 */
 	EDITOR_API std::optional<std::string> Redo();
 
+	/**
+	 * Begins a step of the history that is made of several commands. Until EndStep the commands that are given
+	 * change the scene as always but are not steps by themselves, and EndStep makes everything that has changed
+	 * one step with the given name: what the user did as one thing, such as deleting three entities or dragging
+	 * one across the viewport, is undone as one thing. A change made since the last step is a step of its own
+	 * first, as it is before an undo.
+	 *
+	 * Steps do not nest: beginning one while another is open is a fatal error. Undo, Redo and a scene that
+	 * replaces the one being edited end an open step.
+	 */
+	EDITOR_API void BeginStep(std::string StepName);
+
+	/**
+	 * Ends the step that BeginStep began: what has changed since is one step of the history, or none if nothing
+	 * has. Does nothing if no step is open.
+	 */
+	EDITOR_API void EndStep();
+
+	/** Returns true between BeginStep and what ends the step. */
+	bool IsStepOpen() const
+	{
+		return OpenStepName.has_value();
+	}
+
 	/** Returns the steps that can be undone and redone. */
 	const FUndoHistory& GetHistory() const
 	{
@@ -207,6 +231,9 @@ private:
 	FCommandRegistry Commands;
 
 	FUndoHistory History;
+
+	/** The name of the step that BeginStep began and nothing has ended yet. */
+	std::optional<std::string> OpenStepName;
 
 	/** The scene being edited. It is in the root set, which is what keeps it alive; this is how to find it. */
 	TWeakObjectPtr<WScene> Scene;
