@@ -136,3 +136,51 @@ file(CONFIGURE OUTPUT "${cgltf_implementation}" CONTENT
 add_library(cgltf STATIC "${cgltf_implementation}")
 target_include_directories(cgltf SYSTEM PUBLIC "${cgltf_SOURCE_DIR}")
 set_target_properties(cgltf PROPERTIES POSITION_INDEPENDENT_CODE ON FOLDER "ThirdParty")
+
+# Dear ImGui: lays out the editor's user interface (MIT). Release v1.93.0-docking, from the
+# library's docking branch, which has the dockable windows the editor is made of.
+# The library comes without a build script. Its sources are compiled here as a library of its own,
+# so that they are built as third-party code and not with the engine's warnings. It is linked into
+# the editor module only, and no Dear ImGui type appears in a header of that module.
+# The header written here configures the library; Dear ImGui includes it wherever it is used:
+#  - A failed assertion of the library is reported like a failed check of the engine, in every
+#    build configuration. The editor module defines the function.
+#  - The library reaches the clipboard, files and other programs only through what the editor
+#    gives it, so that the editor behaves the same with a window and without one, and a test
+#    cannot touch the clipboard or the files of the machine it runs on.
+#  - Functions that the library has replaced with newer ones are left out, so that the editor
+#    cannot come to depend on them, and so are the demonstration windows.
+#  - Characters beyond U+FFFF are text like any other, and indices are 32 bits wide, as in the
+#    engine's FUiDrawList.
+FetchContent_Declare(imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG b916186e66aa3c02b72c6ca17455516512ed8049
+    SYSTEM)
+FetchContent_MakeAvailable(imgui)
+
+set(imgui_configuration "${CMAKE_BINARY_DIR}/ThirdParty/WhiteWolfImGuiConfiguration.h")
+file(CONFIGURE OUTPUT "${imgui_configuration}" CONTENT
+"// Written by CMake/WhiteWolfThirdParty.cmake.
+#pragma once
+
+[[noreturn]] void ReportImGuiAssertionFailure(const char* Expression, const char* File, int Line);
+#define IM_ASSERT(Expression) \\
+	((Expression) ? static_cast<void>(0) : ReportImGuiAssertionFailure(#Expression, __FILE__, __LINE__))
+
+#define IMGUI_DISABLE_WIN32_FUNCTIONS
+#define IMGUI_DISABLE_FILE_FUNCTIONS
+#define IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS
+#define IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+#define IMGUI_DISABLE_DEMO_WINDOWS
+#define IMGUI_USE_WCHAR32
+#define ImDrawIdx unsigned int
+" @ONLY)
+add_library(imgui STATIC
+    "${imgui_SOURCE_DIR}/imgui.cpp"
+    "${imgui_SOURCE_DIR}/imgui_demo.cpp"
+    "${imgui_SOURCE_DIR}/imgui_draw.cpp"
+    "${imgui_SOURCE_DIR}/imgui_tables.cpp"
+    "${imgui_SOURCE_DIR}/imgui_widgets.cpp")
+target_include_directories(imgui SYSTEM PUBLIC "${imgui_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/ThirdParty")
+target_compile_definitions(imgui PUBLIC "IMGUI_USER_CONFIG=\"WhiteWolfImGuiConfiguration.h\"")
+set_target_properties(imgui PROPERTIES POSITION_INDEPENDENT_CODE ON FOLDER "ThirdParty")

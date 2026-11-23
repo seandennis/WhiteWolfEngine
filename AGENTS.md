@@ -107,7 +107,8 @@ CMakePresets.json         Configure, build, test and workflow presets
 CMake/                    Build helpers
   WhiteWolfCompilerSettings.cmake   Warning levels, conformance flags, sanitizers
   WhiteWolfModule.cmake             ww_add_module(), ww_add_module_tests(), ww_generate_reflection(), ww_add_shaders()
-  WhiteWolfThirdParty.cmake         Pinned engine dependencies (glm, GLFW, Vulkan-Headers, NVRHI, glslang, stb, cgltf)
+  WhiteWolfThirdParty.cmake         Pinned engine and editor dependencies (glm, GLFW, Vulkan-Headers, NVRHI, glslang,
+                                    stb, cgltf, Dear ImGui)
   WhiteWolfThirdPartyTesting.cmake  Pinned test-only dependencies (doctest)
 Engine/                   The core engine module (WhiteWolfEngine.dll)
   CMakeLists.txt
@@ -152,12 +153,13 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Object/TestObjects.h  WObject classes used by the object system tests, and FScopedObjectTest
     Rendering/TestRendering.h  Helpers for tests that draw: a validated device, reading a target back, checking the log
     Rendering/TestSceneRendering.h  Helpers for tests that draw scenes: FSceneRenderTest, squares, colours
+    Rendering/TestReferenceImages.h Compares a picture with a reference image (CheckAgainstReferenceImage)
     Rendering/TestSceneLighting.h   The lighting model written out again in C++, and a lit test scene
     Rendering/TestGltfFiles.h       Builds small .gltf and .glb files for the importer's tests
     Assets/TestAssets.h             A content directory for one test, and files to put into it
     Rendering/RendererTestScene.h   The renderer's test scene, which is compared with a reference image
     Rendering/ReferenceImages/      The reference images
-Editor/                   The editor module (WhiteWolfEditorCore.dll): everything the editor does, without its windows
+Editor/                   The editor module (WhiteWolfEditorCore.dll): everything the editor does, and its user interface
   CMakeLists.txt
   Main.cpp                Entry point of the editor's executable, WhiteWolfEditor
   Public/
@@ -170,14 +172,22 @@ Editor/                   The editor module (WhiteWolfEditorCore.dll): everythin
     History/              UndoHistory.h (FUndoHistory: the states a scene has been in, for undo and redo)
     Project/              Project.h (FProject: a game project, a directory with a project file and a Content directory)
     Viewport/             ViewportCamera.h (FViewportCamera: the point of view of the editor's viewport)
+    Ui/                   EditorUi.h (FEditorUi: the user interface, laid out for a surface and drawn onto it),
+                          UiRectangle.h (FUiRectangle)
     Agent/                AgentServer.h (FAgentServer: the commands as tools of a Model Context Protocol server)
     EditorApplication.h   FEditorApplication: what the executable does, given a command line and streams
   Private/
     Commands/             The editor's own commands, one class per area (FSceneCommands, FEntityCommands,
                           FComponentCommands, FPropertyCommands, FEditCommands, FProjectCommands, FAssetCommands,
                           FSelectionCommands, FViewportCommands, FEditorCommands), and what they share
+    Ui/                   The user interface on Dear ImGui: ImGuiLibrary.h (the one include of the library),
+                          FUiInput, FUiTextures and FUiDrawData (what goes into the library and what comes out),
+                          FUiTheme, FUiItems (named items), FUiCommands (the commands widgets give), FMainMenuBar
+      Panels/             One class per panel: FViewportPanel, FOutlinerPanel; FUiPanel is what they share
   Tests/                  Unit tests (EditorTests executable)
     TestEditorObjects.h   Component classes for the tests, FScopedEditorTest, JSON written as text
+    Ui/TestEditorUi.h     FEditorUiTest: an editor with its user interface, drawn headless and driven by a test
+    Ui/ReferenceImages/   The reference image of the editor's default layout
     Agent/                The agent server's tests, and a session of messages that CTest gives the executable
 Tools/
   Format.cmake            Formats or checks all C++ sources
@@ -389,6 +399,19 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 - **Refer to entities and components by identifier,** in arguments, in results and in property values. `FCommandTargets` (`Private/Commands/CommandTargets.h`) finds them and words the failure.
 - **Properties go through reflection.** `Object.GetProperty` and `Object.SetProperty` work for every `WPROPERTY()` that is not `Transient`, of any class, so a new component needs no command of its own for its data.
 - **Test a command through `FEditor::ExecuteCommand`:** set the scene up with the scene's own functions, give the command, then check the scene and the result, and for every failure the exact reason and that nothing changed. Start such a test with `const FScopedEditorTest EditorTest;` before the `FEditor` (`Tests/TestEditorObjects.h`).
+
+## The editor's user interface
+
+- **`FEditorUi` is the user interface, and it does not know about windows.** `Ui->Draw(Target, Input, DeltaSeconds, Error)` takes in a frame of input from an `FInputState`, lays the menus and panels out for the size of a render target and draws them onto it (D-049). The executable gives it what a window shows; a test gives it a render target and input that the test makes up.
+- **It is laid out with Dear ImGui and drawn by the engine.** No Dear ImGui type or header appears outside `Editor/Private/Ui/`. Include `Ui/ImGuiLibrary.h` there, never `<imgui.h>`. The library has no access to the graphics card, a window, files or the clipboard: `FUiInput` gives it input, `FUiTextures` keeps its textures as `WTexture` objects, and `FUiDrawData` turns what it laid out into an `FUiDrawList` for `FUiRenderer`. A failed assertion of the library is a fatal error in every build configuration, like a failed `WW_CHECK`.
+- **A widget changes the scene by giving a command, and in no other way.** The functions of `FUiCommands` build the arguments and call `FEditor::ExecuteCommand`; add one for each command a widget needs. The editor logs a command that fails, so a widget does not have to report it. Reading is direct: a panel looks at `Frame.Editor.GetScene()` in every frame and keeps no copy of it, which is why undo, redo and an agent's commands show up without anything telling the panel. Moving the viewport's camera is not a change to the scene and is set on the editor directly (D-048).
+- **Do not change the scene while going through it.** A command that destroys or moves entities changes the lists a panel is in the middle of. Note what was asked for and give the command once the rows are laid out, as `FOutlinerPanel` does with a click.
+- **A panel is a class in `Editor/Private/Ui/Panels/`** with a `Title` and a `Draw(FUiFrame&)` that begins with `FUiPanel::Begin(Title, bIsOpen)` and always ends with `ImGui::End()`. A new panel also needs: a `bShow...` flag in `FUiWorkspace`, an entry in the Window menu (`FMainMenuBar`), a place in the default layout (`BuildDefaultLayout` in `EditorUi.cpp`) and a call in `LayOut` there. The default layout is what the specification describes; changing it changes the reference image.
+- **Shortcuts are entries of the menu bar.** `FMainMenuBar` asks for them with `ImGui::Shortcut(..., ImGuiInputFlags_RouteGlobal)`, which lets a text field that is being typed into keep Ctrl+Z for itself, and not at all while a window is open that has to be answered first.
+- **Items that a test clicks have names.** After laying an item out, call `Frame.Items.NameLastItem("Area/Thing")`: `"Outliner/7"` is the row of the entity 7, `"Menu/Edit/Undo"` a menu entry. `FEditorUi::FindItem` says where a named item was drawn. A name says what an item is, not where, so tests do not break when the layout changes.
+- **Colours are sRGB**, as they are written in a style sheet; `FUiTheme` has the editor's. The engine decodes them and blends in linear light (D-046).
+- **Test the user interface by using it.** `FEditorUiTest` (`Editor/Tests/Ui/TestEditorUi.h`) is an editor with its user interface on a validated render device: `Test.Click("Outliner/7")`, `Test.PressKey(EKey::Z, {EKey::LeftControl})`, `Test.Type("cam")`, then check what the editor's scene, selection or history now is, or read a pixel with `Test.ReadPicture()`. Each action draws the frames the library needs to take it in. Only one `FEditorUiTest` can exist at a time, because it owns the render device.
+- **The default layout has a reference image,** `Editor/Tests/Ui/ReferenceImages/EditorDefaultLayout.png`, which `Tests/Ui/EditorUiTests.cpp` compares a picture of the user interface with, as the renderer's test scene is compared with its own. When a change is meant to alter how the editor looks, look at `Build/<preset>/TestOutput/EditorDefaultLayout.png`, copy it over the reference image and say in the commit message why the picture changed.
 
 ## Third-party dependencies
 

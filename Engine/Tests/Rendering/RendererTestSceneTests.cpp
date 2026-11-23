@@ -2,35 +2,27 @@
 #include "Rendering/DirectionalLightComponent.h"
 #include "Rendering/Image.h"
 #include "Rendering/ImageDifference.h"
-#include "Rendering/ImageFile.h"
 #include "Rendering/RendererTestScene.h"
 #include "Rendering/SceneRenderer.h"
 #include "Rendering/SkyLightComponent.h"
+#include "Rendering/TestReferenceImages.h"
 #include "Rendering/TestRendering.h"
 #include "Rendering/TestSceneRendering.h"
 
 #include <doctest/doctest.h>
 
-#include <filesystem>
 #include <ostream>
 #include <string>
 #include <vector>
 
 // The renderer's test scene is drawn without a window and compared with a reference image that is stored in the
-// repository. Two graphics cards never draw exactly the same picture, so the comparison allows a small difference;
-// see docs/DECISIONS.md, D-034, for the tolerances and for how a reference image is replaced.
+// repository (Rendering/TestReferenceImages.h).
 
 namespace
 {
-	/** By how many steps of 255 a channel may differ from the reference before its pixel counts as different. */
-	constexpr int32 ChannelTolerance = 12;
-
-	/** The fraction of the pixels that may differ from the reference by more than the tolerance. */
-	constexpr double MaxDifferentPixelFraction = 0.02;
-
 	/**
-	 * The same two limits for pictures of the scene in different places drawn by the same machine, which differ
-	 * only at the soft edges of shadows.
+	 * The limits of Rendering/TestReferenceImages.h, for pictures of the scene in different places drawn by the
+	 * same machine, which differ only at the soft edges of shadows.
 	 */
 	constexpr int32 SameMachineChannelTolerance = 6;
 	constexpr double SameMachineMaxDifferentPixelFraction = 0.002;
@@ -51,36 +43,14 @@ namespace
 		return Image;
 	}
 
-	/**
-	 * Checks a picture against a reference image. If it does not match, or there is no reference image yet, the
-	 * picture is saved in the build directory, where it can be looked at and, if it is right, copied over the
-	 * reference image.
-	 *
-	 * @param Name The name of the reference image, without ".png".
-	 * @param OutputSuffix Added to the name of the saved picture, so that a test that checks several pictures
-	 * against one reference image does not save one over the other.
-	 */
+	/** Checks a picture against one of the renderer's reference images; see CheckAgainstReferenceImage. */
 	void CheckAgainstReference(const FImage& Actual, const std::string& Name, const std::string& OutputSuffix = "")
 	{
-		const std::filesystem::path ReferencePath =
-			FFileHelper::PathFromUtf8(WW_REFERENCE_IMAGE_DIRECTORY) / (Name + ".png");
-		const std::filesystem::path OutputPath =
-			FFileHelper::PathFromUtf8(WW_TEST_OUTPUT_DIRECTORY) / (Name + OutputSuffix + ".png");
-
-		FImage Reference;
-		std::string Error;
-		const bool bHasReference = FImageFile::Load(ReferencePath, Reference, Error);
-		const FImageDifference Difference = FImageDifference::Measure(Actual, Reference, ChannelTolerance);
-		const bool bMatches = bHasReference && Difference.IsWithin(MaxDifferentPixelFraction);
-		if (!bMatches)
-		{
-			std::string SaveError;
-			const bool bSaved = FImageFile::SavePng(Actual, OutputPath, SaveError);
-			INFO("Reference image: ", FFileHelper::PathToUtf8(ReferencePath));
-			INFO("What was drawn: ", bSaved ? FFileHelper::PathToUtf8(OutputPath) : SaveError);
-			INFO("Difference: ", bHasReference ? Difference.Describe() : Error);
-			CHECK(bMatches);
-		}
+		CheckAgainstReferenceImage(Actual,
+			FFileHelper::PathFromUtf8(WW_REFERENCE_IMAGE_DIRECTORY),
+			FFileHelper::PathFromUtf8(WW_TEST_OUTPUT_DIRECTORY),
+			Name,
+			OutputSuffix);
 	}
 }
 
@@ -148,9 +118,9 @@ TEST_SUITE("Renderer test scene")
 			CHECK(Test.Renderer->GetStatistics().AmbientOcclusionPassCount == 0);
 		}
 
-		const FImageDifference Difference = FImageDifference::Measure(Without, Whole, ChannelTolerance);
+		const FImageDifference Difference = FImageDifference::Measure(Without, Whole, ReferenceChannelTolerance);
 		INFO("Difference from the whole picture: ", Difference.Describe());
-		CHECK_FALSE(Difference.IsWithin(MaxDifferentPixelFraction));
+		CHECK_FALSE(Difference.IsWithin(ReferenceMaxDifferentPixelFraction));
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 

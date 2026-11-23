@@ -56,7 +56,7 @@ Build\windows\Binaries\Debug\EngineTests.exe --success          # also print pas
 
 On Linux the executables are at `Build/<configure preset>/Binaries/<Config>/EngineTests`.
 
-New source files are picked up automatically; no CMake edit or reconfigure is needed.
+New source files need no CMake edit. On Windows, the build that first notices a new file writes the Visual Studio projects again but may not compile the file in that same run: build a second time, or run `cmake --preset windows` before building.
 
 ## 4. Diagnose failures
 
@@ -76,6 +76,8 @@ New source files are picked up automatically; no CMake edit or reconfigure is ne
 | A sanitizer report under `linux-sanitize` | A real memory, leak or undefined-behaviour bug. Fix it; never suppress it. |
 | A LeakSanitizer report whose stack frames are in `(<unknown module>)` | The memory was allocated by a shared library that had been unloaded by the time the report was written, which hides the library's name and makes its memory look leaked. Do not unload such a library while the process goes on; this is why Vulkan stays loaded (D-044). The annotations of the failed CI job show the first frames of each stack. |
 | `RendererTestSceneTests.cpp` fails with a difference from the reference image | Open `Build/<preset>/TestOutput/RendererTestScene.png` and compare it with `Engine/Tests/Rendering/ReferenceImages/RendererTestScene.png`. Fix the renderer if the new picture is wrong. Only if the change was meant to alter the picture, copy the new one over the reference and commit both together. |
+| `EditorUiTests.cpp` fails with a difference from the reference image | The same for the editor: `Build/<preset>/TestOutput/EditorDefaultLayout.png` against `Editor/Tests/Ui/ReferenceImages/EditorDefaultLayout.png`. A panel that was added, moved or restyled is meant to alter the picture; anything else is a regression of the layout. |
+| A fatal error that begins `An assertion of Dear ImGui failed` | The editor's user interface used the library wrongly: a window, menu or tree row that was begun and not ended, or the other way round. The message names the library's file and line; the mistake is in `Editor/Private/Ui`. |
 | Stale or confusing build state | Delete `Build/<configure preset>/` and run the workflow preset again. |
 
 ## 5. Report honestly
