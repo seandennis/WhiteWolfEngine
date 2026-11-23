@@ -94,8 +94,9 @@ std::optional<FProject> FProject::Create(
 	std::filesystem::create_directories(ContentDirectory, ErrorCode);
 	if (ErrorCode)
 	{
-		OutError = std::format(
-			"cannot create the directory '{}': {}", FFileHelper::PathToUtf8(ContentDirectory), ErrorCode.message());
+		OutError = std::format("cannot create the directory '{}': {}",
+			FFileHelper::PathToUtf8(ContentDirectory),
+			FFileHelper::DescribeError(ErrorCode));
 		return std::nullopt;
 	}
 	return Project;

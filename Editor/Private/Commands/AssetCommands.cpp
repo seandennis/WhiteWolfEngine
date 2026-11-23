@@ -194,7 +194,7 @@ namespace
 					std::format("The file was not imported: '{}' could not be copied to '{}': {}.",
 						FFileHelper::PathToUtf8(Copy.From),
 						FFileHelper::PathToUtf8(Copy.To),
-						ErrorCode.message()));
+						FFileHelper::DescribeError(ErrorCode)));
 			}
 			Copied.push_back(Copy.To);
 		}

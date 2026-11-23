@@ -6,8 +6,10 @@
 
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <ostream>
 #include <string>
+#include <system_error>
 
 TEST_SUITE("FFileHelper")
 {
@@ -101,6 +103,39 @@ TEST_SUITE("FFileHelper")
 		CHECK(Error.find("Folder") != std::string::npos);
 		CHECK(std::filesystem::is_directory(Path));
 		CHECK_FALSE(std::filesystem::exists(Directory.GetPath() / "Folder.tmp"));
+	}
+
+	TEST_CASE("DescribeError gives the words of the operating system without what it ends them with")
+	{
+		// The numbers of a few errors that every system has: no such file, no permission, the file exists.
+		for (const int Code : {2, 5, 13, 17})
+		{
+			CAPTURE(Code);
+			const std::error_code Error(Code, std::system_category());
+			const std::string Words = FFileHelper::DescribeError(Error);
+
+			REQUIRE_FALSE(Words.empty());
+			CHECK(Words.back() != '.');
+			CHECK(Words.back() != ' ');
+			CHECK(Words.back() != '\n');
+			CHECK(Words.back() != '\r');
+			// Nothing but its end is taken away.
+			CHECK(Error.message().starts_with(Words));
+		}
+	}
+
+	TEST_CASE("The reason why a file cannot be saved goes into a sentence: it does not end in a full stop")
+	{
+		const FScopedTempDirectory Directory;
+		std::string Error;
+		REQUIRE(FFileHelper::SaveStringToFile("text", Directory.GetPath() / "File", Error));
+
+		// Below a file there is no room for another file.
+		CHECK_FALSE(FFileHelper::SaveStringToFile("text", Directory.GetPath() / "File" / "Inside", Error));
+
+		REQUIRE_FALSE(Error.empty());
+		CHECK(Error.back() != '.');
+		CHECK(Error.find("File") != std::string::npos);
 	}
 
 	TEST_CASE("PathToUtf8 returns the path as UTF-8 text")

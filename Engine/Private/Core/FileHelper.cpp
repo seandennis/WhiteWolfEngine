@@ -1,5 +1,6 @@
 #include "Core/FileHelper.h"
 
+#include <cstddef>
 #include <format>
 #include <fstream>
 #include <iterator>
@@ -36,7 +37,7 @@ bool FFileHelper::SaveStringToFile(std::string_view Text, const std::filesystem:
 		std::filesystem::create_directories(Directory, Error);
 		if (Error)
 		{
-			OutError = std::format("cannot create the directory '{}': {}", PathToUtf8(Directory), Error.message());
+			OutError = std::format("cannot create the directory '{}': {}", PathToUtf8(Directory), DescribeError(Error));
 			return false;
 		}
 	}
@@ -65,7 +66,7 @@ bool FFileHelper::SaveStringToFile(std::string_view Text, const std::filesystem:
 	std::filesystem::rename(TemporaryPath, Path, Error);
 	if (Error)
 	{
-		const std::string Reason = Error.message();
+		const std::string Reason = DescribeError(Error);
 		std::filesystem::remove(TemporaryPath, Error);
 		OutError = std::format("cannot replace '{}': {}", PathToUtf8(Path), Reason);
 		return false;
@@ -83,4 +84,12 @@ std::string FFileHelper::PathToUtf8(const std::filesystem::path& Path)
 std::filesystem::path FFileHelper::PathFromUtf8(std::string_view Text)
 {
 	return std::filesystem::path(std::u8string(Text.begin(), Text.end()));
+}
+
+std::string FFileHelper::DescribeError(const std::error_code& Error)
+{
+	std::string Message = Error.message();
+	const std::size_t End = Message.find_last_not_of(". \t\r\n");
+	Message.erase(End == std::string::npos ? 0 : End + 1);
+	return Message;
 }

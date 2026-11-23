@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 /** Reads and writes whole text files. */
 class FFileHelper
@@ -37,4 +38,10 @@ public:
 
 	/** Returns the path that UTF-8 text names: the opposite of PathToUtf8. */
 	ENGINE_API static std::filesystem::path PathFromUtf8(std::string_view Text);
+
+	/**
+	 * Returns what the operating system says about an error of the file system, as words to put into a sentence:
+	 * without the full stop, the spaces and the line break that some systems end theirs with.
+	 */
+	ENGINE_API static std::string DescribeError(const std::error_code& Error);
 };
