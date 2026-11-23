@@ -61,8 +61,9 @@ namespace
 			return false;
 		}
 		// A file that is one asset, a picture or an environment, is read now, to see that it can be.
-		if (!FGltfImporter::IsGltfFile(FFileHelper::PathFromUtf8(File)) &&
-			FAssetManager::Load(File, OutError) == nullptr)
+		const bool bIsOneAsset =
+			!FGltfImporter::IsGltfFile(FFileHelper::PathFromUtf8(File)) && !FAssetManager::IsBuiltInFile(File);
+		if (bIsOneAsset && FAssetManager::Load(File, OutError) == nullptr)
 		{
 			return false;
 		}
@@ -210,26 +211,26 @@ namespace
 
 	FCommandResult ListAssets(FEditor& Editor, const FCommandArguments& /*Arguments*/)
 	{
-		const FProject* const Project = Editor.GetProject();
-		if (Project == nullptr)
-		{
-			return FCommandResult::Failure(std::string(NoProjectError));
-		}
+		// What the engine has built in is there with or without a project.
+		std::vector<std::string> Files = FAssetManager::GetBuiltInFiles();
 
-		std::vector<std::string> Files;
-		std::error_code ErrorCode;
-		for (std::filesystem::recursive_directory_iterator Entry(Project->GetContentDirectory(), ErrorCode);
-			 !ErrorCode && Entry != std::filesystem::recursive_directory_iterator();
-			 Entry.increment(ErrorCode))
+		const FProject* const Project = Editor.GetProject();
+		if (Project != nullptr)
 		{
-			std::error_code EntryError;
-			if (!Entry->is_regular_file(EntryError) || !FAssetManager::IsAssetFile(Entry->path()))
+			std::error_code ErrorCode;
+			for (std::filesystem::recursive_directory_iterator Entry(Project->GetContentDirectory(), ErrorCode);
+				 !ErrorCode && Entry != std::filesystem::recursive_directory_iterator();
+				 Entry.increment(ErrorCode))
 			{
-				continue;
-			}
-			if (std::optional<std::string> File = FAssetManager::GetAssetFileOfPath(Entry->path()))
-			{
-				Files.push_back(std::move(*File));
+				std::error_code EntryError;
+				if (!Entry->is_regular_file(EntryError) || !FAssetManager::IsAssetFile(Entry->path()))
+				{
+					continue;
+				}
+				if (std::optional<std::string> File = FAssetManager::GetAssetFileOfPath(Entry->path()))
+				{
+					Files.push_back(std::move(*File));
+				}
 			}
 		}
 		std::ranges::sort(Files);
@@ -238,14 +239,15 @@ namespace
 
 	FCommandResult DescribeAsset(FEditor& Editor, const FCommandArguments& Arguments)
 	{
-		if (Editor.GetProject() == nullptr)
+		const std::string& File = Arguments.GetString("File");
+		if (Editor.GetProject() == nullptr && !FAssetManager::IsBuiltInFile(File))
 		{
 			return FCommandResult::Failure(std::string(NoProjectError));
 		}
 
 		FJsonValue Value;
 		std::string Error;
-		if (!DescribeAssetFile(Arguments.GetString("File"), Value, Error))
+		if (!DescribeAssetFile(File, Value, Error))
 		{
 			return FCommandResult::Failure(std::format("The file cannot be described: {}.", Error));
 		}
@@ -321,19 +323,21 @@ void FAssetCommands::Register(FCommandRegistry& Registry)
 
 	Registry.Register(
 		{"Asset.List",
-			"Returns the asset files of the project: every model, picture and environment in its content directory, "
-			"by name, in the order of the names.",
+			"Returns the asset files of the project, every model, picture and environment in its content directory, "
+			"and the files of assets that the engine has built in, such as \"Engine/Shapes\" with a cube, a sphere "
+			"and a plane. By name, in the order of the names. Without a project, the built-in ones alone.",
 			{},
 			ECommandEffect::LeavesScene},
 		ListAssets);
 
 	Registry.Register(
 		{"Asset.Describe",
-			"Returns the path and class of every asset in a file of the project, and what was left out when the file "
-			"was loaded. The paths are what the properties of components take, with Object.SetProperty.",
+			"Returns the path and class of every asset in a file of the project or in a built-in file, and what was "
+			"left out when the file was loaded. The paths are what the properties of components take, with "
+			"Object.SetProperty: \"Engine/Shapes#Cube\" as the Mesh of a WStaticMeshComponent shows a cube.",
 			{FCommandParameter::Required("File",
 				ECommandArgumentType::String,
-				"The file's name in the project, for example \"Models/Crate.glb\".")},
+				"The file's name as Asset.List returns it, for example \"Models/Crate.glb\" or \"Engine/Shapes\".")},
 			ECommandEffect::LeavesScene},
 		DescribeAsset);
 

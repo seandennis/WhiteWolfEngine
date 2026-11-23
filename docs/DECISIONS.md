@@ -1074,3 +1074,23 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** The speed of flying has no place in the user interface yet; the viewport's toolbar will show it. There is no acceleration and no slower or faster flight with a key held. Bounds are those of meshes: a light, or anything else that shows nothing, has none. Taking the mouse of a window on the desktop is tested only as far as the window in memory goes.
 
 **Testing.** The camera's functions against the geometry they stand for, with their limits, and what they refuse. In the user interface, with a mouse and keys that exist only in the test: looking around; each of the six keys, for a number of frames at the camera's speed; keys and a held button that are not on the viewport; the wheel during a flight, up to both limits; orbiting, with the focus point where it was; the left button without Alt; the dolly; the pan, by the size of a pixel at the focus point; the wheel over the viewport and over another panel; wanting the mouse during each way of steering and not otherwise; F with something selected, with nothing, and typed into a field; and the entry of the Edit menu. The command with one entity, with entities given, with meshes below an entity that shows nothing, with nothing that has a mesh, and with every way of having nothing to look at. And the window in memory taking and giving back the mouse.
+
+## D-060: The engine has a cube, a sphere and a plane built in
+
+**Status:** Accepted.
+
+**Context.** A scene keeps only what has an asset path (D-043), and asset paths named files of the content directory. So nothing could be put into a scene and saved without a model file to import first, and an editor without a project could show nothing at all. Every editor has a few shapes to block a scene out with.
+
+**Decision.**
+
+- **Three meshes are assets of the engine itself:** `Engine/Shapes#Cube`, `Engine/Shapes#Sphere` and `Engine/Shapes#Plane` (`FAssetManager::CubeShape` and so on). They are made by `FMeshShapes` when first asked for, are no files, and need no content directory, so they also work in an editor that has no project and in a test that has no directory.
+- **They are named like every other asset,** a file and a key, the file being `Engine/Shapes`. Nothing that refers to assets has to know that they are special: a component's property takes the path, a scene file writes it, `FAssetManager::Load` returns the mesh, and the package keeps the three together like the assets of a file. The name means the engine's whatever is in the content directory; a file `Engine/Shapes` there, which has no ending that a loadable file has, is not looked at.
+- **Each is one metre across and centred on its origin,** the plane lying flat and facing up. The scale of the entity that shows one is then its size in metres, and one mesh serves for every box and ball of a scene.
+- **They stay loaded when the content directory changes,** because nothing about them depends on it.
+- **`Asset.List` and `Asset.Describe` cover them,** with or without a project, so that an agent finds them where it looks for assets.
+
+**Alternatives considered.** A small file per shape in every project (`Shapes/Cube.shape`) keeps the rule that an asset is a file, at the price of a file format of our own and of files that every project has to have and can lose. Shapes as a kind of component that makes its own mesh would need no asset, and would not be a mesh that anything else can refer to. A separate way to name built-in assets, such as a prefix that no file name can have, would have to be taught to everything that reads an asset path.
+
+**Limits.** There are three shapes; a cylinder, a cone and a capsule wait for `FMeshShapes` to make them. There is no built-in material: a mesh without one is drawn white.
+
+**Testing.** That each shape loads without a content directory, knows its path, and has the bounds of one metre; that the three are one package, loaded once; the errors for a shape that does not exist, for the file without a key and for the wrong class; that the shapes survive a change of the content directory and that a file of the same name does not replace them; that a scene with a cube is saved with the path and loaded again without a content directory; and the two commands, without a project and with one.

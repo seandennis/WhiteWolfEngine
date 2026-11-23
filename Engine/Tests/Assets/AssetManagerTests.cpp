@@ -311,7 +311,98 @@ TEST_SUITE("FAssetManager")
 		CHECK(Error == "\"Square.gltf#Materials/0\" names one asset of a file, where the file is wanted");
 	}
 
-	TEST_CASE("Without a content directory nothing can be loaded")
+	TEST_CASE("The built-in shapes are assets that need no file and no content directory")
+	{
+		const FScopedObjectTest ObjectTest;
+		REQUIRE(FAssetManager::GetContentDirectory().empty());
+		std::string Error;
+
+		WStaticMesh* const Cube = FAssetManager::Load<WStaticMesh>(FAssetManager::CubeShape, Error);
+		INFO("Error: ", Error);
+		REQUIRE(Cube != nullptr);
+		const FScopedRoot Root(Cube);
+		const WStaticMesh* const Sphere = FAssetManager::Load<WStaticMesh>("Engine/Shapes#Sphere", Error);
+		REQUIRE(Sphere != nullptr);
+		const WStaticMesh* const Plane = FAssetManager::Load<WStaticMesh>(FAssetManager::PlaneShape, Error);
+		REQUIRE(Plane != nullptr);
+
+		// Each knows its name, which is what a scene file writes for it.
+		CHECK(Cube->GetAssetPath() == "Engine/Shapes#Cube");
+		CHECK(Sphere->GetAssetPath() == "Engine/Shapes#Sphere");
+		CHECK(Plane->GetAssetPath() == "Engine/Shapes#Plane");
+
+		// One metre each way, around the origin: the scale of an entity is then the size of what it shows.
+		CHECK(Cube->GetBounds().Min == FVector3f(-0.5f));
+		CHECK(Cube->GetBounds().Max == FVector3f(0.5f));
+		constexpr float Tolerance = 1.0e-5f;
+		CHECK(Sphere->GetBounds().Min.y == doctest::Approx(-0.5f).epsilon(Tolerance));
+		CHECK(Sphere->GetBounds().Max.y == doctest::Approx(0.5f).epsilon(Tolerance));
+		CHECK(Sphere->GetBounds().Max.x == doctest::Approx(0.5f).epsilon(Tolerance));
+		// The plane lies flat.
+		CHECK(Plane->GetBounds().Min == FVector3f(-0.5f, 0.0f, -0.5f));
+		CHECK(Plane->GetBounds().Max == FVector3f(0.5f, 0.0f, 0.5f));
+	}
+
+	TEST_CASE("The built-in shapes are the assets of one file, loaded once while any of them is used")
+	{
+		const FScopedObjectTest ObjectTest;
+		std::string Error;
+
+		WAssetPackage* const Package = FAssetManager::LoadPackage(FAssetManager::ShapesFile, Error);
+		INFO("Error: ", Error);
+		REQUIRE(Package != nullptr);
+		const FScopedRoot Root(Package);
+
+		CHECK(Package->GetFile() == "Engine/Shapes");
+		const std::vector<std::string> ExpectedKeys = {"Cube", "Sphere", "Plane"};
+		CHECK(Package->GetKeys() == ExpectedKeys);
+		CHECK(Package->GetWarnings().empty());
+		CHECK(FAssetManager::Load("Engine/Shapes#Cube", Error) == Package->FindAsset("Cube"));
+		CHECK(FAssetManager::LoadPackage("Engine/Shapes", Error) == Package);
+
+		CHECK(FAssetManager::IsBuiltInFile("Engine/Shapes"));
+		CHECK_FALSE(FAssetManager::IsBuiltInFile("Engine/Shapes.glb"));
+		CHECK_FALSE(FAssetManager::IsBuiltInFile("Shapes"));
+		CHECK_FALSE(FAssetManager::IsBuiltInFile(""));
+		CHECK(FAssetManager::GetBuiltInFiles() == std::vector<std::string>{"Engine/Shapes"});
+	}
+
+	TEST_CASE("A shape that the engine does not have is an error that names it")
+	{
+		const FScopedObjectTest ObjectTest;
+		std::string Error;
+
+		CHECK(FAssetManager::Load("Engine/Shapes#Teapot", Error) == nullptr);
+		CHECK(Error == "the file \"Engine/Shapes\" has no asset \"Teapot\"");
+
+		// The file by itself is no shape.
+		CHECK(FAssetManager::Load("Engine/Shapes", Error) == nullptr);
+		CHECK(Error == "the file \"Engine/Shapes\" has no asset \"\"");
+
+		CHECK(FAssetManager::Load<WTexture>("Engine/Shapes#Cube", Error) == nullptr);
+		CHECK(Error == "the asset \"Engine/Shapes#Cube\" is a WStaticMesh, not a WTexture");
+	}
+
+	TEST_CASE("The built-in shapes stay loaded when the content directory changes")
+	{
+		const FScopedObjectTest ObjectTest;
+		std::string Error;
+		WAsset* const Cube = FAssetManager::Load(FAssetManager::CubeShape, Error);
+		const FScopedRoot Root(Cube);
+
+		{
+			const FScopedContentDirectory Content;
+			CHECK(FAssetManager::Load(FAssetManager::CubeShape, Error) == Cube);
+
+			// A file of the content directory cannot take the place of the engine's.
+			std::filesystem::create_directories(Content.GetPath() / "Engine");
+			Content.WriteText("Engine/Shapes", "not a shape");
+			CHECK(FAssetManager::Load(FAssetManager::CubeShape, Error) == Cube);
+		}
+		CHECK(FAssetManager::Load(FAssetManager::CubeShape, Error) == Cube);
+	}
+
+	TEST_CASE("Without a content directory nothing of one can be loaded")
 	{
 		const FScopedObjectTest ObjectTest;
 		REQUIRE(FAssetManager::GetContentDirectory().empty());

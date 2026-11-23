@@ -131,7 +131,7 @@ namespace
 
 TEST_SUITE("Asset commands")
 {
-	TEST_CASE("The asset commands fail while no project is open")
+	TEST_CASE("The commands for the assets of a project fail while no project is open")
 	{
 		const FScopedEditorTest EditorTest;
 		FEditor Editor;
@@ -140,7 +140,6 @@ TEST_SUITE("Asset commands")
 
 		for (const FCommandResult& Result : {
 				 Editor.ExecuteCommand("Asset.Import", ParseTestJson(R"({"Source": "Wood.png"})")),
-				 Editor.ExecuteCommand("Asset.List", FJsonValue()),
 				 Editor.ExecuteCommand("Asset.Describe", ParseTestJson(R"({"File": "Wood.png"})")),
 				 Editor.ExecuteCommand("Asset.Place", ParseTestJson(R"({"File": "Crate.glb"})")),
 			 })
@@ -148,6 +147,41 @@ TEST_SUITE("Asset commands")
 			CHECK_FALSE(Result.HasSucceeded());
 			CHECK(Result.GetError() == ExpectedError);
 		}
+	}
+
+	TEST_CASE("What the engine has built in is listed, described and used without a project")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+
+		const FCommandResult List = Editor.ExecuteCommand("Asset.List", FJsonValue());
+		REQUIRE(List.HasSucceeded());
+		CHECK(WriteTestJson(List.GetValue()) == R"(["Engine/Shapes"])");
+
+		const FCommandResult Description =
+			Editor.ExecuteCommand("Asset.Describe", ParseTestJson(R"({"File": "Engine/Shapes"})"));
+		REQUIRE(Description.HasSucceeded());
+		CHECK(WriteTestJson(Description.GetValue()) ==
+			R"({"File":"Engine/Shapes","Assets":[{"Path":"Engine/Shapes#Cube","Class":"WStaticMesh"},)"
+			R"({"Path":"Engine/Shapes#Sphere","Class":"WStaticMesh"},)"
+			R"({"Path":"Engine/Shapes#Plane","Class":"WStaticMesh"}],"Warnings":[]})");
+
+		// The paths are what a component's property takes.
+		WEntity* const Entity = Editor.GetScene().CreateEntity("Ball");
+		const WStaticMeshComponent* const Component = Entity->AddComponent<WStaticMeshComponent>();
+		REQUIRE(Editor
+					.ExecuteCommand("Object.SetProperty",
+						ParseTestJson(
+							std::format(R"({{"Object": {}, "Property": "Mesh", "Value": "Engine/Shapes#Sphere"}})",
+								Component->GetId())))
+					.HasSucceeded());
+		REQUIRE(Component->Mesh != nullptr);
+		CHECK(Component->Mesh->GetAssetPath() == "Engine/Shapes#Sphere");
+
+		// A model of the engine's cannot be placed like a model of the project: it is one mesh, not a scene.
+		const FCommandResult Placed =
+			Editor.ExecuteCommand("Asset.Place", ParseTestJson(R"({"File": "Engine/Shapes"})"));
+		CHECK_FALSE(Placed.HasSucceeded());
 	}
 
 	TEST_CASE("Asset.Import copies a picture into a folder of the project and says which assets it is")
@@ -311,10 +345,10 @@ TEST_SUITE("Asset commands")
 		}
 	}
 
-	TEST_CASE("Asset.List returns the asset files of the project in the order of their names")
+	TEST_CASE("Asset.List returns the asset files of the project and the built-in ones, in the order of their names")
 	{
 		FAssetCommandTest Test;
-		CHECK(WriteTestJson(Test.Execute("Asset.List").GetValue()) == "[]");
+		CHECK(WriteTestJson(Test.Execute("Asset.List").GetValue()) == R"(["Engine/Shapes"])");
 
 		REQUIRE(Test.Import(Test.WritePicture("Wood.png"), "Textures").HasSucceeded());
 		REQUIRE(Test.Import(Test.WriteSquare("Square.gltf"), "Models").HasSucceeded());
@@ -325,7 +359,8 @@ TEST_SUITE("Asset commands")
 		const FCommandResult Result = Test.Execute("Asset.List");
 
 		REQUIRE(Result.HasSucceeded());
-		CHECK(WriteTestJson(Result.GetValue()) == R"(["Evening.hdr","Models/Square.gltf","Textures/Wood.png"])");
+		CHECK(WriteTestJson(Result.GetValue()) ==
+			R"(["Engine/Shapes","Evening.hdr","Models/Square.gltf","Textures/Wood.png"])");
 	}
 
 	TEST_CASE("Asset.Describe returns the assets of a file of the project")

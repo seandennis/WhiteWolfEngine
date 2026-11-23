@@ -3,6 +3,7 @@
 #include "Assets/AssetPackage.h"
 #include "Assets/AssetPath.h"
 #include "Core/FileHelper.h"
+#include "Math/Vector.h"
 #include "Object/ObjectGlobals.h"
 #include "Object/WeakObjectPtr.h"
 #include "Rendering/EnvironmentMap.h"
@@ -10,6 +11,8 @@
 #include "Rendering/HdrImage.h"
 #include "Rendering/Image.h"
 #include "Rendering/ImageFile.h"
+#include "Rendering/MeshShapes.h"
+#include "Rendering/StaticMesh.h"
 #include "Rendering/Texture.h"
 #include "Rendering/TextureColorSpace.h"
 
@@ -73,13 +76,89 @@ namespace
 		}
 		return EAssetFileKind::Unknown;
 	}
+
+	/**
+	 * The size of the built-in shapes, in metres: one, so that the scale of an entity that shows one is the size
+	 * of what it shows.
+	 */
+	constexpr float ShapeSize = 1.0f;
+
+	/** Makes the built-in shapes, each under the key that its asset path gives it. */
+	void MakeShapes(std::vector<std::pair<std::string, WAsset*>>& OutAssets)
+	{
+		const auto AddShape = [&OutAssets](std::string_view Path, WStaticMesh* Mesh)
+		{
+			std::string Error;
+			const std::optional<FAssetPath> AssetPath = FAssetPath::Parse(Path, Error);
+			const bool bIsShape =
+				AssetPath.has_value() && AssetPath->File == FAssetManager::ShapesFile && Mesh != nullptr;
+			WW_CHECKF(bIsShape, "The built-in shape '{}' could not be made", Path);
+			OutAssets.emplace_back(AssetPath->Key, Mesh);
+		};
+
+		AddShape(FAssetManager::CubeShape, FMeshShapes::CreateBox(FVector3f(ShapeSize)));
+		AddShape(FAssetManager::SphereShape, FMeshShapes::CreateSphere(ShapeSize * 0.5f));
+		AddShape(FAssetManager::PlaneShape, FMeshShapes::CreatePlane(ShapeSize, ShapeSize));
+	}
+
+	/**
+	 * Reads the assets of a file of the content directory.
+	 *
+	 * @param OutAssets Receives the assets that the file holds at once, each with its key. A picture holds none
+	 * until a texture is asked for.
+	 * @return False, with the reason in OutError, if the file is of no kind that holds assets, is not there or
+	 * cannot be read.
+	 */
+	bool ReadAssetFile(const std::string& File,
+		std::vector<std::pair<std::string, WAsset*>>& OutAssets,
+		std::vector<std::string>& OutWarnings,
+		std::string& OutError)
+	{
+		const std::filesystem::path Path = FAssetManager::GetPathOfAssetFile(File);
+		const EAssetFileKind Kind = GetFileKind(Path);
+		if (Kind == EAssetFileKind::Unknown)
+		{
+			OutError = std::format("\"{}\" is not a kind of file that holds assets", File);
+			return false;
+		}
+		std::error_code ErrorCode;
+		if (!std::filesystem::is_regular_file(Path, ErrorCode))
+		{
+			OutError = std::format("the content directory has no file \"{}\"", File);
+			return false;
+		}
+
+		if (Kind == EAssetFileKind::Gltf)
+		{
+			return FGltfImporter::LoadAssets(Path, OutAssets, OutError, &OutWarnings);
+		}
+		if (Kind == EAssetFileKind::Environment)
+		{
+			FHdrImage Image;
+			if (!FImageFile::LoadHdr(Path, Image, OutError))
+			{
+				return false;
+			}
+			WEnvironmentMap* const Environment = NewObject<WEnvironmentMap>();
+			if (!Environment->SetImage(std::move(Image), OutError))
+			{
+				return false;
+			}
+			OutAssets.emplace_back(std::string(), Environment);
+		}
+		return true;
+	}
 }
 
 void FAssetManager::SetContentDirectory(std::filesystem::path Directory)
 {
 	FAssetManagerState& State = GetState();
 	State.ContentDirectory = std::move(Directory);
-	State.Packages.clear();
+
+	// What the engine has built in is the same whatever the content directory is, and stays loaded.
+	std::erase_if(State.Packages,
+		[](const std::pair<const std::string, TWeakObjectPtr<WAssetPackage>>& Entry)
+		{ return !IsBuiltInFile(Entry.first); });
 }
 
 const std::filesystem::path& FAssetManager::GetContentDirectory()
@@ -136,6 +215,16 @@ bool FAssetManager::IsAssetFile(const std::filesystem::path& Path)
 	return GetFileKind(Path) != EAssetFileKind::Unknown;
 }
 
+bool FAssetManager::IsBuiltInFile(std::string_view File)
+{
+	return File == ShapesFile;
+}
+
+std::vector<std::string> FAssetManager::GetBuiltInFiles()
+{
+	return {std::string(ShapesFile)};
+}
+
 std::optional<std::string> FAssetManager::GetAssetFileOfPath(const std::filesystem::path& Path)
 {
 	const std::filesystem::path& ContentDirectory = GetState().ContentDirectory;
@@ -180,7 +269,8 @@ std::filesystem::path FAssetManager::GetPathOfAssetFile(std::string_view File)
 WAssetPackage* FAssetManager::FindOrLoadPackage(const std::string& File, std::string& OutError)
 {
 	FAssetManagerState& State = GetState();
-	if (State.ContentDirectory.empty())
+	const bool bIsBuiltIn = IsBuiltInFile(File);
+	if (!bIsBuiltIn && State.ContentDirectory.empty())
 	{
 		OutError = std::format("the asset file \"{}\" cannot be loaded: there is no content directory", File);
 		return nullptr;
@@ -195,42 +285,15 @@ WAssetPackage* FAssetManager::FindOrLoadPackage(const std::string& File, std::st
 		}
 	}
 
-	const std::filesystem::path Path = GetPathOfAssetFile(File);
-	const EAssetFileKind Kind = GetFileKind(Path);
-	if (Kind == EAssetFileKind::Unknown)
-	{
-		OutError = std::format("\"{}\" is not a kind of file that holds assets", File);
-		return nullptr;
-	}
-	std::error_code ErrorCode;
-	if (!std::filesystem::is_regular_file(Path, ErrorCode))
-	{
-		OutError = std::format("the content directory has no file \"{}\"", File);
-		return nullptr;
-	}
-
 	std::vector<std::pair<std::string, WAsset*>> Assets;
 	std::vector<std::string> Warnings;
-	if (Kind == EAssetFileKind::Gltf)
+	if (bIsBuiltIn)
 	{
-		if (!FGltfImporter::LoadAssets(Path, Assets, OutError, &Warnings))
-		{
-			return nullptr;
-		}
+		MakeShapes(Assets);
 	}
-	else if (Kind == EAssetFileKind::Environment)
+	else if (!ReadAssetFile(File, Assets, Warnings, OutError))
 	{
-		FHdrImage Image;
-		if (!FImageFile::LoadHdr(Path, Image, OutError))
-		{
-			return nullptr;
-		}
-		WEnvironmentMap* const Environment = NewObject<WEnvironmentMap>();
-		if (!Environment->SetImage(std::move(Image), OutError))
-		{
-			return nullptr;
-		}
-		Assets.emplace_back(std::string(), Environment);
+		return nullptr;
 	}
 
 	WAssetPackage* const Package = NewObject<WAssetPackage>();

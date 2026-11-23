@@ -114,6 +114,38 @@ TEST_SUITE("FSceneSerializer asset references")
 		CHECK(Components[0]->Material->GetAssetPath() == "Models/Square.gltf#Materials/0");
 	}
 
+	TEST_CASE("A built-in shape is saved as its path and loaded again, without a content directory")
+	{
+		const FScopedSceneTest SceneTest;
+		const FScopedLogCapture Capture;
+		REQUIRE(FAssetManager::GetContentDirectory().empty());
+		std::string Error;
+		std::string Text;
+		{
+			const FScopedTestScene Scene;
+			WStaticMeshComponent* const Component = Scene->CreateEntity("Crate")->AddComponent<WStaticMeshComponent>();
+			Component->Mesh = FAssetManager::Load<WStaticMesh>(FAssetManager::CubeShape, Error);
+			REQUIRE(Component->Mesh != nullptr);
+
+			Text = FSceneSerializer::SaveToText(*Scene.Get());
+		}
+		CHECK(Text.find("\"Mesh\": \"Engine/Shapes#Cube\"") != std::string::npos);
+
+		std::vector<std::string> Warnings;
+		const WScene* const Loaded = FSceneSerializer::LoadFromText(Text, Error, &Warnings);
+
+		INFO("Error: ", Error);
+		REQUIRE(Loaded != nullptr);
+		CHECK(Warnings.empty());
+		const std::vector<WStaticMeshComponent*> Components = Loaded->GetComponents<WStaticMeshComponent>();
+		REQUIRE(Components.size() == 1);
+		REQUIRE(Components[0]->Mesh != nullptr);
+		CHECK(Components[0]->Mesh->GetAssetPath() == "Engine/Shapes#Cube");
+		CHECK(Components[0]->Mesh->HasGeometry());
+		CHECK(FSceneSerializer::SaveToText(*Loaded) == Text);
+		CHECK(CountLoggedProblems(Capture) == 0);
+	}
+
 	TEST_CASE("A scene with asset references is the same text after it has been saved, loaded and saved again")
 	{
 		const FScopedSceneTest SceneTest;
