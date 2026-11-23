@@ -21,6 +21,7 @@
 #include "Scene/SceneSerializer.h"
 
 #include <algorithm>
+#include <system_error>
 #include <utility>
 
 constinit FLogCategory LogEditor("LogEditor", ELogVerbosity::Log);
@@ -120,10 +121,66 @@ void FEditor::SetProject(FProject NewProject)
 	FAssetManager::SetContentDirectory(NewProject.GetContentDirectory());
 	Project = std::move(NewProject);
 
+	// Another editor may have written the settings since this one read them: what it remembered is kept.
+	ReadSettings();
+	Settings.AddRecentProject(Project->GetFile());
+	WriteSettings();
+
 	// The scene of another project, or of none, has nothing to do with this one's assets.
 	WScene* const EmptyScene = NewObject<WScene>();
 	EmptyScene->SetName(std::string(DefaultSceneName));
 	SetScene(*EmptyScene, std::filesystem::path());
+}
+
+std::vector<FProject> FEditor::FindRecentProjects() const
+{
+	std::vector<FProject> RecentProjects;
+	for (const std::filesystem::path& File : Settings.GetRecentProjects())
+	{
+		// Why a project cannot be opened does not matter here: it is not one to offer.
+		std::string IgnoredError;
+		if (std::optional<FProject> RecentProject = FProject::Open(File, IgnoredError))
+		{
+			RecentProjects.push_back(std::move(*RecentProject));
+		}
+	}
+	return RecentProjects;
+}
+
+void FEditor::SetSettingsFile(std::filesystem::path File)
+{
+	SettingsFile = std::move(File);
+	ReadSettings();
+}
+
+void FEditor::ReadSettings()
+{
+	// Settings that were never written are no failure: the editor has not remembered anything yet.
+	std::error_code ErrorCode;
+	if (SettingsFile.empty() || !std::filesystem::exists(SettingsFile, ErrorCode))
+	{
+		return;
+	}
+
+	std::string Error;
+	std::optional<FEditorSettings> Loaded = FEditorSettings::Load(SettingsFile, Error);
+	if (Loaded.has_value())
+	{
+		Settings = std::move(*Loaded);
+	}
+	else
+	{
+		WW_LOG(LogEditor, Warning, "The editor's settings were not read: {}", Error);
+	}
+}
+
+void FEditor::WriteSettings() const
+{
+	std::string Error;
+	if (!SettingsFile.empty() && !Settings.Save(SettingsFile, Error))
+	{
+		WW_LOG(LogEditor, Warning, "The editor's settings were not written: {}", Error);
+	}
 }
 
 std::vector<int64> FEditor::GetSelection() const

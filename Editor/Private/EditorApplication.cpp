@@ -14,6 +14,7 @@
 #include "Rendering/Image.h"
 #include "Rendering/ImageFile.h"
 #include "Rendering/RenderTarget.h"
+#include "Settings/EditorSettings.h"
 
 #include <chrono>
 #include <filesystem>
@@ -148,6 +149,10 @@ namespace
 				}
 				else
 				{
+					// The editor that a person works in remembers which projects were opened, from one run to the
+					// next. A picture of the editor is the same whoever has it taken.
+					Editor.SetSettingsFile(FEditorSettings::GetUserFile());
+
 					const bool bSucceeded = RunFrames(*Window, std::nullopt, std::nullopt, ErrorOutput);
 					ExitCode = bSucceeded ? SuccessExitCode : FailureExitCode;
 				}

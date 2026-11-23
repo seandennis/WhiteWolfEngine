@@ -8,6 +8,7 @@
 #include "Object/WeakObjectPtr.h"
 #include "Project/Project.h"
 #include "Rendering/SceneViewMode.h"
+#include "Settings/EditorSettings.h"
 #include "Viewport/ViewportCamera.h"
 
 #include <filesystem>
@@ -32,7 +33,8 @@ extern EDITOR_API FLogCategory LogEditor;
  * An editor always has a scene: an empty one called "Untitled" to begin with. The editor keeps its scene alive.
  * It may have a project (FProject), which is where the assets that scenes refer to are. It knows which entities
  * of the scene are selected, the ones that the user is working on, and from where the scene is looked at: the
- * camera of the viewport, which is the user's eye and not something in the scene.
+ * camera of the viewport, which is the user's eye and not something in the scene. And it remembers which projects
+ * were opened last (FEditorSettings), from one run to the next if it is given a file to keep that in.
  *
  * Every change to the scene can be undone. After each command that can change the scene (ECommandEffect), the
  * editor writes the scene down, and if it differs from what it was, that is a step of the history; Undo and Redo
@@ -204,9 +206,42 @@ public:
 	/**
 	 * Makes a project the one being worked on. Its content directory becomes the directory that asset paths are
 	 * relative to (FAssetManager), and the scene is replaced by an empty one, with a history that starts anew. The
-	 * editor gives the content directory up again when it is destroyed.
+	 * editor gives the content directory up again when it is destroyed. The project becomes the first of the
+	 * projects that the settings remember as opened last.
 	 */
 	EDITOR_API void SetProject(FProject NewProject);
+
+	/** Returns what the editor remembers from one run to the next; see SetSettingsFile. */
+	const FEditorSettings& GetSettings() const
+	{
+		return Settings;
+	}
+
+	/**
+	 * Returns those of the projects that were opened last which are still there to be opened, the most recent
+	 * first: what to offer a user who wants to go on where they left off. A project that was moved or deleted
+	 * since is not among them, but is not forgotten either, and is back when its file is.
+	 *
+	 * The project files are read to find out. Ask when the answer is needed, not in every frame.
+	 */
+	EDITOR_API std::vector<FProject> FindRecentProjects() const;
+
+	/**
+	 * Has the editor keep its settings in a file: they are read from it now, if it is there, and written to it
+	 * whenever they change. Before they change they are read again, so that what another editor has written
+	 * there in the meantime is not lost.
+	 *
+	 * An editor that is given no file remembers for as long as it exists and no longer. That is what a test or a
+	 * tool wants; the settings of the person who is logged in (FEditorSettings::GetUserFile) are for the editor
+	 * that this person works in.
+	 *
+	 * A file that cannot be read as settings, or cannot be written, is reported in the log as a warning. The
+	 * editor then goes on with what it remembers, and one that could not be read is replaced when the settings
+	 * next change.
+	 *
+	 * @param File The file, which need not exist yet. An empty path ends the keeping of settings in a file.
+	 */
+	EDITOR_API void SetSettingsFile(std::filesystem::path File);
 
 	/**
 	 * Returns the file that a path given to a command means: a relative path is relative to the content directory
@@ -235,6 +270,12 @@ private:
 	/** Makes NewScene the scene being edited and destroys the one it replaces. */
 	void ReplaceScene(WScene& NewScene);
 
+	/** Reads the settings from their file, if they are kept in one and it is there. */
+	void ReadSettings();
+
+	/** Writes the settings to their file, if they are kept in one. */
+	void WriteSettings() const;
+
 	FCommandRegistry Commands;
 
 	FUndoHistory History;
@@ -255,4 +296,9 @@ private:
 	ESceneViewMode ViewMode = ESceneViewMode::Lit;
 
 	std::optional<FProject> Project;
+
+	FEditorSettings Settings;
+
+	/** The file the settings are kept in; empty if they are kept nowhere. */
+	std::filesystem::path SettingsFile;
 };

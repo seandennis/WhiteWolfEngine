@@ -15,6 +15,10 @@
  * WhiteWolfEditor --screenshot <file>  draws the editor without a window or a display and saves the picture as a
  *                                      PNG file, of the size the editor's window opens with
  * WhiteWolfEditor --help               prints how to start the editor
+ *
+ * Only the editor in its window on the desktop reads and writes the settings of the person who is logged in
+ * (FEditorSettings::GetUserFile), which is where the projects that were opened last are remembered. An agent's
+ * session and a screenshot leave them alone, and are the same whoever starts them.
  */
 class FEditorApplication
 {
