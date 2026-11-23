@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Core/FileHelper.h"
 #include "Editor.h"
 #include "Input/InputEvent.h"
 #include "Input/InputState.h"
@@ -18,11 +19,27 @@
 
 #include <doctest/doctest.h>
 
+#include <filesystem>
 #include <initializer_list>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+
+/**
+ * Gives an editor a new project called "Game" in a directory, and returns the project's content directory.
+ * Whatever the editor had in its scene is gone, as it is when a project is opened.
+ */
+inline std::filesystem::path CreateTestProject(FEditor& Editor, const std::filesystem::path& Directory)
+{
+	FJsonValue Arguments = FJsonValue::MakeObject();
+	Arguments.SetMember("Directory", FFileHelper::PathToUtf8(Directory / "Game"));
+	Arguments.SetMember("Name", "Game");
+	const FCommandResult Result = Editor.ExecuteCommand("Project.New", Arguments);
+	INFO("Error: ", Result.GetError());
+	REQUIRE(Result.HasSucceeded());
+	return Directory / "Game" / "Content";
+}
 
 /**
  * An editor with its user interface, for one test: drawn onto a surface of the test's own, with rendering

@@ -236,6 +236,51 @@ TEST_SUITE("Scene commands")
 		CHECK(Editor.GetScenePath() == std::filesystem::path("Kept.json"));
 	}
 
+	TEST_CASE("Scene.List returns the scene files of the project, in the order of their names")
+	{
+		const FScopedEditorTest EditorTest;
+		const FScopedTempDirectory Directory;
+		FEditor Editor;
+		FJsonValue ProjectArguments = FJsonValue::MakeObject();
+		ProjectArguments.SetMember("Directory", FFileHelper::PathToUtf8(Directory.GetPath() / "Game"));
+		ProjectArguments.SetMember("Name", "Game");
+		REQUIRE(Editor.ExecuteCommand("Project.New", ProjectArguments).HasSucceeded());
+
+		// A project that has just been made has none.
+		CHECK(WriteTestJson(Editor.ExecuteCommand("Scene.List", FJsonValue()).GetValue()) == "[]");
+
+		REQUIRE(
+			Editor.ExecuteCommand("Scene.Save", ParseTestJson(R"({"Path": "Scenes/Town.wwscene"})")).HasSucceeded());
+		REQUIRE(Editor.ExecuteCommand("Scene.Save", ParseTestJson(R"({"Path": "Menu.wwscene"})")).HasSucceeded());
+		REQUIRE(Editor.ExecuteCommand("Scene.Save", ParseTestJson(R"({"Path": "Scenes/Caves/Deep.wwscene"})"))
+					.HasSucceeded());
+		// A file of another name is a scene to whoever opens it, and not one that is listed.
+		REQUIRE(Editor.ExecuteCommand("Scene.Save", ParseTestJson(R"({"Path": "Scenes/Old.json"})")).HasSucceeded());
+
+		const FCommandResult Result = Editor.ExecuteCommand("Scene.List", FJsonValue());
+
+		REQUIRE(Result.HasSucceeded());
+		CHECK(WriteTestJson(Result.GetValue()) ==
+			R"(["Menu.wwscene","Scenes/Caves/Deep.wwscene","Scenes/Town.wwscene"])");
+
+		// What is listed is what Scene.Open takes.
+		CHECK(Editor.ExecuteCommand("Scene.Open", ParseTestJson(R"({"Path": "Scenes/Caves/Deep.wwscene"})"))
+				  .HasSucceeded());
+	}
+
+	TEST_CASE("Scene.List fails while no project is open")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+
+		const FCommandResult Result = Editor.ExecuteCommand("Scene.List", FJsonValue());
+
+		CHECK_FALSE(Result.HasSucceeded());
+		CHECK(Result.GetError() ==
+			"No project is open, and it is the scenes of a project that are listed. Create one "
+			"with Project.New or open one with Project.Open.");
+	}
+
 	TEST_CASE("Scene.GetHierarchy returns the tree of entities with their components")
 	{
 		const FScopedEditorTest EditorTest;

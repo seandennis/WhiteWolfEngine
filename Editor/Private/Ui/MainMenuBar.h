@@ -2,6 +2,9 @@
 
 #include "CoreMinimal.h"
 
+#include "Ui/Dialogs/OpenSceneDialog.h"
+#include "Ui/Dialogs/SaveSceneDialog.h"
+
 struct FUiFrame;
 
 /**
@@ -21,6 +24,15 @@ private:
 	void DrawHelpMenu(FUiFrame& Frame);
 	void DrawAboutWindow(FUiFrame& Frame);
 
+	/**
+	 * Saves the scene to its file. A scene that has no file yet, or that could not be saved to its file, has the
+	 * user asked where to save it.
+	 */
+	void SaveScene(FUiFrame& Frame);
+
 	/** Set by Help > About: the window that says what the editor is opens in the same frame. */
 	bool bWantsAboutWindow = false;
+
+	FSaveSceneDialog SaveSceneDialog;
+	FOpenSceneDialog OpenSceneDialog;
 };

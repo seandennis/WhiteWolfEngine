@@ -9,6 +9,7 @@
 #include <doctest/doctest.h>
 
 #include <filesystem>
+#include <initializer_list>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -201,6 +202,34 @@ TEST_SUITE("Project commands")
 		CHECK(Editor.ResolveFilePath(std::filesystem::path("Scenes") / "Level1.json") ==
 			std::filesystem::path("Scenes") / "Level1.json");
 		CHECK(Editor.ResolveFilePath(std::filesystem::path()).empty());
+	}
+
+	TEST_CASE("MakeProjectPath names a file of the project's content by its place there, and any other by its path")
+	{
+		const FScopedEditorTest EditorTest;
+		const FScopedTempDirectory Directory;
+		FEditor Editor;
+		const std::filesystem::path Outside = Directory.GetPath() / "Elsewhere" / "Level1.wwscene";
+
+		// Without a project every file is named by its whole path.
+		CHECK(Editor.MakeProjectPath(Outside) == FFileHelper::PathToUtf8(Outside));
+
+		REQUIRE(Editor.ExecuteCommand("Project.New", MakeNewArguments(Directory.GetPath() / "Game", "Game"))
+					.HasSucceeded());
+		const std::filesystem::path Content = Directory.GetPath() / "Game" / "Content";
+
+		CHECK(Editor.MakeProjectPath(Content / "Level1.wwscene") == "Level1.wwscene");
+		CHECK(Editor.MakeProjectPath(Content / "Scenes" / "Caves" / "Deep.wwscene") == "Scenes/Caves/Deep.wwscene");
+		CHECK(Editor.MakeProjectPath(Outside) == FFileHelper::PathToUtf8(Outside));
+		// Beside the content directory is not in it.
+		const std::filesystem::path Beside = Directory.GetPath() / "Game" / "Notes.txt";
+		CHECK(Editor.MakeProjectPath(Beside) == FFileHelper::PathToUtf8(Beside));
+
+		// What it returns is what ResolveFilePath makes the file of again.
+		for (const std::filesystem::path& File : {Content / "Scenes" / "Town.wwscene", Outside, Beside})
+		{
+			CHECK(Editor.ResolveFilePath(FFileHelper::PathFromUtf8(Editor.MakeProjectPath(File))) == File);
+		}
 	}
 
 	TEST_CASE("SetProject of another project moves the content directory to it")

@@ -128,6 +128,45 @@ void FUiCommands::NewScene(FEditor& Editor)
 	Editor.ExecuteCommand("Scene.New", FJsonValue());
 }
 
+FCommandResult FUiCommands::SaveScene(FEditor& Editor)
+{
+	return Editor.ExecuteCommand("Scene.Save", FJsonValue());
+}
+
+FCommandResult FUiCommands::SaveSceneAs(FEditor& Editor, const std::string& Path)
+{
+	FJsonValue Arguments = FJsonValue::MakeObject();
+	Arguments.SetMember("Path", Path);
+	return Editor.ExecuteCommand("Scene.Save", Arguments);
+}
+
+FCommandResult FUiCommands::OpenScene(FEditor& Editor, const std::string& Path)
+{
+	FJsonValue Arguments = FJsonValue::MakeObject();
+	Arguments.SetMember("Path", Path);
+	return Editor.ExecuteCommand("Scene.Open", Arguments);
+}
+
+std::vector<std::string> FUiCommands::ListScenes(FEditor& Editor)
+{
+	std::vector<std::string> Scenes;
+	// Without a project there are no scenes of one to list, which the command would say by failing.
+	if (Editor.GetProject() == nullptr)
+	{
+		return Scenes;
+	}
+
+	const FCommandResult Result = Editor.ExecuteCommand("Scene.List", FJsonValue());
+	if (Result.HasSucceeded())
+	{
+		for (const FJsonValue& Scene : Result.GetValue().GetElements())
+		{
+			Scenes.push_back(Scene.GetString());
+		}
+	}
+	return Scenes;
+}
+
 void FUiCommands::Undo(FEditor& Editor)
 {
 	Editor.ExecuteCommand("Edit.Undo", FJsonValue());

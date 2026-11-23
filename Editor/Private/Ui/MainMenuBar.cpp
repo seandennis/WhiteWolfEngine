@@ -1,5 +1,6 @@
 #include "Ui/MainMenuBar.h"
 
+#include "Commands/CommandResult.h"
 #include "Core/EngineVersion.h"
 #include "Editor.h"
 #include "Ui/ImGuiLibrary.h"
@@ -85,6 +86,19 @@ void FMainMenuBar::Draw(FUiFrame& Frame)
 			{
 				FUiCommands::NewScene(Frame.Editor);
 			}
+			if (IsShortcutPressed(ImGuiMod_Ctrl | ImGuiKey_O))
+			{
+				OpenSceneDialog.Open(Frame.Editor);
+			}
+			if (IsShortcutPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S))
+			{
+				SaveSceneDialog.Open(Frame.Editor);
+			}
+			// What another part of the user interface asked for, such as the toolbar's button, is done here too.
+			if (IsShortcutPressed(ImGuiMod_Ctrl | ImGuiKey_S) || Frame.Requests.bSaveScene)
+			{
+				SaveScene(Frame);
+			}
 			if (IsShortcutPressed(ImGuiMod_Ctrl | ImGuiKey_Z))
 			{
 				FUiCommands::Undo(Frame.Editor);
@@ -118,8 +132,28 @@ void FMainMenuBar::Draw(FUiFrame& Frame)
 		DrawHelpMenu(Frame);
 		ImGui::EndMainMenuBar();
 	}
+	// A request that came while a window had to be answered is dropped with it, not kept for later.
+	Frame.Requests.bSaveScene = false;
 
 	DrawAboutWindow(Frame);
+	SaveSceneDialog.Draw(Frame);
+	OpenSceneDialog.Draw(Frame);
+}
+
+void FMainMenuBar::SaveScene(FUiFrame& Frame)
+{
+	if (Frame.Editor.GetScenePath().empty())
+	{
+		SaveSceneDialog.Open(Frame.Editor);
+		return;
+	}
+
+	// A scene that cannot be saved must not look saved: the user is told, and asked for another place.
+	const FCommandResult Result = FUiCommands::SaveScene(Frame.Editor);
+	if (!Result.HasSucceeded())
+	{
+		SaveSceneDialog.Open(Frame.Editor, Result.GetError());
+	}
 }
 
 void FMainMenuBar::DrawFileMenu(FUiFrame& Frame)
@@ -132,6 +166,19 @@ void FMainMenuBar::DrawFileMenu(FUiFrame& Frame)
 	if (MenuEntry(Frame, "File", "New Scene", "Ctrl+N"))
 	{
 		FUiCommands::NewScene(Frame.Editor);
+	}
+	if (MenuEntry(Frame, "File", "Open Scene...", "Ctrl+O"))
+	{
+		OpenSceneDialog.Open(Frame.Editor);
+	}
+	ImGui::Separator();
+	if (MenuEntry(Frame, "File", "Save Scene", "Ctrl+S"))
+	{
+		SaveScene(Frame);
+	}
+	if (MenuEntry(Frame, "File", "Save Scene As...", "Ctrl+Shift+S"))
+	{
+		SaveSceneDialog.Open(Frame.Editor);
 	}
 	ImGui::EndMenu();
 }

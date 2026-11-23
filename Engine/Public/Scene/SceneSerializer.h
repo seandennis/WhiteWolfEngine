@@ -52,6 +52,12 @@ public:
 	/** The format version this build writes, and the newest one it reads. */
 	static constexpr int32 FormatVersion = 1;
 
+	/**
+	 * The end of the name that a scene file is given, as in "Scenes/Level1.wwscene": how scene files are told from
+	 * the other files of a content directory. A file of any name can be saved to and loaded.
+	 */
+	static constexpr std::string_view FileExtension = ".wwscene";
+
 	/** Returns the scene as a JSON document. */
 	ENGINE_API static FJsonValue SaveToJson(const WScene& Scene);
 

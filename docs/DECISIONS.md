@@ -1116,3 +1116,25 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** A shape is put with its middle at the focus point, not standing on what is there. The sky light is added without an environment, which it needs to light anything. There are no icons yet: the buttons say what they do in words.
 
 **Testing.** With the mouse of `FEditorUiTest`: the cube, with its name, its component and mesh, its place to the centimetre, the selection, the name of the step and one undo; every other line of the list; the sun's direction; that a cube that was added is in the picture of the viewport, in the middle of it; several things added one after another; and the user interface on a surface too small for anything, which must still cover it.
+
+## D-062: Scene files are called .wwscene, and are saved and opened in the editor's window
+
+**Status:** Accepted.
+
+**Context.** A scene could be saved and opened only by a command, to and from a file of any name (D-024, D-045). The editor's window had no way to save what was made in it, and nothing could say which files of a project are scenes.
+
+**Decision.**
+
+- **A scene file ends in `.wwscene`** (`FSceneSerializer::FileExtension`), as a project file ends in `.wwproject`. It is the same JSON text as before. The ending is how scenes are told from the other files of a content directory; `Scene.Save` and `Scene.Open` still take a file of any name.
+- **`Scene.List` returns the scene files of the project,** as paths that `Scene.Open` takes, so that an agent and the Open Scene window find them in the same way.
+- **Ctrl+S, the File menu and the Save button of the toolbar save the scene** to its file. A scene that has none yet, or that cannot be saved to the one it has, has the user asked where: a window with a field for the file, which with a project open is a place in its content (`FEditor::MakeProjectPath` is how a file is shown there). A name without the ending is given it. Saving over another file is said in the window before it is done.
+- **Ctrl+O and the File menu open a scene:** a window with the project's scenes to choose from and a field for the file. A double click opens.
+- **A window that asks stays open until what was asked for has worked.** If the command fails, the window shows the command's sentence in the colour for errors and keeps what was typed. A scene that could not be saved does not look saved.
+- **The windows are laid out with Dear ImGui like everything else,** not the operating system's own file windows: they work in a window in memory, so they are tested like the rest, and they show a project's content as the paths that commands take.
+- **What the operating system says about an error is worded for a sentence** (`FFileHelper::DescribeError`): some systems end their messages with a full stop, which made the editor's sentences end in two.
+
+**Alternatives considered.** The operating system's file windows are what users know, and can go anywhere on the disk; they cannot be opened or answered in a test, and a scene belongs in the content of its project, where a field and a list are enough. Recognising scene files by reading every `.json` file of a project is slow and finds what merely looks like one. Leaving the ending to the user makes files that `Scene.List` cannot find.
+
+**Limits.** Opening a scene, making a new one or closing the editor does not ask about changes that were not saved. The Open window has no folders to go into and no search: it lists every scene of the project. Outside a project a whole path has to be typed. There is no list of the scenes that were opened last.
+
+**Testing.** `Scene.List` with scenes in folders, with a scene of another ending and without a project; `MakeProjectPath` inside the content, beside it, outside it and without a project, and back through `ResolveFilePath`; the wording of operating system errors. In the user interface, with a project in a temporary directory: Ctrl+S on a scene without a file, with one, and when the file cannot be written; Save As to a folder that does not exist yet; Cancel and Escape; a whole path without a project; the toolbar's button and the entries of the File menu; that keys do nothing to the scene while a window asks; Ctrl+O with a click and Open, with a double click, with a typed file, with a file that is not there, cancelled, without a project, and after another scene was saved.

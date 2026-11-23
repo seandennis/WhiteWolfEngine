@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 
+#include "Commands/CommandResult.h"
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -16,14 +18,29 @@ struct FUiNewEntity;
  * A widget does nothing to the scene itself: it gives the editor a command, the same one that an agent or a test
  * would give (D-040). What the user does as one thing is one step of the history, with a name that says what it
  * was (D-054); if the user was in the middle of something else, a change begun with BeginChange, that ends first.
- * A command that fails is reported by the editor in its log, which the user interface shows, so nothing here
- * returns whether it worked.
+ * A command that fails is reported by the editor in its log, which the user interface shows, so most of what is
+ * here does not return whether it worked. What reads or writes files does: the user has to be told at once.
  */
 class FUiCommands
 {
 public:
 	/** Scene.New: replaces the scene being edited with an empty one. */
 	static void NewScene(FEditor& Editor);
+
+	/**
+	 * Scene.Save: writes the scene to its own file. The result says why if the file was not written, which the
+	 * user has to be told and not only the log.
+	 */
+	static FCommandResult SaveScene(FEditor& Editor);
+
+	/** Scene.Save to a file, which becomes the scene's. A relative path is relative to the project's content. */
+	static FCommandResult SaveSceneAs(FEditor& Editor, const std::string& Path);
+
+	/** Scene.Open: replaces the scene being edited with the one in a file. */
+	static FCommandResult OpenScene(FEditor& Editor, const std::string& Path);
+
+	/** Scene.List: returns the scene files of the project, or none if no project is open. */
+	static std::vector<std::string> ListScenes(FEditor& Editor);
 
 	/** Edit.Undo: undoes the last step of the history, if there is one. */
 	static void Undo(FEditor& Editor);

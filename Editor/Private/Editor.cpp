@@ -12,6 +12,7 @@
 #include "Commands/SceneCommands.h"
 #include "Commands/SelectionCommands.h"
 #include "Commands/ViewportCommands.h"
+#include "Core/FileHelper.h"
 #include "Json/JsonFormat.h"
 #include "Json/JsonValue.h"
 #include "Json/JsonWriter.h"
@@ -172,6 +173,22 @@ std::filesystem::path FEditor::ResolveFilePath(const std::filesystem::path& Path
 		return Project->GetContentDirectory() / Path;
 	}
 	return Path;
+}
+
+std::string FEditor::MakeProjectPath(const std::filesystem::path& File) const
+{
+	if (Project.has_value() && File.is_absolute())
+	{
+		// A path that leads out of the content directory begins with "..", and is no path within it.
+		const std::filesystem::path Relative = File.lexically_relative(Project->GetContentDirectory());
+		const bool bIsInContent = !Relative.empty() && Relative.native().front() != '.';
+		if (bIsInContent)
+		{
+			const std::u8string Text = Relative.generic_u8string();
+			return std::string(Text.begin(), Text.end());
+		}
+	}
+	return FFileHelper::PathToUtf8(File);
 }
 
 void FEditor::BeginStep(std::string StepName)

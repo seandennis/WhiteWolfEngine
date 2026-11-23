@@ -215,6 +215,13 @@ public:
 	 */
 	EDITOR_API std::filesystem::path ResolveFilePath(const std::filesystem::path& Path) const;
 
+	/**
+	 * Returns the text that names a file to a command, and to the user: its path relative to the content
+	 * directory of the project, with forward slashes, if the file is inside that directory, and its whole path
+	 * otherwise. ResolveFilePath makes the file of it again.
+	 */
+	EDITOR_API std::string MakeProjectPath(const std::filesystem::path& File) const;
+
 private:
 	/** Returns the scene written down: everything that is saved with it, as the text of the history's states. */
 	std::string WriteSceneState() const;

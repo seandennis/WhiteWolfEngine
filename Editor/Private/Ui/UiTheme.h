@@ -31,6 +31,9 @@ public:
 	 */
 	static FColor GetPartColor(int32 PartIndex);
 
+	/** Returns the colour of text that says that something went wrong. */
+	static FColor GetErrorColor();
+
 	/**
 	 * Makes the headings that are laid out next bands of grey: a heading that opens and closes what is under it
 	 * is not something that is selected, which is what the accent means. PopHeadingColors follows the headings.

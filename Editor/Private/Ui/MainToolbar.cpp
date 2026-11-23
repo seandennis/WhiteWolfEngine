@@ -6,6 +6,7 @@
 #include "Ui/UiFrame.h"
 #include "Ui/UiItems.h"
 #include "Ui/UiNewEntity.h"
+#include "Ui/UiRequests.h"
 
 #include <array>
 #include <format>
@@ -74,6 +75,14 @@ void FMainToolbar::Draw(FUiFrame& Frame)
 	constexpr ImGuiWindowFlags Flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings;
 	if (ImGui::BeginViewportSideBar("##MainToolbar", ImGui::GetMainViewport(), ImGuiDir_Up, Height, Flags))
 	{
+		if (ImGui::Button("Save"))
+		{
+			Frame.Requests.bSaveScene = true;
+		}
+		ImGui::SetItemTooltip("Save the scene (Ctrl+S)");
+		Frame.Items.NameLastItem("Toolbar/Save");
+
+		ImGui::SameLine();
 		if (ImGui::Button("Add"))
 		{
 			ImGui::OpenPopup(AddMenuId);

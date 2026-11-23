@@ -12,4 +12,10 @@ struct FUiRequests
 {
 	/** The entity whose row in the outliner is to turn into a text field for its name. */
 	std::optional<int64> EntityToRename;
+
+	/**
+	 * True if the scene is to be saved, as the Save button of the toolbar asks: to its file, or, if it has none
+	 * yet, to one that the user is then asked for. The menu bar, which has the windows that ask, does it.
+	 */
+	bool bSaveScene = false;
 };

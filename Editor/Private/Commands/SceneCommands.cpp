@@ -7,15 +7,18 @@
 #include "Json/JsonValue.h"
 #include "Object/Class.h"
 #include "Object/ObjectGlobals.h"
+#include "Project/Project.h"
 #include "Scene/Component.h"
 #include "Scene/Entity.h"
 #include "Scene/MissingComponent.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneSerializer.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <format>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -110,6 +113,42 @@ namespace
 		return FCommandResult::Success(std::move(Value));
 	}
 
+	FCommandResult ListScenes(FEditor& Editor, const FCommandArguments& /*Arguments*/)
+	{
+		const FProject* const Project = Editor.GetProject();
+		if (Project == nullptr)
+		{
+			return FCommandResult::Failure("No project is open, and it is the scenes of a project that are listed. "
+										   "Create one with Project.New or open one with Project.Open.");
+		}
+
+		const std::filesystem::path ContentDirectory = Project->GetContentDirectory();
+		std::vector<std::string> Files;
+		std::error_code ErrorCode;
+		for (std::filesystem::recursive_directory_iterator Entry(ContentDirectory, ErrorCode);
+			 !ErrorCode && Entry != std::filesystem::recursive_directory_iterator();
+			 Entry.increment(ErrorCode))
+		{
+			std::error_code EntryError;
+			const bool bIsSceneFile = Entry->is_regular_file(EntryError) &&
+				FFileHelper::PathToUtf8(Entry->path().extension()) == FSceneSerializer::FileExtension;
+			if (bIsSceneFile)
+			{
+				// As a path that Scene.Open takes: relative to the content directory, with forward slashes.
+				const std::u8string Relative = Entry->path().lexically_relative(ContentDirectory).generic_u8string();
+				Files.emplace_back(Relative.begin(), Relative.end());
+			}
+		}
+		std::ranges::sort(Files);
+
+		FJsonValue List = FJsonValue::MakeArray();
+		for (std::string& File : Files)
+		{
+			List.AddElement(std::move(File));
+		}
+		return FCommandResult::Success(std::move(List));
+	}
+
 	FCommandResult GetHierarchy(FEditor& Editor, const FCommandArguments& /*Arguments*/)
 	{
 		const WScene& Scene = Editor.GetScene();
@@ -154,10 +193,19 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 			"Saves the scene being edited to a scene file, which becomes the scene's file. Returns its path.",
 			{FCommandParameter::Optional("Path",
 				ECommandArgumentType::String,
-				"The file to save to; a relative path is relative to the content directory of the project, if one is "
+				"The file to save to, for example \"Scenes/Level1.wwscene\": Scene.List finds the files whose names "
+				"end in \".wwscene\". A relative path is relative to the content directory of the project, if one is "
 				"open. The file the scene was opened from or last saved to if left out.")},
 			ECommandEffect::LeavesScene},
 		SaveScene);
+
+	Registry.Register(
+		{"Scene.List",
+			"Returns the scene files of the project: the files in its content directory whose names end in "
+			"\".wwscene\", as paths that Scene.Open takes, in the order of the names.",
+			{},
+			ECommandEffect::LeavesScene},
+		ListScenes);
 
 	Registry.Register(
 		{"Scene.GetHierarchy",
