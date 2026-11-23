@@ -20,6 +20,7 @@
 #include "Ui/UiWorkspace.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace
@@ -109,6 +110,9 @@ struct FEditorUi::FImplementation
 	FUiItems Items;
 	FUiWorkspace Workspace;
 
+	/** By how much the sizes of the user interface are multiplied; see FEditorUi::SetScale. */
+	float Scale = 1.0f;
+
 	FMainMenuBar MenuBar;
 	FViewportPanel Viewport;
 	FOutlinerPanel Outliner;
@@ -148,7 +152,8 @@ std::unique_ptr<FEditorUi> FEditorUi::Create(FEditor& Editor, FRenderDevice& Dev
 	// A panel is moved by its tab; dragging inside it is for what the panel shows.
 	Io.ConfigWindowsMoveFromTitleBarOnly = true;
 
-	FUiTheme::Apply();
+	FUiTheme::AddFonts();
+	FUiTheme::Apply(NewImplementation->Scale);
 	return std::make_unique<FEditorUi>(std::move(NewImplementation));
 }
 
@@ -195,6 +200,22 @@ bool FEditorUi::Draw(FRenderTarget& Target, const FInputState& Input, double Del
 
 	Target.Clear(UncoveredColor);
 	return Ui.UiRenderer->Draw(Ui.DrawList, Target, OutError);
+}
+
+void FEditorUi::SetScale(float NewScale)
+{
+	const float AcceptedScale = std::isfinite(NewScale) ? std::clamp(NewScale, MinScale, MaxScale) : 1.0f;
+	if (AcceptedScale != Implementation->Scale)
+	{
+		Implementation->Scale = AcceptedScale;
+		ImGui::SetCurrentContext(Implementation->Context);
+		FUiTheme::Apply(AcceptedScale);
+	}
+}
+
+float FEditorUi::GetScale() const
+{
+	return Implementation->Scale;
 }
 
 std::optional<FUiRectangle> FEditorUi::FindItem(std::string_view Name) const

@@ -4,6 +4,7 @@
 #include "Platform/Platform.h"
 #include "Platform/PlatformState.h"
 
+#include <cmath>
 #include <format>
 #include <memory>
 #include <string>
@@ -18,6 +19,16 @@ struct FWindow::FImplementation
 	std::string Title;
 	int32 Width = 0;
 	int32 Height = 0;
+	float ContentScale = 1.0f;
+
+	/** Takes in what the window system says the scale of the window's display is, if it is a scale at all. */
+	void SetContentScale(float NewScale)
+	{
+		if (std::isfinite(NewScale) && NewScale > 0.0f)
+		{
+			ContentScale = NewScale;
+		}
+	}
 
 	/** Returns the implementation of the window that a GLFW callback was called for. */
 	static FImplementation& From(GLFWwindow* WindowHandle)
@@ -79,6 +90,12 @@ struct FWindow::FImplementation
 		Window.Height = NewHeight;
 	}
 
+	static void HandleContentScale(GLFWwindow* WindowHandle, float ScaleX, float /*ScaleY*/)
+	{
+		// Displays have the same scale in both directions; the engine has one number for it.
+		From(WindowHandle).SetContentScale(ScaleX);
+	}
+
 	static void HandleFocus(GLFWwindow* WindowHandle, int Focused)
 	{
 		// Keys released while another window has the focus are never reported to this one.
@@ -107,6 +124,7 @@ std::unique_ptr<FWindow> FWindow::Create(const FWindowDescription& Description, 
 	glfwDefaultWindowHints();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, Description.bResizable ? GLFW_TRUE : GLFW_FALSE);
+	glfwWindowHint(GLFW_MAXIMIZED, Description.bMaximized ? GLFW_TRUE : GLFW_FALSE);
 
 	State.LastError.clear();
 	GLFWwindow* const Handle =
@@ -122,6 +140,11 @@ std::unique_ptr<FWindow> FWindow::Create(const FWindowDescription& Description, 
 	NewImplementation->Title = Description.Title;
 	glfwGetFramebufferSize(Handle, &NewImplementation->Width, &NewImplementation->Height);
 
+	float ScaleX = 1.0f;
+	float ScaleY = 1.0f;
+	glfwGetWindowContentScale(Handle, &ScaleX, &ScaleY);
+	NewImplementation->SetContentScale(ScaleX);
+
 	glfwSetWindowUserPointer(Handle, NewImplementation.get());
 	glfwSetKeyCallback(Handle, &FImplementation::HandleKey);
 	glfwSetCharCallback(Handle, &FImplementation::HandleCharacter);
@@ -130,6 +153,7 @@ std::unique_ptr<FWindow> FWindow::Create(const FWindowDescription& Description, 
 	glfwSetCursorEnterCallback(Handle, &FImplementation::HandleCursorEnter);
 	glfwSetScrollCallback(Handle, &FImplementation::HandleScroll);
 	glfwSetFramebufferSizeCallback(Handle, &FImplementation::HandleFramebufferSize);
+	glfwSetWindowContentScaleCallback(Handle, &FImplementation::HandleContentScale);
 	glfwSetWindowFocusCallback(Handle, &FImplementation::HandleFocus);
 
 	std::unique_ptr<FWindow> Window = std::make_unique<FWindow>(std::move(NewImplementation));
@@ -167,6 +191,11 @@ int32 FWindow::GetWidth() const
 int32 FWindow::GetHeight() const
 {
 	return Implementation->Height;
+}
+
+float FWindow::GetContentScale() const
+{
+	return Implementation->ContentScale;
 }
 
 void FWindow::SetSize(int32 NewWidth, int32 NewHeight)

@@ -36,6 +36,7 @@ std::unique_ptr<FEditorWindow> FEditorWindow::Create(
 	WindowDescription.Title = MakeTitle(Editor);
 	WindowDescription.Width = Description.Width;
 	WindowDescription.Height = Description.Height;
+	WindowDescription.bMaximized = Description.bMaximized;
 	std::unique_ptr<FWindow> Window = FWindow::Create(WindowDescription, OutError);
 	if (Window == nullptr)
 	{
@@ -115,6 +116,8 @@ bool FEditorWindow::RunFrame(double DeltaSeconds, std::string& OutError)
 		Picture = std::move(NewPicture);
 	}
 
+	// On a display that the user has set to show things larger, the user interface is as much larger.
+	Ui->SetScale(Window->GetContentScale());
 	if (!Ui->Draw(*Picture, Window->GetInput(), DeltaSeconds, OutError))
 	{
 		return false;

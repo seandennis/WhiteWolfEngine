@@ -130,8 +130,11 @@ namespace
 		{
 			{
 				FEditor Editor;
-				const std::unique_ptr<FEditorWindow> Window =
-					FEditorWindow::Create(Editor, FEditorWindowDescription(), Error);
+				// On the desktop the editor takes the whole screen, as a program to work in does. A screenshot has
+				// the size the window is restored to.
+				FEditorWindowDescription Description;
+				Description.bMaximized = !bIsScreenshot;
+				const std::unique_ptr<FEditorWindow> Window = FEditorWindow::Create(Editor, Description, Error);
 				if (Window == nullptr)
 				{
 					ErrorOutput << "The editor could not open its window: " << Error << ".\n";

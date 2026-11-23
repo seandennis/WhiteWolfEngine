@@ -903,6 +903,25 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 
 **Alternatives considered.** A loop in the executable around a window, a device and a user interface that the executable owns would be the usual shape, and none of it could be tested. A second, windowless executable for agents and tools would spare the editor its console window, and is what exporting a game will need for the game's own executable; until then one program is simpler to build, document and start.
 
-**Limits.** The window opens at 1600 by 900 pixels and not maximised, and the user interface is not yet scaled for displays with a high pixel density, on which it is small. Closing the window ends the editor without asking about changes that were not saved. There is no project browser at the start: the editor opens with an empty scene and no project.
+**Limits.** Closing the window ends the editor without asking about changes that were not saved. (That the window opened small and unscaled was a limit until D-052.) There is no project browser at the start: the editor opens with an empty scene and no project.
 
 **Testing.** The window in memory: that it opens at the size and with the title it should have, that a frame draws the user interface at the window's size and the picture follows when the size changes, that the title follows the scene and the project, that a click made with the window's mouse selects an entity, that frames are counted as shown only where they can be, that a request to close is seen, that it cannot be opened without the platform layer or with a size of nothing, and that it can be opened again. The application: that `--screenshot` saves a picture of the right size that shows something and leaves the platform layer shut down, that it says why when the picture cannot be saved, and that a screenshot without a file name is a command line it does not understand. The window on the desktop was started by hand: the executable opened its window, showed the user interface and ended when the window was closed, without a warning in the log.
+
+## D-052: The editor is scaled to its display, and opens maximised
+
+**Status:** Accepted.
+
+**Context.** Displays differ in how many pixels they have to the centimetre, and their users set a scale for each: 125 %, 150 %, 200 %. A program that tells the operating system it understands this, which GLFW does for every program that uses it, is given the display's real pixels and has to draw larger by itself; one that does not is drawn small and stretched by the system, which blurs it. The editor drew everything at one size, so on a dense display it was small.
+
+**Decision.**
+
+- **A window says what its display's scale is:** `FWindow::GetContentScale`, from the window system, 1 for the usual pixel density. It follows the window to another display.
+- **The user interface has a scale,** `FEditorUi::SetScale`, by which every size of the theme is multiplied. Letters are drawn anew for the size they come out at and not stretched, which the library does for any size that is asked for. `FEditorWindow` gives the user interface the scale of its window's display in every frame, so moving the window to another display is followed without anything else knowing.
+- **Sizes are written for a scale of one, in the theme.** A panel that needs a size of its own takes it from the font's height or the style, which are scaled, so that there is one place where the scale is applied.
+- **On the desktop the editor's window opens maximised** (`FWindowDescription::bMaximized`), as a program to work in for hours does. `--screenshot` draws at the size the window is restored to, at a scale of one, so that its picture is the same on every machine.
+
+**Alternatives considered.** Leaving the stretching to the operating system needs the program to deny what GLFW says for it, and blurs every letter. A scale that the user sets in the editor, in place of the display's, is what some editors have in addition; it can multiply this one when it is wanted.
+
+**Limits.** Pictures that are not letters or shapes, such as icons and thumbnails, will need to exist at the sizes that scales ask for when the editor gets them. The scale of the display is the only scale: the user cannot add one of their own.
+
+**Testing.** A window in memory has a scale of one and can be opened maximised. The user interface: at twice the scale its items are twice as large, within the tenth that letters drawn for their size differ by, and the panels still share the surface; set back, it draws the picture it drew at first, to the pixel; a scale beyond the limits is the nearest limit and one that is no number is one, and at both limits it is still drawn without an error. The editor's window gives the user interface its own scale in every frame, whatever the user interface was set to, and can be opened maximised. On a display set to 125 % the executable was started by hand: its window opened maximised with the user interface a quarter larger and sharp.

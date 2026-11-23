@@ -196,6 +196,44 @@ TEST_SUITE("FEditorWindow")
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 
+	TEST_CASE("The user interface has the scale of the display the window is on")
+	{
+		FEditorWindowTest Test;
+		Test.RunFrame();
+		// A window in memory is on no display, and its scale is one.
+		REQUIRE(Test.Window->GetWindow().GetContentScale() == 1.0f);
+		CHECK(Test.Window->GetUi().GetScale() == 1.0f);
+
+		// Whatever scale the user interface was given, a frame gives it the window's.
+		Test.Window->GetUi().SetScale(2.0f);
+		Test.RunFrame();
+
+		CHECK(Test.Window->GetUi().GetScale() == 1.0f);
+	}
+
+	TEST_CASE("The editor's window can open maximised")
+	{
+		const FScopedEditorTest EditorTest;
+		const FScopedHeadlessPlatform Platform;
+		FEditor Editor;
+		FEditorWindowDescription Description;
+		Description.Width = 640;
+		Description.Height = 360;
+		Description.bMaximized = true;
+		std::string Error;
+
+		const std::unique_ptr<FEditorWindow> Window = FEditorWindow::Create(Editor, Description, Error);
+
+		INFO("Error: ", Error);
+		REQUIRE(Window != nullptr);
+		CHECK(Window->GetWindow().GetWidth() >= 640);
+		CHECK(Window->GetWindow().GetHeight() >= 360);
+		FPlatform::PollEvents();
+		CHECK(Window->RunFrame(1.0 / 60.0, Error));
+		REQUIRE(Window->GetPicture() != nullptr);
+		CHECK(Window->GetPicture()->GetWidth() == Window->GetWindow().GetWidth());
+	}
+
 	TEST_CASE("A window that was asked to close says so")
 	{
 		FEditorWindowTest Test;

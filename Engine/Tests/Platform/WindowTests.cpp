@@ -134,6 +134,32 @@ TEST_SUITE("FWindow")
 		CHECK(Window->GetNativeHandle() == nullptr);
 	}
 
+	TEST_CASE("A window says how its display is scaled, which for a window in memory is not at all")
+	{
+		const FScopedHeadlessPlatform Platform;
+		std::string Error;
+		const std::unique_ptr<FWindow> Window = FWindow::Create(FWindowDescription(), Error);
+		REQUIRE(Window != nullptr);
+
+		CHECK(Window->GetContentScale() == 1.0f);
+	}
+
+	TEST_CASE("A window that opens maximised is at least as large as it was asked to be")
+	{
+		const FScopedHeadlessPlatform Platform;
+		FWindowDescription Description;
+		Description.Width = 640;
+		Description.Height = 360;
+		Description.bMaximized = true;
+		std::string Error;
+
+		const std::unique_ptr<FWindow> Window = FWindow::Create(Description, Error);
+
+		REQUIRE(Window != nullptr);
+		CHECK(Window->GetWidth() >= 640);
+		CHECK(Window->GetHeight() >= 360);
+	}
+
 	TEST_CASE("Each window has its own input state")
 	{
 		const FScopedHeadlessPlatform Platform;

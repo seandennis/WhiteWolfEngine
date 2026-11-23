@@ -23,6 +23,7 @@
 #include <glm/trigonometric.hpp>
 
 #include <format>
+#include <limits>
 #include <memory>
 #include <ostream>
 #include <string>
@@ -178,6 +179,74 @@ TEST_SUITE("FEditorUi")
 		CHECK(After.GetHeight() > Before.GetHeight());
 		CHECK(After.Right <= 1600.0f);
 		CHECK(After.Bottom <= 1000.0f);
+		CHECK(CountLoggedErrors(Test.Capture) == 0);
+	}
+
+	TEST_CASE("At twice the scale the items of the user interface are twice as large, and still share the surface")
+	{
+		FEditorUiTest Test;
+		REQUIRE(Test.Ui->GetScale() == 1.0f);
+		const FUiRectangle SearchBefore = Test.RequireItem("Outliner/Search");
+		const FUiRectangle MenuBefore = Test.RequireItem("Menu/File");
+
+		Test.Ui->SetScale(2.0f);
+		Test.DrawFrames(3);
+
+		CHECK(Test.Ui->GetScale() == 2.0f);
+		const FUiRectangle SearchAfter = Test.RequireItem("Outliner/Search");
+		const FUiRectangle MenuAfter = Test.RequireItem("Menu/File");
+		// Letters are drawn anew for their size and not stretched, so twice is not exact to the pixel.
+		CHECK(SearchAfter.GetHeight() == doctest::Approx(2.0f * SearchBefore.GetHeight()).epsilon(0.1));
+		CHECK(MenuAfter.GetHeight() == doctest::Approx(2.0f * MenuBefore.GetHeight()).epsilon(0.1));
+		CHECK(MenuAfter.GetWidth() == doctest::Approx(2.0f * MenuBefore.GetWidth()).epsilon(0.1));
+
+		// The panels are where they were: the outliner to the right of the viewport, which reaches the bottom.
+		const FUiRectangle Viewport = Test.RequireItem("Viewport");
+		CHECK(Viewport.Right < SearchAfter.Left);
+		CHECK(Viewport.Bottom >= static_cast<float>(FEditorUiTest::DefaultHeight) - 2.0f);
+		CHECK(SearchAfter.Right <= static_cast<float>(FEditorUiTest::DefaultWidth));
+		CHECK(CountLoggedErrors(Test.Capture) == 0);
+	}
+
+	TEST_CASE("Setting the scale back gives the user interface its first size again")
+	{
+		FEditorUiTest Test;
+		const FUiRectangle Before = Test.RequireItem("Outliner/Search");
+		const FImage PictureBefore = Test.ReadPicture();
+
+		Test.Ui->SetScale(1.5f);
+		Test.DrawFrames(3);
+		Test.Ui->SetScale(1.0f);
+		Test.DrawFrames(3);
+
+		CHECK(Test.RequireItem("Outliner/Search") == Before);
+		CHECK(Test.ReadPicture() == PictureBefore);
+	}
+
+	TEST_CASE("A scale beyond the limits is taken as the nearest limit, and one that is no number as one")
+	{
+		FEditorUiTest Test;
+
+		Test.Ui->SetScale(0.01f);
+		CHECK(Test.Ui->GetScale() == FEditorUi::MinScale);
+
+		Test.Ui->SetScale(100.0f);
+		CHECK(Test.Ui->GetScale() == FEditorUi::MaxScale);
+
+		Test.Ui->SetScale(-2.0f);
+		CHECK(Test.Ui->GetScale() == FEditorUi::MinScale);
+
+		Test.Ui->SetScale(std::numeric_limits<float>::quiet_NaN());
+		CHECK(Test.Ui->GetScale() == 1.0f);
+
+		Test.Ui->SetScale(std::numeric_limits<float>::infinity());
+		CHECK(Test.Ui->GetScale() == 1.0f);
+
+		// At either limit the user interface is still drawn.
+		Test.Ui->SetScale(FEditorUi::MaxScale);
+		Test.DrawFrames(3);
+		Test.Ui->SetScale(FEditorUi::MinScale);
+		Test.DrawFrames(3);
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 

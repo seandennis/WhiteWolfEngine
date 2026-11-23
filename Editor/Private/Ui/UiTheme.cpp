@@ -34,9 +34,16 @@ namespace
 	constexpr float FontSize = 15.0f;
 }
 
-void FUiTheme::Apply()
+void FUiTheme::AddFonts()
 {
-	ImGuiStyle& Style = ImGui::GetStyle();
+	// The font that comes with Dear ImGui, in its scalable form: its letters are drawn for whatever size is asked.
+	ImGui::GetIO().Fonts->AddFontDefaultVector();
+}
+
+void FUiTheme::Apply(float Scale)
+{
+	// Started from the library's own style every time, so that applying a scale twice does not scale twice.
+	ImGuiStyle Style;
 	ImGui::StyleColorsDark(&Style);
 
 	Style.WindowPadding = ImVec2(8.0f, 8.0f);
@@ -118,8 +125,8 @@ void FUiTheme::Apply()
 	Colors[ImGuiCol_NavCursor] = AccentHovered;
 	Colors[ImGuiCol_ModalWindowDimBg] = Rgb(0, 0, 0, 0.5f);
 
-	// The font that comes with Dear ImGui, in its scalable form: its letters are drawn for whatever size is asked.
-	ImGuiIO& Io = ImGui::GetIO();
-	Io.Fonts->AddFontDefaultVector();
 	Style.FontSizeBase = FontSize;
+	Style.ScaleAllSizes(Scale);
+	Style.FontScaleDpi = Scale;
+	ImGui::GetStyle() = Style;
 }

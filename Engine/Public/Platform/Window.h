@@ -47,6 +47,14 @@ public:
 	ENGINE_API int32 GetHeight() const;
 
 	/**
+	 * Returns how much larger than on a display of the usual pixel density things have to be drawn in this window
+	 * to look the same size: 1 on such a display, 1.5 on one with half again as many pixels to the centimetre. It
+	 * is the scale the user has set for the display the window is on, and follows the window to another display.
+	 * A user interface multiplies its sizes by it. Always greater than zero.
+	 */
+	ENGINE_API float GetContentScale() const;
+
+	/**
 	 * Asks the window system to resize the window's content. Both values must be positive; anything else is
 	 * ignored with a warning. The new size is reported by GetWidth and GetHeight once the window system has
 	 * applied it.

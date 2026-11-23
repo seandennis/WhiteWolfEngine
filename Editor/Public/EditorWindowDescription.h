@@ -9,6 +9,9 @@ struct FEditorWindowDescription
 	int32 Width = 1600;
 	int32 Height = 900;
 
+	/** Whether the window opens as large as its screen allows; Width and Height are then what it is restored to. */
+	bool bMaximized = false;
+
 	/**
 	 * Whether every call to the rendering interface is checked, with mistakes reported as errors in the log. It
 	 * costs time, so it is for tests and for finding a fault, not for everyday use.

@@ -33,6 +33,10 @@ private:
 	struct FImplementation;
 
 public:
+	/** The smallest and largest scale of the user interface; see SetScale. */
+	static constexpr float MinScale = 0.5f;
+	static constexpr float MaxScale = 4.0f;
+
 	/**
 	 * Creates the user interface of an editor.
 	 *
@@ -62,6 +66,17 @@ public:
 	 * @return True if the frame was drawn.
 	 */
 	EDITOR_API bool Draw(FRenderTarget& Target, const FInputState& Input, double DeltaSeconds, std::string& OutError);
+
+	/**
+	 * Makes everything in the user interface larger or smaller, from the next frame on. At 1, the scale it starts
+	 * with, it is the size meant for a display of the usual pixel density; on a display that the user has set to
+	 * another scale (FWindow::GetContentScale), that scale makes it look the same size there. A scale outside
+	 * MinScale to MaxScale is taken as the nearest of the two, and one that is not a number as 1.
+	 */
+	EDITOR_API void SetScale(float NewScale);
+
+	/** Returns the scale of the user interface. */
+	EDITOR_API float GetScale() const;
 
 	/**
 	 * Returns where an item of the user interface was drawn in the last frame, or nothing if it was not drawn or
