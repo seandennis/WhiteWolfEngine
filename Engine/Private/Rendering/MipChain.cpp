@@ -1,6 +1,7 @@
 #include "Rendering/MipChain.h"
 
 #include "Math/Color.h"
+#include "Math/Srgb.h"
 
 #include <algorithm>
 #include <array>
@@ -16,16 +17,14 @@ namespace
 		std::array<float, 256> Table{};
 		for (std::size_t Value = 0; Value < Table.size(); ++Value)
 		{
-			const float Encoded = static_cast<float>(Value) / 255.0f;
-			Table[Value] = Encoded <= 0.04045f ? Encoded / 12.92f : std::pow((Encoded + 0.055f) / 1.055f, 2.4f);
+			Table[Value] = FSrgb::Decode(static_cast<float>(Value) / 255.0f);
 		}
 		return Table;
 	}
 
 	uint8 LinearToSrgb(float Linear)
 	{
-		const float Encoded = Linear <= 0.0031308f ? Linear * 12.92f : 1.055f * std::pow(Linear, 1.0f / 2.4f) - 0.055f;
-		return static_cast<uint8>(std::lround(std::clamp(Encoded, 0.0f, 1.0f) * 255.0f));
+		return static_cast<uint8>(std::lround(std::clamp(FSrgb::Encode(Linear), 0.0f, 1.0f) * 255.0f));
 	}
 
 	uint8 RoundToByte(float Value)
