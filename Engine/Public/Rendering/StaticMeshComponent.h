@@ -7,8 +7,11 @@
 #include "Object/ObjectPtr.h"
 #include "Scene/Component.h"
 
+#include <optional>
+
 class WMaterial;
 class WStaticMesh;
+struct FRay;
 
 /**
  * Makes its entity visible: the renderer draws the component's mesh at the entity's place in the world, with the
@@ -42,4 +45,13 @@ public:
 	 * somewhat more than the mesh itself. Empty while the component has no mesh with geometry or no entity.
 	 */
 	FBox GetWorldBounds() const;
+
+	/**
+	 * Returns how far along a ray in the world it first meets the mesh where the entity puts it, in metres. What
+	 * is met is what is drawn: the fronts of the triangles of a mesh that is visible (WStaticMesh::IntersectRay).
+	 *
+	 * @return The distance from where the ray begins, or nothing if the ray misses the mesh, the component is not
+	 * visible or has no mesh or no entity, or the entity's scale is zero along an axis.
+	 */
+	std::optional<double> IntersectRay(const FRay& Ray) const;
 };

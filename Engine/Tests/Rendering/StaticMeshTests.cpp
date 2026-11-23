@@ -2,10 +2,13 @@
 
 #include "Object/ObjectGlobals.h"
 #include "Object/TestObjects.h"
+#include "Rendering/MeshShapes.h"
 
 #include <doctest/doctest.h>
 
+#include <initializer_list>
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -162,5 +165,87 @@ TEST_SUITE("WStaticMesh")
 		CHECK(Mesh->GetIndices() == std::vector<uint32>{0, 1, 2});
 		CHECK(Mesh->GetGeometryVersion() == Version);
 		CHECK(Mesh->GetBounds() == Bounds);
+	}
+
+	TEST_CASE("A ray meets the front of a mesh at its distance, in multiples of its direction")
+	{
+		const FScopedObjectTest ObjectTest;
+		WStaticMesh* const Mesh = NewObject<WStaticMesh>();
+		std::string Error;
+		REQUIRE(Mesh->SetGeometry(MakeTriangleVertices(), {0, 1, 2}, Error));
+		const FVector3f Origin(0.25f, 0.25f, 5.0f);
+
+		const std::optional<float> Distance = Mesh->IntersectRay(Origin, FVector3f(0.0f, 0.0f, -1.0f));
+		const std::optional<float> InLongerSteps = Mesh->IntersectRay(Origin, FVector3f(0.0f, 0.0f, -2.0f));
+
+		REQUIRE(Distance.has_value());
+		CHECK(*Distance == doctest::Approx(5.0f));
+		REQUIRE(InLongerSteps.has_value());
+		CHECK(*InLongerSteps == doctest::Approx(2.5f));
+	}
+
+	TEST_CASE("A ray that misses a mesh, or comes at it from behind, meets nothing")
+	{
+		const FScopedObjectTest ObjectTest;
+		WStaticMesh* const Mesh = NewObject<WStaticMesh>();
+		std::string Error;
+		REQUIRE(Mesh->SetGeometry(MakeTriangleVertices(), {0, 1, 2}, Error));
+
+		// Beside the triangle but through the box around it, and beside the box.
+		CHECK_FALSE(Mesh->IntersectRay(FVector3f(0.9f, 0.9f, 5.0f), FVector3f(0.0f, 0.0f, -1.0f)).has_value());
+		CHECK_FALSE(Mesh->IntersectRay(FVector3f(5.0f, 5.0f, 5.0f), FVector3f(0.0f, 0.0f, -1.0f)).has_value());
+		// From behind.
+		CHECK_FALSE(Mesh->IntersectRay(FVector3f(0.25f, 0.25f, -5.0f), FVector3f(0.0f, 0.0f, 1.0f)).has_value());
+	}
+
+	TEST_CASE("Of the triangles that a ray meets, the nearest counts, whatever their order in the mesh")
+	{
+		const FScopedObjectTest ObjectTest;
+		const FVector3f Normal(0.0f, 0.0f, 1.0f);
+		// Three sheets that face +Z, at the heights 0, 2 and 1 in that order.
+		std::vector<FStaticMeshVertex> Vertices;
+		for (const float Height : {0.0f, 2.0f, 1.0f})
+		{
+			Vertices.push_back({FVector3f(0.0f, 0.0f, Height), Normal});
+			Vertices.push_back({FVector3f(1.0f, 0.0f, Height), Normal});
+			Vertices.push_back({FVector3f(0.0f, 1.0f, Height), Normal});
+		}
+		WStaticMesh* const Mesh = NewObject<WStaticMesh>();
+		std::string Error;
+		REQUIRE(Mesh->SetGeometry(Vertices, {0, 1, 2, 3, 4, 5, 6, 7, 8}, Error));
+
+		const std::optional<float> Distance =
+			Mesh->IntersectRay(FVector3f(0.25f, 0.25f, 5.0f), FVector3f(0.0f, 0.0f, -1.0f));
+
+		// The sheet at the height 2 is three below where the ray begins.
+		REQUIRE(Distance.has_value());
+		CHECK(*Distance == doctest::Approx(3.0f));
+	}
+
+	TEST_CASE("A ray that begins inside a closed mesh meets nothing: the insides of its triangles are not drawn")
+	{
+		const FScopedObjectTest ObjectTest;
+		const WStaticMesh* const Box = FMeshShapes::CreateBox(FVector3f(2.0f));
+		REQUIRE(Box != nullptr);
+
+		for (const FVector3f& Direction :
+			{FVector3f(1.0f, 0.0f, 0.0f), FVector3f(0.0f, -1.0f, 0.0f), FVector3f(0.3f, 0.5f, -0.8f)})
+		{
+			CHECK_FALSE(Box->IntersectRay(FVector3f(0.0f), Direction).has_value());
+		}
+
+		// From outside, the side that faces the ray is met, a metre from the middle of the box.
+		const std::optional<float> Distance =
+			Box->IntersectRay(FVector3f(0.3f, -0.2f, 5.0f), FVector3f(0.0f, 0.0f, -1.0f));
+		REQUIRE(Distance.has_value());
+		CHECK(*Distance == doctest::Approx(4.0f));
+	}
+
+	TEST_CASE("A mesh without geometry is met by nothing")
+	{
+		const FScopedObjectTest ObjectTest;
+		const WStaticMesh* const Mesh = NewObject<WStaticMesh>();
+
+		CHECK_FALSE(Mesh->IntersectRay(FVector3f(0.0f, 0.0f, 5.0f), FVector3f(0.0f, 0.0f, -1.0f)).has_value());
 	}
 }

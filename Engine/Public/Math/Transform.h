@@ -37,6 +37,22 @@ struct FTransform
 	ENGINE_API FVector InverseTransformPosition(const FVector& Position) const;
 
 	/**
+	 * Maps a direction, or the difference of two positions, from parent space to local space: it is turned and
+	 * scaled as InverseTransformPosition turns and scales a position, and not moved. A direction of unit length is
+	 * in general not of unit length afterwards.
+	 *
+	 * A scale component that is zero cannot be inverted; the corresponding local coordinate of the result is zero.
+	 */
+	ENGINE_API FVector3f InverseTransformVector(const FVector3f& Vector) const;
+
+	/**
+	 * Returns true if what this transform does can be undone: no component of its scale is zero, or so close to
+	 * zero that it cannot be divided by. InverseTransformPosition and InverseTransformVector then give back what
+	 * went into the transform, and otherwise flatten it.
+	 */
+	ENGINE_API bool IsInvertible() const;
+
+	/**
 	 * Returns the transform that applies Child and then Parent.
 	 *
 	 * If Child places an object in Parent's local space, the result places that object in Parent's parent space.

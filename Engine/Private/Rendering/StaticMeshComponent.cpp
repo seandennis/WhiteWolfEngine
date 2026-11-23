@@ -1,7 +1,9 @@
 #include "Rendering/StaticMeshComponent.h"
 
+#include "Math/Ray.h"
 #include "Math/Transform.h"
 #include "Math/Vector.h"
+#include "Object/ObjectGlobals.h"
 #include "Rendering/StaticMesh.h"
 #include "Scene/Entity.h"
 
@@ -31,4 +33,35 @@ FBox WStaticMeshComponent::GetWorldBounds() const
 		}
 	}
 	return WorldBounds;
+}
+
+std::optional<double> WStaticMeshComponent::IntersectRay(const FRay& Ray) const
+{
+	// A mesh that has been destroyed is no longer drawn, though it is there until it is collected.
+	const WStaticMesh* const ShownMesh = Mesh.Get();
+	const WEntity* const Entity = GetOwner();
+	if (!bVisible || !IsValid(ShownMesh) || Entity == nullptr)
+	{
+		return std::nullopt;
+	}
+
+	// A mesh that is scaled to nothing along an axis is flat, and a ray cannot be taken into its space.
+	const FTransform WorldTransform = Entity->GetWorldTransform();
+	if (!WorldTransform.IsInvertible())
+	{
+		return std::nullopt;
+	}
+
+	// The ray goes to the mesh rather than the mesh to the ray. Where it begins is measured from the entity in
+	// double precision, so that it is exact however far both are from the world origin. Its direction is no
+	// longer of unit length there, and stands for a metre of the world all the same: a multiple of it in the space
+	// of the mesh is that many metres along the ray.
+	const FVector3f LocalOrigin = FVector3f(WorldTransform.InverseTransformPosition(Ray.Origin));
+	const FVector3f LocalDirection = WorldTransform.InverseTransformVector(Ray.Direction);
+	const std::optional<float> Distance = ShownMesh->IntersectRay(LocalOrigin, LocalDirection);
+	if (!Distance.has_value())
+	{
+		return std::nullopt;
+	}
+	return static_cast<double>(*Distance);
 }

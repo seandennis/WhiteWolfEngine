@@ -3,11 +3,13 @@
 #include "TestSupport/ScopedLogCapture.h"
 
 #include <doctest/doctest.h>
+#include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/trigonometric.hpp>
 #include <glm/vec4.hpp>
 
 #include <cmath>
+#include <initializer_list>
 #include <limits>
 
 namespace
@@ -250,5 +252,89 @@ TEST_SUITE("FCameraView")
 
 		CHECK_THROWS_AS(View.GetProjectionMatrix(0.0f), FFatalErrorException);
 		CHECK_THROWS_AS(View.GetProjectionMatrix(-1.0f), FFatalErrorException);
+	}
+
+	TEST_CASE("The ray through the middle of the picture goes straight ahead, from the near plane")
+	{
+		FCameraView View;
+		View.NearPlane = 0.25f;
+
+		const FRay Ray = View.GetRay(FVector2f(0.0f, 0.0f), 16.0f / 9.0f);
+
+		CHECK(Ray.Direction == FVector3f(0.0f, 0.0f, -1.0f));
+		CHECK(Ray.Origin == FVector(0.0, 0.0, -0.25));
+	}
+
+	TEST_CASE("The rays through the edges of the picture are half the field of view from straight ahead")
+	{
+		FCameraView View;
+		View.VerticalFieldOfView = 90.0f;
+		constexpr float AspectRatio = 2.0f;
+
+		// Half of ninety degrees up, the ray rises as fast as it goes ahead; to the side, in a picture twice as
+		// wide as high, twice as fast.
+		const FRay Top = View.GetRay(FVector2f(0.0f, 1.0f), AspectRatio);
+		const FRay Right = View.GetRay(FVector2f(1.0f, 0.0f), AspectRatio);
+		const FRay BottomLeft = View.GetRay(FVector2f(-1.0f, -1.0f), AspectRatio);
+
+		CHECK(IsNear(Top.Direction, glm::normalize(FVector3f(0.0f, 1.0f, -1.0f))));
+		CHECK(IsNear(Right.Direction, glm::normalize(FVector3f(2.0f, 0.0f, -1.0f))));
+		CHECK(IsNear(BottomLeft.Direction, glm::normalize(FVector3f(-2.0f, -1.0f, -1.0f))));
+	}
+
+	TEST_CASE("What lies along the ray through a point of the picture is drawn at that point")
+	{
+		FCameraView View;
+		View.Location = FVector(120.0, -4.0, 37.5);
+		View.Rotation = YawRotation(130.0f) * glm::angleAxis(glm::radians(-25.0f), FVector3f(1.0f, 0.0f, 0.0f));
+		View.VerticalFieldOfView = 70.0f;
+		View.NearPlane = 0.5f;
+		constexpr float AspectRatio = 1.6f;
+
+		// The last of the points is beyond the edge of the picture, where the picture would go on.
+		for (const FVector2f& PicturePoint : {FVector2f(0.0f, 0.0f),
+				 FVector2f(1.0f, 1.0f),
+				 FVector2f(-1.0f, -1.0f),
+				 FVector2f(0.3f, -0.7f),
+				 FVector2f(-1.5f, 0.2f)})
+		{
+			const FRay Ray = View.GetRay(PicturePoint, AspectRatio);
+			CHECK(glm::length(Ray.Direction) == doctest::Approx(1.0f));
+
+			for (const double Distance : {0.0, 1.0, 250.0})
+			{
+				const FVector3f FromCamera = FVector3f(Ray.GetPoint(Distance) - View.Location);
+				const FVector3f InViewSpace = FVector3f(View.GetViewMatrix() * glm::vec4(FromCamera, 1.0f));
+				const FProjectedPoint Drawn = Project(View, AspectRatio, InViewSpace);
+
+				CHECK(Drawn.X == doctest::Approx(PicturePoint.x).epsilon(1.0e-4));
+				CHECK(Drawn.Y == doctest::Approx(PicturePoint.y).epsilon(1.0e-4));
+				if (Distance == 0.0)
+				{
+					// Where the ray begins is on the near plane, whose depth is one.
+					CHECK(Drawn.Depth == doctest::Approx(1.0f).epsilon(1.0e-4));
+				}
+			}
+		}
+	}
+
+	TEST_CASE("A ray begins exactly where the camera is, however far that is from the origin of the world")
+	{
+		FCameraView View;
+		View.Location = FVector(4.0e9, -2.0e9, 1.0e9);
+		View.NearPlane = 0.125f;
+
+		const FRay Ray = View.GetRay(FVector2f(0.0f, 0.0f), 1.0f);
+
+		CHECK(Ray.Origin - View.Location == FVector(0.0, 0.0, -0.125));
+	}
+
+	TEST_CASE("Asking for a ray with an aspect ratio that is not positive is a programming error")
+	{
+		const FScopedLogCapture Capture;
+		const FCameraView View;
+
+		CHECK_THROWS_AS(View.GetRay(FVector2f(0.0f, 0.0f), 0.0f), FFatalErrorException);
+		CHECK_THROWS_AS(View.GetRay(FVector2f(0.0f, 0.0f), -2.0f), FFatalErrorException);
 	}
 }

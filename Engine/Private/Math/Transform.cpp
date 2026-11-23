@@ -33,6 +33,17 @@ FVector FTransform::InverseTransformPosition(const FVector& Position) const
 	return FVector(GetSafeScaleReciprocal(Scale)) * (PreciseInverseRotation * (Position - Location));
 }
 
+FVector3f FTransform::InverseTransformVector(const FVector3f& Vector) const
+{
+	return GetSafeScaleReciprocal(Scale) * (glm::conjugate(Rotation) * Vector);
+}
+
+bool FTransform::IsInvertible() const
+{
+	return std::abs(Scale.x) > SmallestInvertibleScale && std::abs(Scale.y) > SmallestInvertibleScale &&
+		std::abs(Scale.z) > SmallestInvertibleScale;
+}
+
 FTransform FTransform::Combine(const FTransform& Parent, const FTransform& Child)
 {
 	FTransform Result;

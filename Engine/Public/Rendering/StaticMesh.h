@@ -7,6 +7,7 @@
 #include "Object/ObjectMacros.h"
 #include "Rendering/StaticMeshVertex.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,20 @@ public:
 	 * vertex. Empty for a mesh without geometry.
 	 */
 	const FBox3f& GetBounds() const;
+
+	/**
+	 * Returns where a ray first meets the mesh, in the mesh's own space. Only the fronts of triangles count, as
+	 * only they are drawn: a ray that begins inside a closed mesh meets nothing.
+	 *
+	 * Every triangle is looked at, unless the ray misses the box of the mesh altogether: this is for a question
+	 * that is asked now and then, such as what the user has clicked on, not for many rays in every frame.
+	 *
+	 * @param Origin Where the ray begins.
+	 * @param Direction Which way it goes; any length but zero.
+	 * @return The multiple of Direction that leads from Origin to the nearest point where the ray meets the mesh,
+	 * or nothing if it meets none of its triangles (FIntersection::RayTriangle).
+	 */
+	std::optional<float> IntersectRay(const FVector3f& Origin, const FVector3f& Direction) const;
 
 	/**
 	 * Returns a number that identifies the geometry the mesh has now. It changes every time SetGeometry succeeds

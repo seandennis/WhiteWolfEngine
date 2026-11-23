@@ -1,5 +1,7 @@
 #include "Rendering/StaticMesh.h"
 
+#include "Math/Intersection.h"
+
 #include <cmath>
 #include <cstddef>
 #include <format>
@@ -104,6 +106,30 @@ int32 WStaticMesh::GetTriangleCount() const
 const FBox3f& WStaticMesh::GetBounds() const
 {
 	return Bounds;
+}
+
+std::optional<float> WStaticMesh::IntersectRay(const FVector3f& Origin, const FVector3f& Direction) const
+{
+	std::optional<float> Nearest;
+	// Most rays miss most meshes, which the box of a mesh says without a look at its triangles.
+	if (!FIntersection::RayBox(Origin, Direction, Bounds))
+	{
+		return Nearest;
+	}
+
+	for (std::size_t Corner = 0; Corner + 2 < Indices.size(); Corner += 3)
+	{
+		const std::optional<float> Distance = FIntersection::RayTriangle(Origin,
+			Direction,
+			Vertices[Indices[Corner]].Position,
+			Vertices[Indices[Corner + 1]].Position,
+			Vertices[Indices[Corner + 2]].Position);
+		if (Distance.has_value() && (!Nearest.has_value() || *Distance < *Nearest))
+		{
+			Nearest = Distance;
+		}
+	}
+	return Nearest;
 }
 
 uint64 WStaticMesh::GetGeometryVersion() const

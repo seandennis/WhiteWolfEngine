@@ -4,6 +4,7 @@
 
 #include "Math/Matrix.h"
 #include "Math/Quat.h"
+#include "Math/Ray.h"
 #include "Math/Transform.h"
 #include "Math/Vector.h"
 
@@ -76,6 +77,17 @@ struct FCameraView
 	 * @param AspectRatio The width of the picture divided by its height. Must be greater than zero.
 	 */
 	ENGINE_API FMatrix4f GetProjectionMatrix(float AspectRatio) const;
+
+	/**
+	 * Returns the ray along which the camera sees a point of its picture: whatever is drawn at that point lies on
+	 * it. It begins where the picture does, on the near plane, and goes away from the camera.
+	 *
+	 * @param PicturePoint The point, as the projection counts: x from -1 at the left edge of the picture to 1 at
+	 * the right, y from -1 at the bottom to 1 at the top. A point beyond the edges gives the ray through where the
+	 * picture would go on.
+	 * @param AspectRatio The width of the picture divided by its height. Must be greater than zero.
+	 */
+	ENGINE_API FRay GetRay(const FVector2f& PicturePoint, float AspectRatio) const;
 
 	bool operator==(const FCameraView& Other) const = default;
 };

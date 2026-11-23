@@ -290,4 +290,67 @@ TEST_SUITE("FTransform")
 		Other.Rotation = MakeRotation(1.0f, FVector3f(1.0f, 0.0f, 0.0f));
 		CHECK(Transform != Other);
 	}
+
+	TEST_CASE("InverseTransformVector turns and scales a difference of positions back, and does not move it")
+	{
+		const FVector From(1.0, 2.0, 3.0);
+		const FVector To(-2.5, 0.25, 7.0);
+
+		for (const FTransform& Transform : {MakeUniformTransform(), MakeNonUniformTransform()})
+		{
+			const FVector3f InParentSpace =
+				FVector3f(Transform.TransformPosition(To) - Transform.TransformPosition(From));
+
+			const FVector3f InLocalSpace = Transform.InverseTransformVector(InParentSpace);
+
+			CheckNearlyEqual(InLocalSpace, FVector3f(To - From), 1.0e-4f);
+		}
+
+		// Where the transform is makes no difference to a direction.
+		FTransform Here = MakeNonUniformTransform();
+		FTransform There = Here;
+		There.Location = FVector(1.0e9, -1.0e9, 5.0);
+		const FVector3f Direction(0.0f, 0.6f, -0.8f);
+		CHECK(Here.InverseTransformVector(Direction) == There.InverseTransformVector(Direction));
+	}
+
+	TEST_CASE("InverseTransformVector divides by the scale, so a unit direction does not stay one")
+	{
+		FTransform Transform;
+		Transform.Scale = FVector3f(2.0f, 4.0f, 0.5f);
+
+		CHECK(Transform.InverseTransformVector(FVector3f(1.0f, 0.0f, 0.0f)) == FVector3f(0.5f, 0.0f, 0.0f));
+		CHECK(Transform.InverseTransformVector(FVector3f(0.0f, 1.0f, 0.0f)) == FVector3f(0.0f, 0.25f, 0.0f));
+		CHECK(Transform.InverseTransformVector(FVector3f(0.0f, 0.0f, 1.0f)) == FVector3f(0.0f, 0.0f, 2.0f));
+	}
+
+	TEST_CASE("InverseTransformVector yields zero along an axis whose scale is zero")
+	{
+		FTransform Transform;
+		Transform.Scale = FVector3f(0.0f, 2.0f, 4.0f);
+
+		CHECK(Transform.InverseTransformVector(FVector3f(5.0f, 6.0f, 8.0f)) == FVector3f(0.0f, 3.0f, 2.0f));
+	}
+
+	TEST_CASE("A transform can be undone unless its scale is zero along an axis")
+	{
+		FTransform Transform;
+		CHECK(Transform.IsInvertible());
+		CHECK(MakeNonUniformTransform().IsInvertible());
+
+		// A scale below zero mirrors, which can be undone like any other.
+		Transform.Scale = FVector3f(-1.0f, 2.0f, -0.001f);
+		CHECK(Transform.IsInvertible());
+
+		for (const FVector3f& Flat :
+			{FVector3f(0.0f, 1.0f, 1.0f), FVector3f(1.0f, 0.0f, 1.0f), FVector3f(1.0f, 1.0f, 0.0f), FVector3f(0.0f)})
+		{
+			Transform.Scale = Flat;
+			CHECK_FALSE(Transform.IsInvertible());
+		}
+
+		// So close to zero that dividing by it would give nothing of use.
+		Transform.Scale = FVector3f(1.0f, 1.0e-9f, 1.0f);
+		CHECK_FALSE(Transform.IsInvertible());
+	}
 }

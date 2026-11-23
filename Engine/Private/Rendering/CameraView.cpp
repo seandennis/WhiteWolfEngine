@@ -1,5 +1,6 @@
 #include "Rendering/CameraView.h"
 
+#include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/trigonometric.hpp>
@@ -70,4 +71,22 @@ FMatrix4f FCameraView::GetProjectionMatrix(float AspectRatio) const
 	Matrix[2][3] = -1.0f;
 	Matrix[3][2] = NearPlane;
 	return Matrix;
+}
+
+FRay FCameraView::GetRay(const FVector2f& PicturePoint, float AspectRatio) const
+{
+	WW_CHECKF(AspectRatio > 0.0f, "The aspect ratio of a picture must be greater than zero, not {}", AspectRatio);
+
+	// A metre in front of the camera, the picture is as high as twice the tangent of half the field of view. The
+	// point of the picture is seen where the ray crosses that plane.
+	const float HalfHeight = std::tan(glm::radians(VerticalFieldOfView) * 0.5f);
+	const FVector3f InViewSpace(PicturePoint.x * HalfHeight * AspectRatio, PicturePoint.y * HalfHeight, -1.0f);
+	const FVector3f AlongWorldAxes = Rotation * InViewSpace;
+
+	// The same offset, shortened to the distance of the near plane, is where the ray crosses that: nothing closer
+	// to the camera is drawn.
+	FRay Ray;
+	Ray.Origin = Location + FVector(AlongWorldAxes) * static_cast<double>(NearPlane);
+	Ray.Direction = glm::normalize(AlongWorldAxes);
+	return Ray;
 }
