@@ -59,6 +59,13 @@ public:
 	/** Marks the window as wanting to close, as if the user had clicked its close button. */
 	ENGINE_API void RequestClose();
 
+	/**
+	 * Returns the window as the operating system's window system knows it: an HWND on Windows. Null for a window
+	 * that exists in memory only. It is for handing the window to something that is not the engine's, as the
+	 * renderer hands it to the graphics card; everything else about a window goes through this class.
+	 */
+	ENGINE_API void* GetNativeHandle() const;
+
 	/** Returns the keyboard and mouse state of this window. */
 	ENGINE_API FInputState& GetInput();
 	ENGINE_API const FInputState& GetInput() const;

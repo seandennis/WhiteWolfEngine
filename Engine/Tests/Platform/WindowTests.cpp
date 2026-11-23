@@ -124,6 +124,16 @@ TEST_SUITE("FWindow")
 		CHECK(Window->ShouldClose());
 	}
 
+	TEST_CASE("A window that exists in memory only has no handle in the operating system's window system")
+	{
+		const FScopedHeadlessPlatform Platform;
+		std::string Error;
+		const std::unique_ptr<FWindow> Window = FWindow::Create(FWindowDescription(), Error);
+		REQUIRE(Window != nullptr);
+
+		CHECK(Window->GetNativeHandle() == nullptr);
+	}
+
 	TEST_CASE("Each window has its own input state")
 	{
 		const FScopedHeadlessPlatform Platform;

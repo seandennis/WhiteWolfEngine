@@ -60,6 +60,7 @@ public:
 
 private:
 	friend class FSceneRenderer;
+	friend class FSwapChain;
 	friend class FUiRenderer;
 
 	/** Shared with everything created from this device, so that the graphics card outlives all of it. */

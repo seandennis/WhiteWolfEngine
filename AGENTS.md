@@ -139,7 +139,8 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
                           StaticMeshComponent.h (WStaticMeshComponent), DirectionalLightComponent.h,
                           PointLightComponent.h, SceneRenderer.h (FSceneRenderer), SceneViewMode.h,
                           GltfImporter.h (FGltfImporter: .gltf and .glb files),
-                          UiRenderer.h (FUiRenderer), UiDrawList.h, UiDrawCommand.h, UiVertex.h (user interfaces)
+                          UiRenderer.h (FUiRenderer), UiDrawList.h, UiDrawCommand.h, UiVertex.h (user interfaces),
+                          SwapChain.h (FSwapChain: shows a render target in a window)
     Reflection/           Reflected properties: Property.h (FProperty), ValueProperty.h and PropertyValueTraits.h
                           (bool, numbers, strings, math types), ObjectProperty.h, WeakObjectProperty.h,
                           ArrayProperty.h, PropertyFactory.h (MakeProperty), PropertyJsonContext.h.
@@ -356,7 +357,7 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 - **Headless mode** creates windows that exist in memory only. It needs no display, which is what lets tests, build servers and tools run the whole engine unattended. The Linux development builds support only this mode (D-025).
 - **Input is read from an `FInputState`,** one per window: `IsKeyDown` for held keys, `WasKeyPressed` and `WasKeyReleased` for what changed in the current frame, and the mouse position, movement and scroll amount; `HasMousePosition` is false while the mouse is outside the window. Keys are `EKey` values named after their position on a US keyboard. Text is not read from keys: `GetTypedText` is what was typed in the current frame, as the keyboard layout made it.
 - **Input can be simulated.** The `Handle...` functions of `FInputState` are public: a window calls them with real events, and tests and tools call them to press keys, type text and move the mouse without a person. Never read keys from GLFW directly.
-- No GLFW type or header appears outside `Engine/Private/Platform/`. Include `Platform/Glfw.h` there, never `<GLFW/glfw3.h>`.
+- No GLFW type or header appears outside `Engine/Private/Platform/`. Include `Platform/Glfw.h` there, never `<GLFW/glfw3.h>`. `FWindow::GetNativeHandle()` is the window as the operating system knows it, for handing it to something that is not the engine's; it is null for a window that exists in memory only.
 
 ## Rendering
 
@@ -379,6 +380,7 @@ A `WScene` is a tree of `WEntity` objects; each entity has a name, a transform r
 - **`FGltfImporter::Import(Path, Scene, Error, &Warnings)`** brings a glTF 2.0 file (.gltf or .glb) into a scene: one entity named after the file, its nodes below it, with meshes, materials, textures and lights. Nothing is converted, because the engine uses glTF's axes, units, material model and light units. What the engine does not support (animations, skins, cameras, transparency and more) is left out with a warning each; only a file that cannot be read at all is an error. No cgltf type or header appears outside `Engine/Private/Rendering/GltfImporter.cpp`.
 - `FMeshShapes` makes meshes of a box, a sphere and a plane, with normals and texture coordinates. `FImageDifference::Measure` says how much two pictures differ, which is how a screenshot is compared with a reference image.
 - `FImageFile` reads PNG and JPEG files into an `FImage` and writes an `FImage` as a PNG file, from and to disk or memory. It reads and writes Radiance HDR files (`.hdr`) as an `FHdrImage`, a picture whose pixels are amounts of light (`FLinearColor`) that can be far brighter than white. No stb type or header appears outside `Engine/Private/Rendering/ImageFile.cpp`.
+- **A window is shown pictures by an `FSwapChain`,** and that is all it is for: `SwapChain->Present(*Target, Error)` copies a finished render target onto the window's surface, pixel for pixel, and returns when the display takes it, which paces a program that draws in a loop (D-050). Everything is drawn onto render targets as before; nothing draws into a window directly, so what a window shows is what a test reads back. The swap chain follows the size of its window by itself; give it a render target of the window's size. Destroy it before its window. A window that exists in memory only can be shown pictures only where the graphics driver has a surface for such windows, which software drivers have and most graphics cards' drivers have not: ask `FSwapChain::IsSupported`, and write tests so that they pass either way, as `Tests/Rendering/SwapChainTests.cpp` does.
 - Everything created from a render device keeps the graphics card alive, so the order in which the device and its resources are destroyed does not matter.
 - No NVRHI or Vulkan type or header appears outside `Engine/Private/Rendering/`. Include `Rendering/VulkanApi.h` there, never `<vulkan/vulkan.hpp>`, so that the engine and NVRHI configure Vulkan identically; call Vulkan through the function table it sets up, with the plain C functions.
 - Test rendering with validation on (`FRenderDeviceDescription::bEnableValidation`) and check that nothing was logged as an error: the validation layer reports misuse of the rendering interface to `LogRendering`.

@@ -51,6 +51,46 @@ public:
 		return ImmediateCommandList;
 	}
 
+	/**
+	 * Returns the NVRHI device as what it is underneath, for the few calls that only its Vulkan side has. With
+	 * validation on, GetDevice returns a wrapper around this one.
+	 */
+	nvrhi::vulkan::IDevice* GetVulkanDevice() const
+	{
+		return VulkanDevice;
+	}
+
+	// The Vulkan objects themselves, for what NVRHI leaves to its user: showing pictures in windows.
+
+	VkPhysicalDevice GetPhysicalDevice() const
+	{
+		return PhysicalDevice;
+	}
+
+	VkDevice GetLogicalDevice() const
+	{
+		return LogicalDevice;
+	}
+
+	VkQueue GetGraphicsQueue() const
+	{
+		return GraphicsQueue;
+	}
+
+	uint32 GetGraphicsQueueFamily() const
+	{
+		return GraphicsQueueFamily;
+	}
+
+	/**
+	 * Returns true if the graphics card can hand pictures to a window system: it was opened with Vulkan's swap
+	 * chains, which it has and which the instance has the window surfaces for.
+	 */
+	bool CanShowPictures() const
+	{
+		return bCanShowPictures;
+	}
+
 	const std::string& GetAdapterName() const
 	{
 		return AdapterName;
@@ -83,12 +123,16 @@ private:
 
 	FMessageCallback MessageCallback;
 
+	/** The NVRHI device on Vulkan. */
+	nvrhi::vulkan::DeviceHandle VulkanDevice;
+
 	/** The device used for rendering: the Vulkan device, or the validation layer wrapped around it. */
 	nvrhi::DeviceHandle Device;
 	nvrhi::CommandListHandle ImmediateCommandList;
 
 	std::string AdapterName;
 	bool bIsSoftwareAdapter = false;
+	bool bCanShowPictures = false;
 
 	/** True if this context is the one that currently owns the global Vulkan function table. */
 	bool bOwnsFunctionTable = false;

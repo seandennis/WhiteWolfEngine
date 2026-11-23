@@ -1,6 +1,6 @@
 #include "Platform/Window.h"
 
-#include "Platform/Glfw.h"
+#include "Platform/GlfwNative.h"
 #include "Platform/Platform.h"
 #include "Platform/PlatformState.h"
 
@@ -188,6 +188,18 @@ bool FWindow::ShouldClose() const
 void FWindow::RequestClose()
 {
 	glfwSetWindowShouldClose(Implementation->Handle, GLFW_TRUE);
+}
+
+void* FWindow::GetNativeHandle() const
+{
+#if defined(_WIN32)
+	// GLFW has a window of the operating system only when it runs on the operating system's window system.
+	if (FPlatformState::Get().Mode == EPlatformMode::Windowed)
+	{
+		return glfwGetWin32Window(Implementation->Handle);
+	}
+#endif
+	return nullptr;
 }
 
 FInputState& FWindow::GetInput()

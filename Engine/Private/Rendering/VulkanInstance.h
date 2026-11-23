@@ -40,6 +40,19 @@ public:
 	/** Returns vkGetInstanceProcAddr, from which all other Vulkan functions are obtained. See GetHandle. */
 	static PFN_vkGetInstanceProcAddr GetInstanceProcAddr();
 
+	/**
+	 * Returns true if pictures can be shown in the windows of the operating system. The instance is created with
+	 * what Vulkan needs for that wherever it exists, because it is created once and before anyone asks for a
+	 * window. Initialize must have succeeded.
+	 */
+	static bool CanShowInWindows();
+
+	/**
+	 * Returns true if pictures can be shown in windows that exist in memory only, which the platform layer creates
+	 * in its headless mode. Not every graphics driver offers that. Initialize must have succeeded.
+	 */
+	static bool CanShowInHeadlessWindows();
+
 	/** Returns a Vulkan version as text, for messages: "1.3". */
 	static std::string FormatVersion(uint32 Version);
 };

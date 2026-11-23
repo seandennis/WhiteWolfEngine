@@ -56,6 +56,7 @@ public:
 private:
 	friend class FRenderDevice;
 	friend class FSceneRenderer;
+	friend class FSwapChain;
 	friend class FUiRenderer;
 
 	std::unique_ptr<FImplementation> Implementation;

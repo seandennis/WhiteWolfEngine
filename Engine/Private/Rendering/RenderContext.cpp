@@ -5,7 +5,9 @@
 
 #include <nvrhi/validation.h>
 
+#include <algorithm>
 #include <format>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -131,6 +133,7 @@ FRenderContext::~FRenderContext()
 	}
 	ImmediateCommandList = nullptr;
 	Device = nullptr;
+	VulkanDevice = nullptr;
 
 	// The instance is the process's and stays; see FVulkanInstance.
 	if (LogicalDevice != VK_NULL_HANDLE)
@@ -251,11 +254,36 @@ bool FRenderContext::CreateLogicalDevice(std::string& OutError)
 	FRequiredFeatures Enabled;
 	Enabled.EnableRequired();
 
+	// Swap chains are how pictures get from the graphics card into a window. The renderer does not need them, so
+	// a graphics card without them, or an instance without window surfaces, still draws.
+	uint32 ExtensionCount = 0;
+	GetFunctions().vkEnumerateDeviceExtensionProperties(PhysicalDevice, nullptr, &ExtensionCount, nullptr);
+	std::vector<VkExtensionProperties> Extensions(ExtensionCount);
+	if (ExtensionCount > 0)
+	{
+		GetFunctions().vkEnumerateDeviceExtensionProperties(
+			PhysicalDevice, nullptr, &ExtensionCount, Extensions.data());
+		Extensions.resize(ExtensionCount);
+	}
+	const bool bHasSwapChains = std::ranges::any_of(Extensions,
+		[](const VkExtensionProperties& Extension)
+		{ return std::string_view(Extension.extensionName) == VK_KHR_SWAPCHAIN_EXTENSION_NAME; });
+	const bool bHasSurfaces = FVulkanInstance::CanShowInWindows() || FVulkanInstance::CanShowInHeadlessWindows();
+	bCanShowPictures = bHasSwapChains && bHasSurfaces;
+
+	std::vector<const char*> EnabledExtensions;
+	if (bCanShowPictures)
+	{
+		EnabledExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+	}
+
 	VkDeviceCreateInfo CreateInfo{};
 	CreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	CreateInfo.pNext = &Enabled.Features;
 	CreateInfo.queueCreateInfoCount = 1;
 	CreateInfo.pQueueCreateInfos = &QueueInfo;
+	CreateInfo.enabledExtensionCount = static_cast<uint32>(EnabledExtensions.size());
+	CreateInfo.ppEnabledExtensionNames = EnabledExtensions.data();
 
 	const VkResult Result = GetFunctions().vkCreateDevice(PhysicalDevice, &CreateInfo, nullptr, &LogicalDevice);
 	if (Result != VK_SUCCESS)
@@ -284,7 +312,7 @@ bool FRenderContext::CreateRenderInterface(const FRenderDeviceDescription& Descr
 	DeviceDescription.transferQueue = VK_NULL_HANDLE;
 	DeviceDescription.computeQueue = VK_NULL_HANDLE;
 
-	const nvrhi::vulkan::DeviceHandle VulkanDevice = nvrhi::vulkan::createDevice(DeviceDescription);
+	VulkanDevice = nvrhi::vulkan::createDevice(DeviceDescription);
 	if (VulkanDevice == nullptr)
 	{
 		OutError = "the rendering interface could not be created";
