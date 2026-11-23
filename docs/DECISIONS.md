@@ -989,3 +989,20 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** The outliner has no toggles for visibility yet, no way to select a range with Shift, and no way to put an entity between two others: a dropped entity becomes the last child. A copy has the name of its original.
 
 **Testing.** With the mouse and keyboard of `FEditorUiTest`: the menu of a row, which selects it, and of several selected rows, which stay selected; creating below a row and at the root, with the selection and the names of the steps; renaming by F2 and by the menu, onto the end of the old name, cancelled by Escape, confirmed by a click elsewhere, confirmed unchanged, and with the entity taken away meanwhile; Delete with a parent and its child among what is selected, as one step that one undo takes back; Delete with nothing selected and in a text field; Ctrl+D with the copies selected; dragging onto a row and onto the empty part, with the place in the world kept; a drop refused on what is below the dragged row; several selected rows dragged by one; a click on one of several selected rows; and the entries of the Edit menu, with and without a selection.
+
+## D-056: A rotation is shown as pitch, yaw and roll in degrees
+
+**Status:** Accepted.
+
+**Context.** Rotations are quaternions (`FQuat`, D-028), which nobody reads or types. The editor's Details panel has to show the rotation of an entity as numbers and take numbers for it, and scripts will want to say "turned 90 degrees to the left".
+
+**Decision.** `FRotator` (`Math/Rotator.h`) is a rotation as three angles in degrees, with `ToQuat` and `FromQuat`.
+
+- **Each angle turns around one axis of the world's convention** (D-028: +X right, +Y up, -Z forward), counter-clockwise as seen with the axis pointing at the viewer: `Pitch` around +X tilts what faces forward upwards, `Yaw` around +Y turns it to the left, `Roll` around +Z tips an object onto its left side. In a panel they are the X, Y and Z of a rotation.
+- **Roll is applied first, then pitch, then yaw:** the rotation is yaw times pitch times roll. The yaw therefore always turns around the up axis, as a turret or a person's heading does, and the two angles that are used most, heading and tilt, mean what they say whatever the third is. It is the order in which the viewport's camera is turned and tilted (D-048).
+- **`FromQuat` gives a pitch from -90 to 90 and a yaw and roll from -180 to 180.** Many sets of angles are one rotation, so the angles that went in need not be the ones that come out. Within about a tenth of a degree of straight up or down, where yaw and roll turn around the same axis and a quaternion's single precision cannot tell them apart, the pitch is exactly 90 or -90, the roll is 0 and the yaw is what the two do together.
+- **It is not a property type and nothing stores one.** A rotator is for the moment a person looks at a rotation or types one. Whoever shows angles while they are being changed keeps the angles for that long, because reading them back from the quaternion in every frame would make a number that is dragged past 90 degrees jump.
+
+**Alternatives considered.** glm's own functions for angles use another order (roll around Z last), in which a yaw of a tilted object is not a turn around the up axis. Storing angles in the transform, as Unreal does with its rotator, makes typed angles come back as typed, but then every rotation that is calculated has to be turned into angles, which loses precision and has no single answer. An axis and an angle are exact but not how people think of the way an object faces.
+
+**Testing.** What each angle does to the forward, right and up directions; that yaw turns around the up axis whatever the other angles are; that angles in range come back as they went in; that angles out of range and arbitrary quaternions come back in range and as the same rotation; and both vertical cases, with the yaw taking over the roll.

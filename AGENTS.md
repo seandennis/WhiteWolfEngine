@@ -125,7 +125,8 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
     Json/                 JSON text: JsonValue.h (FJsonValue), JsonReader.h (FJsonReader), JsonWriter.h (FJsonWriter)
     Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
     Math/                 Math types: Vector.h (FVector, FVector3f, FVector2f, FVector2D), Quat.h (FQuat), Transform.h (FTransform),
-                          LinearColor.h (FLinearColor), Color.h (FColor), Matrix.h (FMatrix4f)
+                          Rotator.h (FRotator: a rotation as angles), LinearColor.h (FLinearColor), Color.h (FColor),
+                          Matrix.h (FMatrix4f)
     Object/               The object system: Object.h (WObject), Class.h (WClass), ObjectPtr.h (TObjectPtr),
                           WeakObjectPtr.h (TWeakObjectPtr), ObjectGlobals.h (NewObject, Cast, IsValid,
                           CollectGarbage), GarbageCollector.h (FGarbageCollector), ObjectMacros.h (class
@@ -260,6 +261,7 @@ The code follows the [Epic C++ Coding Standard](https://dev.epicgames.com/docume
 
 - C++20. Use the standard library (`std::string`, `std::vector`, `std::optional`, `std::format`) directly; this project does not reimplement Unreal's containers (D-009). Strings are UTF-8 `std::string`; there is no `TEXT()` macro.
 - Math types are glm types under engine names: `FVector` (`glm::dvec3`) for every world-space position, `FVector3f` (`glm::vec3`) for directions, scales and mesh-local data, `FQuat` (`glm::quat`, constructed as w, x, y, z) for rotations, and `FTransform` for location, rotation and scale. Their components are glm's lowercase `x`, `y`, `z`, `w`. Never store a world-space position in single precision. `FMatrix4f` (`glm::mat4`) is for the renderer only.
+- Rotations are stored and combined as `FQuat`. An `FRotator` is a rotation as `Pitch`, `Yaw` and `Roll` in degrees, around +X, +Y and +Z, for showing a rotation to a person and making one from numbers (`ToQuat`, `FromQuat`, D-056); do not store one or calculate with one.
 - The world is right-handed with +Y up, and lengths are metres. Objects and cameras face along their own -Z axis with +X to their right. Triangles are front-facing when their corners run counter-clockwise. This is glTF's convention (D-028).
 - Integer types: `int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64` from `Core/CoreTypes.h`. Use `int32` for counts and indices in engine APIs; use `std::size_t` only where a standard container requires it.
 - `auto` only for lambdas, iterators and types that cannot be spelled; otherwise write the type.
