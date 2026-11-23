@@ -83,6 +83,23 @@ TEST_SUITE("FGizmoShape")
 		CHECK(Square.GetDistanceTo(FVector2f(15.0f, 4.0f)) == doctest::Approx(6.0f));
 	}
 
+	TEST_CASE("An area whose corners are in a line or in one place has no inside: it is that line, or that point")
+	{
+		const FGizmoShape Flat = MakeArea({FVector2f(0.0f, 0.0f), FVector2f(10.0f, 0.0f), FVector2f(20.0f, 0.0f)});
+
+		// On the line through the corners beyond the last of them and before the first, and beside them.
+		CHECK(Flat.GetDistanceTo(FVector2f(100.0f, 0.0f)) == doctest::Approx(80.0f));
+		CHECK(Flat.GetDistanceTo(FVector2f(-3.0f, 0.0f)) == doctest::Approx(3.0f));
+		CHECK(Flat.GetDistanceTo(FVector2f(5.0f, 4.0f)) == doctest::Approx(4.0f));
+		// Between the corners a point is on the area's edges.
+		CHECK(Flat.GetDistanceTo(FVector2f(15.0f, 0.0f)) == 0.0f);
+
+		const FGizmoShape Dot = MakeArea({FVector2f(5.0f, 5.0f), FVector2f(5.0f, 5.0f), FVector2f(5.0f, 5.0f)});
+		CHECK(Dot.GetDistanceTo(FVector2f(5.0f, 5.0f)) == 0.0f);
+		CHECK(Dot.GetDistanceTo(FVector2f(8.0f, 9.0f)) == doctest::Approx(5.0f));
+		CHECK(Dot.GetDistanceTo(FVector2f(100.0f, 5.0f)) == doctest::Approx(95.0f));
+	}
+
 	TEST_CASE("A shape of one point is that point, and one of none is nowhere")
 	{
 		CHECK(MakeLine({FVector2f(3.0f, 4.0f)}).GetDistanceTo(FVector2f(0.0f, 0.0f)) == doctest::Approx(5.0f));

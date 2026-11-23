@@ -27,7 +27,8 @@ struct FGizmoShape
 
 	/**
 	 * Returns how far a point of the picture is from the shape, in pixels: from the nearest point of a line, or
-	 * from the nearest edge of an area, and zero inside an area. Infinitely far from a shape without points.
+	 * from the nearest edge of an area, and zero inside an area. An area whose corners are all in one line, or in
+	 * one place, has no inside. Infinitely far from a shape without points.
 	 */
 	EDITOR_API float GetDistanceTo(const FVector2f& Point) const;
 };

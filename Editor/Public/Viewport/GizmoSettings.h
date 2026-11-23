@@ -51,7 +51,7 @@ struct FGizmoSettings
 	 * Returns what dragging the gizmo does after a mode, when the modes are gone through in turn, as a key does
 	 * that is pressed again and again: moving, turning, sizing, and moving again.
 	 */
-	EDITOR_API static EGizmoMode GetNextMode(EGizmoMode Mode);
+	EDITOR_API static EGizmoMode GetNextMode(EGizmoMode InMode);
 
 	bool operator==(const FGizmoSettings& Other) const = default;
 };

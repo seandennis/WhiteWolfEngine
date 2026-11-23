@@ -43,16 +43,18 @@ public:
 	 *
 	 * @param InGizmo The gizmo as it lies when the mouse takes hold. The drag keeps a copy of it.
 	 * @param InMode What the gizmo does.
-	 * @param InHandle The handle that the mouse has taken hold of. None, or a handle that the mode has not, is a
-	 * drag that does nothing.
+	 * @param InHandle The handle that the mouse has taken hold of. None, a handle that the mode has not, or any
+	 * handle of a gizmo that is not visible, is a drag that does nothing.
 	 * @param InStartPoint Where in the picture the mouse took hold, in pixels from its top left corner.
 	 */
 	EDITOR_API FGizmoDrag(
 		const FTransformGizmo& InGizmo, EGizmoMode InMode, EGizmoHandle InHandle, const FVector2f& InStartPoint);
 
 	/**
-	 * Takes the mouse to a point of the picture. Where the mouse then says nothing, as when it points along the
-	 * very axis that it drags, the drag stays what it was.
+	 * Takes the mouse to a point of the picture. Where the mouse then says nothing, the drag stays what it was:
+	 * when it points along the very axis that it drags, when it points past the horizon of the plane that the drag
+	 * is taken in, or at a place of that plane that is more than a hundred times as far away as the gizmo, and
+	 * when the point is no number.
 	 *
 	 * @param PicturePoint Where the mouse is, in pixels from the top left corner of the picture.
 	 * @param Settings Whether the drag goes in steps, and in which.
@@ -67,11 +69,13 @@ public:
 	 */
 	EDITOR_API FTransform Apply(const FTransform& StartTransform) const;
 
+	/** Returns what the drag does: what the gizmo was set to do when the mouse took hold. */
 	EGizmoMode GetMode() const
 	{
 		return Mode;
 	}
 
+	/** Returns the handle that is dragged; None for a drag of a gizmo that is not visible. */
 	EGizmoHandle GetHandle() const
 	{
 		return Handle;

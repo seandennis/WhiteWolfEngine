@@ -32,8 +32,8 @@ struct FRay
 	 *
 	 * @param PlanePoint A point of the plane.
 	 * @param PlaneNormal The direction that the plane faces, of unit length.
-	 * @return The distance from where the ray begins, or nothing if the ray runs along the plane or the plane is
-	 * behind where the ray begins.
+	 * @return The distance from where the ray begins, or nothing if the ray runs along the plane, if the plane is
+	 * behind where the ray begins, or if the ray or the plane is not made of finite numbers.
 	 */
 	ENGINE_API std::optional<double> IntersectPlane(const FVector& PlanePoint, const FVector3f& PlaneNormal) const;
 

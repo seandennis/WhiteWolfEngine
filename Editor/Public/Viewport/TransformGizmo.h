@@ -38,7 +38,8 @@ public:
 	 * @param InView From where the picture is taken.
 	 * @param InPictureSize The width and the height of the picture, in pixels; both greater than zero.
 	 * @param InPivot Where the gizmo is: the place in the world of the thing that it moves.
-	 * @param Orientation The rotation of the gizmo's axes; none for the axes of the world.
+	 * @param Orientation The rotation of the gizmo's axes; none for the axes of the world. It need not be of unit
+	 * length: only the way it turns counts, and a rotation of no length turns nothing.
 	 * @param InAxisLength How long its axes are in the picture, in pixels; greater than zero.
 	 */
 	EDITOR_API FTransformGizmo(const FCameraView& InView,
@@ -143,6 +144,25 @@ public:
 		return Handle == EGizmoHandle::YZ || Handle == EGizmoHandle::XZ || Handle == EGizmoHandle::XY;
 	}
 
+	/**
+	 * Returns the direction from the middle of the gizmo to the point at which a piece of the ring around an axis
+	 * begins, of unit length. Pieces are counted around the ring the way that a thing turns counter-clockwise as
+	 * seen from where the axis points, beginning at the next of the gizmo's axes, and on from the last piece to
+	 * the first.
+	 *
+	 * @param AxisIndex 0 for X, 1 for Y, 2 for Z. Anything else is a fatal error.
+	 */
+	EDITOR_API FVector3f GetRingPointDirection(int32 AxisIndex, int32 Piece) const;
+
+	/**
+	 * Returns true if the point at which a piece of the ring around an axis begins is not behind the middle of
+	 * the gizmo, as the camera sees it. A ring is drawn through these points and through no others, so they are
+	 * also the only ones that the mouse can have taken hold of.
+	 *
+	 * @param AxisIndex 0 for X, 1 for Y, 2 for Z. Anything else is a fatal error.
+	 */
+	EDITOR_API bool IsRingPointInFront(int32 AxisIndex, int32 Piece) const;
+
 private:
 	/** Returns true if the arrow or the box of an axis can be used from where the camera is. */
 	bool IsAxisUsable(int32 AxisIndex) const;
@@ -150,18 +170,17 @@ private:
 	/** Returns true if the square of the plane that leaves an axis out can be used from where the camera is. */
 	bool IsPlaneUsable(int32 AxisIndex) const;
 
-	/**
-	 * Returns true if the point at which a piece of the ring around an axis begins is not behind the middle of
-	 * the gizmo, as the camera sees it. Pieces are counted around the ring, and on from its last to its first.
-	 */
-	bool IsRingPointInFront(int32 AxisIndex, int32 Piece) const;
-
 	/** Returns the point of the world that is so many axis lengths along each of the gizmo's axes from its pivot. */
 	FVector GetPoint(const FVector3f& AxisLengths) const;
 
-	void AddTranslateShapes(std::vector<FGizmoShape>& Shapes) const;
-	void AddRotateShapes(std::vector<FGizmoShape>& Shapes) const;
-	void AddScaleShapes(std::vector<FGizmoShape>& Shapes) const;
+	/** Adds the shapes of the handles that move things: an arrow along each axis and a square in each plane. */
+	void AddTranslateShapes(std::vector<FGizmoShape>& OutShapes) const;
+
+	/** Adds the shapes of the handles that turn things: a ring around each axis. */
+	void AddRotateShapes(std::vector<FGizmoShape>& OutShapes) const;
+
+	/** Adds the shapes of the handles that size things: a box at the end of each axis and one in the middle. */
+	void AddScaleShapes(std::vector<FGizmoShape>& OutShapes) const;
 
 	FCameraView View;
 	FVector2f PictureSize;

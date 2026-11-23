@@ -9,9 +9,9 @@ bool FGizmoSettings::IsValid() const
 	return bHasValidLocationSnap && bHasValidRotationSnap && bHasValidScaleSnap;
 }
 
-EGizmoMode FGizmoSettings::GetNextMode(EGizmoMode Mode)
+EGizmoMode FGizmoSettings::GetNextMode(EGizmoMode InMode)
 {
-	switch (Mode)
+	switch (InMode)
 	{
 		case EGizmoMode::Translate:
 			return EGizmoMode::Rotate;

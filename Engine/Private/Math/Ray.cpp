@@ -23,8 +23,10 @@ std::optional<double> FRay::IntersectPlane(const FVector& PlanePoint, const FVec
 		return std::nullopt;
 	}
 
+	// A ray or a plane that is not made of finite numbers gives a distance that is no number, or one without
+	// end: it is gone through nowhere.
 	const double Distance = glm::dot(PlanePoint - Origin, Normal) / Approach;
-	if (Distance < 0.0)
+	if (!std::isfinite(Distance) || Distance < 0.0)
 	{
 		return std::nullopt;
 	}

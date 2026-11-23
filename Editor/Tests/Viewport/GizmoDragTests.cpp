@@ -1,6 +1,7 @@
 #include "Viewport/GizmoDrag.h"
 
 #include "Math/Transform.h"
+#include "Rendering/CameraView.h"
 #include "Viewport/GizmoSettings.h"
 #include "Viewport/TransformGizmo.h"
 #include "Viewport/ViewportCamera.h"
@@ -10,8 +11,11 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/trigonometric.hpp>
 
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <initializer_list>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <ostream>
@@ -306,10 +310,46 @@ TEST_SUITE("FGizmoDrag")
 		Drag.MoveTo(FVector2f(40.0f, 100.0f), Steps);
 		CHECK(IsNear(Drag.GetScale(), FVector3f(0.25f, 1.0f, 1.0f)));
 
-		// A step that is finer than the least a drag leaves of a size does not go below that.
-		const FGizmoSettings FineSteps = MakeSteps(0.5, 15.0f, 0.001f);
+		// A step that is finer than the least a drag leaves of a size stops at the last whole step that leaves no
+		// less: 247 steps of four thousandths down from one.
+		const FGizmoSettings FineSteps = MakeSteps(0.5, 15.0f, 0.004f);
 		Drag.MoveTo(FVector2f(40.0f, 100.0f), FineSteps);
-		CHECK(IsNear(Drag.GetScale(), FVector3f(FGizmoDrag::MinScaleFactor, 1.0f, 1.0f)));
+		CHECK(IsNear(Drag.GetScale(), FVector3f(0.012f, 1.0f, 1.0f)));
+	}
+
+	TEST_CASE("With steps, it is the change of a size that goes in steps, whatever the step")
+	{
+		// Steps that one is no whole number of, up to the largest: a drag that has gone nowhere is no step.
+		for (const float Step : {0.3f, 0.75f, 2.0f, FGizmoSettings::MaxScaleSnap})
+		{
+			CAPTURE(Step);
+			const FGizmoSettings Steps = MakeSteps(0.5, 15.0f, Step);
+			REQUIRE(Steps.IsValid());
+
+			FGizmoDrag Box(MakeFrontGizmo(), EGizmoMode::Scale, EGizmoHandle::X, FVector2f(150.0f, 100.0f));
+			Box.MoveTo(FVector2f(150.0f, 100.0f), Steps);
+			CHECK(Box.GetScale() == FVector3f(1.0f));
+
+			FGizmoDrag Middle(MakeFrontGizmo(), EGizmoMode::Scale, EGizmoHandle::All, FVector2f(100.0f, 100.0f));
+			Middle.MoveTo(FVector2f(100.0f, 100.0f), Steps);
+			CHECK(Middle.GetScale() == FVector3f(1.0f));
+		}
+
+		// In steps of three tenths, 1.26 times the size is nearer to one step more than to none.
+		const FGizmoSettings Tenths = MakeSteps(0.5, 15.0f, 0.3f);
+		FGizmoDrag Drag(MakeFrontGizmo(), EGizmoMode::Scale, EGizmoHandle::X, FVector2f(150.0f, 100.0f));
+		Drag.MoveTo(FVector2f(163.0f, 100.0f), Tenths);
+		CHECK(IsNear(Drag.GetScale(), FVector3f(1.3f, 1.0f, 1.0f)));
+		// Three steps less leave a tenth; a fourth would leave less than nothing.
+		Drag.MoveTo(FVector2f(40.0f, 100.0f), Tenths);
+		CHECK(IsNear(Drag.GetScale(), FVector3f(0.1f, 1.0f, 1.0f)));
+
+		// In steps of twice the size, a thing gets no smaller, and larger by two sizes at a time.
+		const FGizmoSettings Doubles = MakeSteps(0.5, 15.0f, 2.0f);
+		Drag.MoveTo(FVector2f(40.0f, 100.0f), Doubles);
+		CHECK(IsNear(Drag.GetScale(), FVector3f(1.0f, 1.0f, 1.0f)));
+		Drag.MoveTo(FVector2f(250.0f, 100.0f), Doubles);
+		CHECK(IsNear(Drag.GetScale(), FVector3f(3.0f, 1.0f, 1.0f)));
 	}
 
 	TEST_CASE("A handle that the gizmo has not in its mode does nothing when it is dragged")
@@ -352,5 +392,325 @@ TEST_SUITE("FGizmoDrag")
 		Drag.MoveTo(*End, FGizmoSettings());
 
 		CHECK(IsNear(Drag.GetTranslation(), FVector(Gizmo.GetWorldAxisLength(), 0.0, 0.0), 1.0e-3));
+	}
+
+	TEST_CASE("A drag that comes back to where it began leaves a thing exactly as it was")
+	{
+		FTransform Start;
+		Start.Location = FVector(1.0e9 + 0.125, -3.0, 7.5);
+		Start.Rotation = glm::angleAxis(glm::radians(33.0f), glm::normalize(FVector3f(1.0f, 2.0f, 3.0f)));
+		Start.Scale = FVector3f(1.5f, 0.25f, 3.0f);
+
+		const auto ComeBack =
+			[&Start](EGizmoMode Mode, EGizmoHandle Handle, const FVector2f& Point, const FGizmoSettings& Settings)
+		{
+			CAPTURE(static_cast<int32>(Mode));
+			CAPTURE(static_cast<int32>(Handle));
+			FGizmoDrag Drag(MakeFrontGizmo(), Mode, Handle, Point);
+
+			// Somewhere else first, where the drag has done something.
+			Drag.MoveTo(Point + FVector2f(37.0f, -23.0f), Settings);
+			CHECK_FALSE(Drag.Apply(Start) == Start);
+
+			Drag.MoveTo(Point, Settings);
+			CHECK(Drag.GetTranslation() == FVector(0.0));
+			CHECK(Drag.GetAngle() == 0.0f);
+			CHECK(Drag.GetScale() == FVector3f(1.0f));
+			CHECK(Drag.Apply(Start) == Start);
+		};
+		// Without steps, in steps that one is a whole number of, and in steps that it is not.
+		for (const FGizmoSettings& Settings :
+			{FGizmoSettings(), MakeSteps(0.5, 15.0f, 0.25f), MakeSteps(0.3, 7.0f, 0.4f)})
+		{
+			ComeBack(EGizmoMode::Translate, EGizmoHandle::X, FVector2f(130.0f, 100.0f), Settings);
+			ComeBack(EGizmoMode::Translate, EGizmoHandle::XY, FVector2f(118.0f, 82.0f), Settings);
+			ComeBack(EGizmoMode::Rotate, EGizmoHandle::Z, FVector2f(150.0f, 100.0f), Settings);
+			ComeBack(EGizmoMode::Scale, EGizmoHandle::X, FVector2f(150.0f, 100.0f), Settings);
+			ComeBack(EGizmoMode::Scale, EGizmoHandle::All, FVector2f(100.0f, 100.0f), Settings);
+		}
+	}
+
+	TEST_CASE("Where the mouse comes to say nothing, a drag stays what it had come to")
+	{
+		// The gizmo's X leans sixty degrees towards the camera, and so does the plane that the mouse points at for
+		// its arrow. From the left of the picture the camera looks along that plane and past it.
+		const FTransformGizmo Leaning =
+			MakeFrontGizmo(glm::angleAxis(glm::radians(-60.0f), FVector3f(0.0f, 1.0f, 0.0f)));
+		FGizmoDrag Arrow(Leaning, EGizmoMode::Translate, EGizmoHandle::X, FVector2f(130.0f, 100.0f));
+		Arrow.MoveTo(FVector2f(140.0f, 100.0f), FGizmoSettings());
+		const FVector Moved = Arrow.GetTranslation();
+		REQUIRE(glm::length(Moved) > 0.5);
+		Arrow.MoveTo(FVector2f(20.0f, 100.0f), FGizmoSettings());
+		CHECK(Arrow.GetTranslation() == Moved);
+
+		// A box is measured as an arrow is.
+		FGizmoDrag Box(Leaning, EGizmoMode::Scale, EGizmoHandle::X, FVector2f(130.0f, 100.0f));
+		Box.MoveTo(FVector2f(140.0f, 100.0f), FGizmoSettings());
+		const FVector3f Sized = Box.GetScale();
+		REQUIRE(Sized.x > 1.1f);
+		Box.MoveTo(FVector2f(20.0f, 100.0f), FGizmoSettings());
+		CHECK(Box.GetScale() == Sized);
+
+		// As the editor's camera first looks, from above, the plane of X and Z ends at a horizon in the picture,
+		// and above it the mouse points at the sky.
+		const FViewportCamera Camera;
+		const FTransformGizmo Seen(Camera.GetView(), PictureSize, Camera.GetFocusPoint(), NoRotation, AxisLength);
+		const std::optional<FVector2f> OnSquare = Seen.FindHandlePoint(EGizmoMode::Translate, EGizmoHandle::XZ);
+		REQUIRE(OnSquare.has_value());
+		FGizmoDrag Square(Seen, EGizmoMode::Translate, EGizmoHandle::XZ, *OnSquare);
+		Square.MoveTo(*OnSquare + FVector2f(20.0f, 0.0f), FGizmoSettings());
+		const FVector Slid = Square.GetTranslation();
+		REQUIRE(glm::length(Slid) > 0.1);
+		CHECK(Slid.y == 0.0);
+		Square.MoveTo(FVector2f(100.0f, 5.0f), FGizmoSettings());
+		CHECK(Square.GetTranslation() == Slid);
+	}
+
+	TEST_CASE("Towards the horizon of the plane that a drag is taken in, the mouse says nothing and the thing stays")
+	{
+		// A gizmo five metres below a camera that looks level: the plane of X and Z is a floor whose horizon is the
+		// middle row of the picture. Fifty rows below it the floor is ten metres ahead, where the gizmo is, and five
+		// rows below it a hundred.
+		FCameraView View;
+		View.VerticalFieldOfView = 90.0f;
+		const FTransformGizmo Gizmo(View, PictureSize, FVector(0.0, -5.0, -10.0), NoRotation, AxisLength);
+
+		// The arrow along Z is measured on the same floor: of the planes that hold its axis, that one faces the
+		// camera most squarely.
+		for (const EGizmoHandle Handle : {EGizmoHandle::XZ, EGizmoHandle::Z})
+		{
+			CAPTURE(static_cast<int32>(Handle));
+			FGizmoDrag Drag(Gizmo, EGizmoMode::Translate, Handle, FVector2f(100.0f, 150.0f));
+			Drag.MoveTo(FVector2f(100.0f, 105.0f), FGizmoSettings());
+			CHECK(IsNear(Drag.GetTranslation(), FVector(0.0, 0.0, -90.0), 1.0e-2));
+
+			// A quarter of a row below the horizon the floor is two kilometres ahead, a hundredth of a row fifty;
+			// on the horizon and above it there is no floor.
+			for (const float Row : {100.25f, 100.01f, 100.0f, 99.0f, 50.0f})
+			{
+				CAPTURE(Row);
+				Drag.MoveTo(FVector2f(100.0f, Row), FGizmoSettings());
+				CHECK(IsNear(Drag.GetTranslation(), FVector(0.0, 0.0, -90.0), 1.0e-2));
+			}
+
+			// Back below it, the thing follows the mouse again.
+			Drag.MoveTo(FVector2f(100.0f, 125.0f), FGizmoSettings());
+			CHECK(IsNear(Drag.GetTranslation(), FVector(0.0, 0.0, -10.0), 1.0e-3));
+		}
+
+		// A box on an axis that points away from the camera is measured on that floor too. Taken where the floor
+		// is twenty metres ahead and dragged to where it is a hundred, it is eighty metres along an axis of five.
+		const FTransformGizmo TurnedAway(View,
+			PictureSize,
+			FVector(0.0, -5.0, -10.0),
+			glm::angleAxis(glm::radians(180.0f), FVector3f(0.0f, 1.0f, 0.0f)),
+			AxisLength);
+		FGizmoDrag Box(TurnedAway, EGizmoMode::Scale, EGizmoHandle::Z, FVector2f(100.0f, 125.0f));
+		Box.MoveTo(FVector2f(100.0f, 105.0f), FGizmoSettings());
+		CHECK(IsNear(Box.GetScale(), FVector3f(1.0f, 1.0f, 17.0f), 1.0e-2f));
+		Box.MoveTo(FVector2f(100.0f, 100.25f), FGizmoSettings());
+		CHECK(IsNear(Box.GetScale(), FVector3f(1.0f, 1.0f, 17.0f), 1.0e-2f));
+	}
+
+	TEST_CASE("A point of the picture that is no number leaves a drag as it was")
+	{
+		const float NoNumber = std::numeric_limits<float>::quiet_NaN();
+		const float Endless = std::numeric_limits<float>::infinity();
+		const FTransform Start = MakeTransformAt(FVector(1.0, 2.0, 3.0));
+
+		for (const EGizmoMode Mode : {EGizmoMode::Translate, EGizmoMode::Rotate, EGizmoMode::Scale})
+		{
+			CAPTURE(static_cast<int32>(Mode));
+			FGizmoDrag Drag(MakeFrontGizmo(), Mode, EGizmoHandle::X, FVector2f(150.0f, 100.0f));
+			Drag.MoveTo(FVector2f(160.0f, 90.0f), FGizmoSettings());
+			const FTransform Before = Drag.Apply(Start);
+			REQUIRE_FALSE(Before == Start);
+
+			for (const FVector2f& Nowhere :
+				{FVector2f(NoNumber, 100.0f), FVector2f(150.0f, NoNumber), FVector2f(Endless, 100.0f)})
+			{
+				Drag.MoveTo(Nowhere, FGizmoSettings());
+				CHECK(Drag.Apply(Start) == Before);
+			}
+		}
+
+		// The box in the middle is measured in the picture alone, and is left as it was all the same.
+		FGizmoDrag Middle(MakeFrontGizmo(), EGizmoMode::Scale, EGizmoHandle::All, FVector2f(100.0f, 100.0f));
+		Middle.MoveTo(FVector2f(125.0f, 100.0f), FGizmoSettings());
+		Middle.MoveTo(FVector2f(NoNumber, NoNumber), FGizmoSettings());
+		CHECK(IsNear(Middle.GetScale(), FVector3f(1.5f)));
+	}
+
+	TEST_CASE("A drag of a gizmo that is not visible does nothing")
+	{
+		// Behind a camera that looks along +X. The plane that the mouse would point at is in front of it all the
+		// same.
+		FCameraView View;
+		View.VerticalFieldOfView = 90.0f;
+		View.Rotation = glm::angleAxis(glm::radians(-90.0f), FVector3f(0.0f, 1.0f, 0.0f));
+		const FTransformGizmo Gizmo(View, PictureSize, FVector(-5.0, 0.0, -3.0), NoRotation, AxisLength);
+		REQUIRE_FALSE(Gizmo.IsVisible());
+		FTransform Start = MakeTransformAt(FVector(1.0, 2.0, 3.0));
+		Start.Scale = FVector3f(1.0f, 2.0f, 3.0f);
+
+		for (const EGizmoMode Mode : {EGizmoMode::Translate, EGizmoMode::Rotate, EGizmoMode::Scale})
+		{
+			CAPTURE(static_cast<int32>(Mode));
+			FGizmoDrag Drag(Gizmo, Mode, EGizmoHandle::X, FVector2f(50.0f, 100.0f));
+			Drag.MoveTo(FVector2f(60.0f, 110.0f), FGizmoSettings());
+
+			CHECK(Drag.GetHandle() == EGizmoHandle::None);
+			CHECK(Drag.Apply(Start) == Start);
+		}
+	}
+
+	TEST_CASE("An arrow of a gizmo whose rotation is not of unit length moves a thing as far as the mouse goes")
+	{
+		// A quarter turn around Y, written too long: the gizmo's Z axis points to the right.
+		const FTransformGizmo Gizmo = MakeFrontGizmo(FQuat(1.0f, 0.0f, 1.0f, 0.0f));
+		FGizmoDrag Drag(Gizmo, EGizmoMode::Translate, EGizmoHandle::Z, FVector2f(130.0f, 100.0f));
+
+		// Twenty pixels to the right are two metres.
+		Drag.MoveTo(FVector2f(150.0f, 100.0f), FGizmoSettings());
+
+		CHECK(IsNear(Drag.GetTranslation(), FVector(2.0, 0.0, 0.0)));
+	}
+
+	TEST_CASE("In a picture that is wider than it is high, a pixel is as far in the world both ways")
+	{
+		// Half as wide again as it is high: the middle of the gizmo is at (150, 100), and a pixel is still ten
+		// centimetres there.
+		FCameraView View;
+		View.VerticalFieldOfView = 90.0f;
+		const FTransformGizmo Gizmo(View, FVector2f(300.0f, 200.0f), Pivot, NoRotation, AxisLength);
+		CHECK(Gizmo.GetWorldAxisLength() == doctest::Approx(5.0));
+		const std::optional<FVector2f> Beside = Gizmo.FindInPicture(Pivot + FVector(2.0, 1.0, 0.0));
+		REQUIRE(Beside.has_value());
+		CHECK(glm::length(*Beside - FVector2f(170.0f, 90.0f)) < 0.01f);
+
+		FGizmoDrag AlongX(Gizmo, EGizmoMode::Translate, EGizmoHandle::X, FVector2f(180.0f, 100.0f));
+		AlongX.MoveTo(FVector2f(200.0f, 100.0f), FGizmoSettings());
+		CHECK(IsNear(AlongX.GetTranslation(), FVector(2.0, 0.0, 0.0)));
+		FGizmoDrag AlongY(Gizmo, EGizmoMode::Translate, EGizmoHandle::Y, FVector2f(150.0f, 70.0f));
+		AlongY.MoveTo(FVector2f(150.0f, 50.0f), FGizmoSettings());
+		CHECK(IsNear(AlongY.GetTranslation(), FVector(0.0, 2.0, 0.0)));
+	}
+
+	TEST_CASE("Every arrow, square and box does to its own axes what the others do to theirs")
+	{
+		// As the editor's camera first looks, from the side and above.
+		const FViewportCamera Camera;
+		const FTransformGizmo Gizmo(Camera.GetView(), PictureSize, Camera.GetFocusPoint(), NoRotation, AxisLength);
+		const double Length = Gizmo.GetWorldAxisLength();
+		const auto FindPoint = [&Gizmo, Length](const FVector& AxisLengths)
+		{
+			const std::optional<FVector2f> Point = Gizmo.FindInPicture(Gizmo.GetPivot() + AxisLengths * Length);
+			REQUIRE(Point.has_value());
+			return *Point;
+		};
+		constexpr std::array<EGizmoHandle, 3> AxisHandles = {EGizmoHandle::X, EGizmoHandle::Y, EGizmoHandle::Z};
+		constexpr std::array<EGizmoHandle, 3> PlaneHandles = {EGizmoHandle::YZ, EGizmoHandle::XZ, EGizmoHandle::XY};
+
+		for (int32 AxisIndex = 0; AxisIndex < 3; ++AxisIndex)
+		{
+			CAPTURE(AxisIndex);
+			FVector Along(0.0);
+			Along[AxisIndex] = 1.0;
+			FVector First(0.0);
+			First[(AxisIndex + 1) % 3] = 1.0;
+			FVector Second(0.0);
+			Second[(AxisIndex + 2) % 3] = 1.0;
+
+			// From the middle of the gizmo to the end of its axis is the length of the axis.
+			const EGizmoHandle AxisHandle = AxisHandles[static_cast<std::size_t>(AxisIndex)];
+			FGizmoDrag Arrow(Gizmo, EGizmoMode::Translate, AxisHandle, FindPoint(FVector(0.0)));
+			Arrow.MoveTo(FindPoint(Along), FGizmoSettings());
+			CHECK(IsNear(Arrow.GetTranslation(), Along * Length, 1.0e-3));
+
+			// From one point of a square's plane to another is the way between the two.
+			const EGizmoHandle PlaneHandle = PlaneHandles[static_cast<std::size_t>(AxisIndex)];
+			FGizmoDrag Square(Gizmo, EGizmoMode::Translate, PlaneHandle, FindPoint((First + Second) * 0.375));
+			Square.MoveTo(FindPoint(First * 0.75 + Second * 0.25), FGizmoSettings());
+			CHECK(IsNear(Square.GetTranslation(), (First * 0.375 - Second * 0.125) * Length, 1.0e-3));
+
+			// From the end of an axis to half as far again is half the size again, along that axis alone.
+			FGizmoDrag Box(Gizmo, EGizmoMode::Scale, AxisHandle, FindPoint(Along));
+			Box.MoveTo(FindPoint(Along * 1.5), FGizmoSettings());
+			FVector3f Sized(1.0f);
+			Sized[AxisIndex] = 1.5f;
+			CHECK(IsNear(Box.GetScale(), Sized, 1.0e-3f));
+		}
+	}
+
+	TEST_CASE("A ring that is seen from its edge is taken by its near side, wherever along it the mouse takes hold")
+	{
+		// The far half of the ring around Y, which is not there, lies on the near half in the picture, and its
+		// points are closer together there: at 132, one of them is half a pixel away and the nearest of the near
+		// half three and a half. The near half runs to the right all along the line.
+		const FTransformGizmo Gizmo = MakeFrontGizmo();
+		for (float Along = 51.0f; Along < 150.0f; Along += 1.0f)
+		{
+			// In the middle the ring around X crosses.
+			if (Along == 100.0f)
+			{
+				continue;
+			}
+			CAPTURE(Along);
+			const FVector2f Start(Along, 100.0f);
+			REQUIRE(Gizmo.FindHandle(EGizmoMode::Rotate, Start, 0.5f) == EGizmoHandle::Y);
+			FGizmoDrag Drag(Gizmo, EGizmoMode::Rotate, EGizmoHandle::Y, Start);
+
+			Drag.MoveTo(Start + FVector2f(50.0f, 0.0f), FGizmoSettings());
+
+			CHECK(Drag.GetAngle() == doctest::Approx(glm::degrees(1.0f)).epsilon(0.02));
+		}
+	}
+
+	TEST_CASE("A ring that is seen nearly from its edge is taken by the half that is there, also from beside it")
+	{
+		// The ring around Y leans two degrees towards the camera: its near half is a little below the middle of the
+		// picture and its far half, which is not there, a little above. A point of the far half is within reach of
+		// the near half, and the mouse that presses there has the near half, which runs to the right.
+		const FTransformGizmo Gizmo = MakeFrontGizmo(glm::angleAxis(glm::radians(2.0f), FVector3f(1.0f, 0.0f, 0.0f)));
+		const float BehindAngle = glm::radians(157.5f);
+		const FVector3f Behind = Gizmo.GetAxis(2) * std::cos(BehindAngle) + Gizmo.GetAxis(0) * std::sin(BehindAngle);
+		REQUIRE(glm::dot(Behind, Gizmo.GetViewDirection()) > 0.5f);
+		const std::optional<FVector2f> Start =
+			Gizmo.FindInPicture(Gizmo.GetPivot() + FVector(Behind) * Gizmo.GetWorldAxisLength());
+		REQUIRE(Start.has_value());
+		constexpr float Reach = 5.0f;
+		REQUIRE(Gizmo.FindHandle(EGizmoMode::Rotate, *Start, Reach) == EGizmoHandle::Y);
+		FGizmoDrag Drag(Gizmo, EGizmoMode::Rotate, EGizmoHandle::Y, *Start);
+
+		Drag.MoveTo(*Start + FVector2f(50.0f, 0.0f), FGizmoSettings());
+
+		CHECK(Drag.GetAngle() == doctest::Approx(glm::degrees(1.0f)).epsilon(0.02));
+	}
+
+	TEST_CASE("The ring around X is taken by its near side too, which runs downwards in the picture")
+	{
+		FGizmoDrag Drag(MakeFrontGizmo(), EGizmoMode::Rotate, EGizmoHandle::X, FVector2f(100.0f, 70.0f));
+
+		Drag.MoveTo(FVector2f(100.0f, 120.0f), FGizmoSettings());
+
+		CHECK(Drag.GetAngle() == doctest::Approx(glm::degrees(1.0f)).epsilon(0.02));
+		const FVector3f TowardsCamera = Drag.Apply(MakeTransformAt(Pivot)).Rotation * FVector3f(0.0f, 0.0f, 1.0f);
+		CHECK(TowardsCamera.y < -0.5f);
+	}
+
+	TEST_CASE("A ring of a gizmo that is turned turns a thing around the gizmo's own axis")
+	{
+		// A quarter turn around X: the gizmo's Y points at the camera, and the ring around it is a circle in the
+		// picture. Taken at its rightmost point and dragged a quarter of the way around, upwards.
+		const FTransformGizmo Gizmo = MakeFrontGizmo(glm::angleAxis(glm::radians(90.0f), FVector3f(1.0f, 0.0f, 0.0f)));
+		FGizmoDrag Drag(Gizmo, EGizmoMode::Rotate, EGizmoHandle::Y, FVector2f(150.0f, 100.0f));
+		const float QuarterTurn = 50.0f * std::numbers::pi_v<float> * 0.5f;
+
+		Drag.MoveTo(FVector2f(150.0f, 100.0f - QuarterTurn), FGizmoSettings());
+
+		// Around the axis that points at the camera, which is the world's Z here and not its Y.
+		CHECK(Drag.GetAngle() == doctest::Approx(90.0f).epsilon(1.0e-4));
+		const FTransform Turned = Drag.Apply(MakeTransformAt(Pivot));
+		CHECK(IsNear(Turned.Rotation * FVector3f(1.0f, 0.0f, 0.0f), FVector3f(0.0f, 1.0f, 0.0f)));
 	}
 }

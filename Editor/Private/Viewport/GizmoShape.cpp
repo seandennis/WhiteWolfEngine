@@ -56,7 +56,8 @@ float FGizmoShape::GetDistanceTo(const FVector2f& Point) const
 	}
 
 	// A point is inside an area that bulges nowhere inwards if it is on the same side of every edge, whichever way
-	// round the corners go.
-	const bool bIsInside = bIsArea && Points.size() >= 3 && (bIsLeftOfAll || bIsRightOfAll);
+	// round the corners go. On every edge at once it is only where the corners are all in one line, or in one
+	// place: such an area has no inside, and is as far away as its edges are.
+	const bool bIsInside = bIsArea && Points.size() >= 3 && (bIsLeftOfAll != bIsRightOfAll);
 	return bIsInside ? 0.0f : Nearest;
 }

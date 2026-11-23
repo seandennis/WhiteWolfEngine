@@ -265,7 +265,7 @@ The code follows the [Epic C++ Coding Standard](https://dev.epicgames.com/docume
 
 - Boolean variables and members start with `b`: `bIsVisible`. Functions that return `bool` ask a question: `IsValid()`, `ShouldTick()`.
 - Functions are verbs; types and variables are nouns. Names are descriptive and unambiguous; do not abbreviate.
-- Parameters written by the function are prefixed with `Out` (`OutVersion`, `bOutSucceeded`). Prefix a parameter with `In` when it would otherwise shadow a member (`InName`). Shadowing is not allowed: a parameter or local variable must never have the name of a data member of its class or of a base class, in static member functions too. MSVC rejects it (C4458) even where GCC and Clang do not.
+- Parameters written by the function are prefixed with `Out` (`OutVersion`, `bOutSucceeded`). Prefix a parameter with `In` when it would otherwise shadow a member (`InName`). Shadowing is not allowed: a parameter or local variable must never have the name of a data member of its class or of a base class, in static member functions too. MSVC rejects it (C4458) even where GCC and Clang do not, but not in a static member function: there only review finds it.
 - Macros are `UPPER_SNAKE_CASE` with the `WW_` prefix. The exceptions are the reflection macros named by the specification (`WCLASS()`, `WPROPERTY()`, `WFUNCTION()`), the module API macros (`ENGINE_API`) and `DLLEXPORT`/`DLLIMPORT`.
 - CMake functions are `ww_snake_case`, cache options are `WW_UPPER_SNAKE_CASE`, local variables are `snake_case`.
 

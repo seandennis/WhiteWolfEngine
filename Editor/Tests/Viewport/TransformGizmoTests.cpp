@@ -94,6 +94,29 @@ TEST_SUITE("FTransformGizmo")
 		CHECK(glm::length(Turned.GetAxis(2) - FVector3f(0.0f, 0.0f, 1.0f)) < 1.0e-6f);
 	}
 
+	TEST_CASE("The axes of a gizmo are of unit length, whatever the length of the rotation that turns them")
+	{
+		// A quarter turn around Y that is not of unit length, as a scene file or a command may give an entity, and
+		// the same turn as a unit quaternion: X points away from the camera, and Z to the right.
+		const FTransformGizmo Gizmo = MakeFrontGizmo(FQuat(1.0f, 0.0f, 1.0f, 0.0f));
+		const FTransformGizmo Unit = MakeFrontGizmo(glm::angleAxis(glm::radians(90.0f), FVector3f(0.0f, 1.0f, 0.0f)));
+
+		for (int32 AxisIndex = 0; AxisIndex < 3; ++AxisIndex)
+		{
+			CAPTURE(AxisIndex);
+			CHECK(glm::length(Gizmo.GetAxis(AxisIndex)) == doctest::Approx(1.0f));
+			CHECK(glm::length(Gizmo.GetAxis(AxisIndex) - Unit.GetAxis(AxisIndex)) < 1.0e-6f);
+		}
+		CHECK(glm::length(Gizmo.GetAxis(0) - FVector3f(0.0f, 0.0f, -1.0f)) < 1.0e-6f);
+		CHECK(glm::length(Gizmo.GetAxis(2) - FVector3f(1.0f, 0.0f, 0.0f)) < 1.0e-6f);
+
+		// A rotation of no length at all turns nothing.
+		const FTransformGizmo Unturned = MakeFrontGizmo(FQuat(0.0f, 0.0f, 0.0f, 0.0f));
+		CHECK(Unturned.GetAxis(0) == FVector3f(1.0f, 0.0f, 0.0f));
+		CHECK(Unturned.GetAxis(1) == FVector3f(0.0f, 1.0f, 0.0f));
+		CHECK(Unturned.GetAxis(2) == FVector3f(0.0f, 0.0f, 1.0f));
+	}
+
 	TEST_CASE("An axis that a gizmo has not is a fatal error")
 	{
 		const FScopedLogCapture Capture;
@@ -101,6 +124,8 @@ TEST_SUITE("FTransformGizmo")
 
 		CHECK_THROWS_AS(Gizmo.GetAxis(-1), FFatalErrorException);
 		CHECK_THROWS_AS(Gizmo.GetAxis(3), FFatalErrorException);
+		CHECK_THROWS_AS(Gizmo.GetRingPointDirection(-1, 0), FFatalErrorException);
+		CHECK_THROWS_AS(Gizmo.IsRingPointInFront(3, 0), FFatalErrorException);
 	}
 
 	TEST_CASE("A gizmo cannot be laid out for a picture without a size, or with axes of no length")
@@ -266,6 +291,56 @@ TEST_SUITE("FTransformGizmo")
 		}
 	}
 
+	TEST_CASE("The points of a ring go around its axis from the next axis on, and those in front are there")
+	{
+		const FTransformGizmo Gizmo = MakeFrontGizmo();
+		constexpr int32 Quarter = FTransformGizmo::RingPieceCount / 4;
+
+		// Around Y the ring begins at Z, which points at the camera, and goes on to X, to the right: the way that a
+		// thing turns counter-clockwise as seen from above.
+		CHECK(glm::length(Gizmo.GetRingPointDirection(1, 0) - FVector3f(0.0f, 0.0f, 1.0f)) < 1.0e-6f);
+		CHECK(glm::length(Gizmo.GetRingPointDirection(1, Quarter) - FVector3f(1.0f, 0.0f, 0.0f)) < 1.0e-6f);
+		CHECK(glm::length(Gizmo.GetRingPointDirection(1, 2 * Quarter) - FVector3f(0.0f, 0.0f, -1.0f)) < 1.0e-6f);
+		// After its last piece a ring is where it began.
+		CHECK(glm::length(Gizmo.GetRingPointDirection(1, FTransformGizmo::RingPieceCount) -
+				  Gizmo.GetRingPointDirection(1, 0)) < 1.0e-6f);
+
+		// The half towards the camera is in front, with the two points beside the middle that are neither in front
+		// nor behind; the far half is not.
+		CHECK(Gizmo.IsRingPointInFront(1, 0));
+		CHECK(Gizmo.IsRingPointInFront(1, Quarter));
+		CHECK(Gizmo.IsRingPointInFront(1, 3 * Quarter));
+		CHECK_FALSE(Gizmo.IsRingPointInFront(1, Quarter + 1));
+		CHECK_FALSE(Gizmo.IsRingPointInFront(1, 2 * Quarter));
+		CHECK_FALSE(Gizmo.IsRingPointInFront(1, 3 * Quarter - 1));
+
+		// The ring is drawn through the points in front, and through no others.
+		const std::vector<FGizmoShape> Rings = GetShapesOf(Gizmo, EGizmoMode::Rotate, EGizmoHandle::Y);
+		REQUIRE(Rings.size() == 1);
+		std::size_t FrontCount = 0;
+		for (int32 Piece = 0; Piece < FTransformGizmo::RingPieceCount; ++Piece)
+		{
+			if (!Gizmo.IsRingPointInFront(1, Piece))
+			{
+				continue;
+			}
+
+			++FrontCount;
+			const std::optional<FVector2f> InPicture = Gizmo.FindInPicture(
+				Gizmo.GetPivot() + FVector(Gizmo.GetRingPointDirection(1, Piece)) * Gizmo.GetWorldAxisLength());
+			REQUIRE(InPicture.has_value());
+			CAPTURE(Piece);
+			CHECK(Rings[0].GetDistanceTo(*InPicture) < 0.01f);
+		}
+		CHECK(Rings[0].Points.size() == FrontCount);
+
+		// A ring that is seen squarely is all in front.
+		for (int32 Piece = 0; Piece < FTransformGizmo::RingPieceCount; ++Piece)
+		{
+			CHECK(Gizmo.IsRingPointInFront(2, Piece));
+		}
+	}
+
 	TEST_CASE("The part of a ring that is there is in one piece, wherever on the ring it begins")
 	{
 		// From straight above, with -Z up in the picture. The half of the ring around X that is towards the
@@ -403,6 +478,20 @@ TEST_SUITE("FTransformGizmo")
 		CHECK(Gizmo.FindHandle(EGizmoMode::Translate, FVector2f(70.0f, 100.0f), 3.0f) == EGizmoHandle::Y);
 		CHECK(Gizmo.FindHandle(EGizmoMode::Translate, FVector2f(130.0f, 100.0f), 3.0f) == EGizmoHandle::None);
 		CHECK(Gizmo.FindHandle(EGizmoMode::Translate, FVector2f(82.0f, 82.0f), 0.0f) == EGizmoHandle::XY);
+	}
+
+	TEST_CASE("A gizmo that is far beside the picture has no handle at a point of the picture")
+	{
+		// So far to the side and up that the corners of a box are all one number there: floats are sixteen apart
+		// beyond a hundred and thirty million.
+		const FTransformGizmo Gizmo(MakeFrontView(), PictureSize, FVector(2.0e6, 2.0e6, -1.0), NoRotation, AxisLength);
+		REQUIRE(Gizmo.IsVisible());
+
+		for (const EGizmoMode Mode : {EGizmoMode::Translate, EGizmoMode::Rotate, EGizmoMode::Scale})
+		{
+			CAPTURE(static_cast<int32>(Mode));
+			CHECK(Gizmo.FindHandle(Mode, FVector2f(100.0f, 100.0f), 5.0f) == EGizmoHandle::None);
+		}
 	}
 
 	TEST_CASE("A gizmo behind the camera, or closer than its near plane, is not there")

@@ -94,6 +94,18 @@ namespace
 			Center + FVector2f(HalfSize, HalfSize),
 			Center + FVector2f(-HalfSize, HalfSize)};
 	}
+
+	/**
+	 * Returns the directions of a gizmo's axes, of unit length. Only the way a rotation turns counts: one that is
+	 * not of unit length turns the axes as the unit quaternion does that it is a multiple of, and one of no length
+	 * turns nothing.
+	 */
+	std::array<FVector3f, AxisCount> MakeAxes(const FQuat& Orientation)
+	{
+		const FQuat Turn = glm::normalize(Orientation);
+		return {
+			Turn * FVector3f(1.0f, 0.0f, 0.0f), Turn * FVector3f(0.0f, 1.0f, 0.0f), Turn * FVector3f(0.0f, 0.0f, 1.0f)};
+	}
 }
 
 FTransformGizmo::FTransformGizmo(const FCameraView& InView,
@@ -104,9 +116,7 @@ FTransformGizmo::FTransformGizmo(const FCameraView& InView,
 	: View(InView)
 	, PictureSize(InPictureSize)
 	, Pivot(InPivot)
-	, Axes{Orientation * FVector3f(1.0f, 0.0f, 0.0f),
-		  Orientation * FVector3f(0.0f, 1.0f, 0.0f),
-		  Orientation * FVector3f(0.0f, 0.0f, 1.0f)}
+	, Axes(MakeAxes(Orientation))
 	, AxisLength(InAxisLength)
 {
 	WW_CHECKF(PictureSize.x > 0.0f && PictureSize.y > 0.0f,
@@ -293,12 +303,17 @@ bool FTransformGizmo::IsPlaneUsable(int32 AxisIndex) const
 	return std::abs(glm::dot(GetAxis(AxisIndex), ViewDirection)) >= MinPlaneFacing;
 }
 
+FVector3f FTransformGizmo::GetRingPointDirection(int32 AxisIndex, int32 Piece) const
+{
+	WW_CHECKF(AxisIndex >= 0 && AxisIndex < AxisCount, "A gizmo has the axes 0, 1 and 2, and no axis {}", AxisIndex);
+	const FVector3f AxisLengths = GetRingPoint(AxisIndex, Piece);
+	return Axes[0] * AxisLengths.x + Axes[1] * AxisLengths.y + Axes[2] * AxisLengths.z;
+}
+
 bool FTransformGizmo::IsRingPointInFront(int32 AxisIndex, int32 Piece) const
 {
 	// How far along the line of sight the point is from the middle of the gizmo, in lengths of its axes.
-	const FVector3f AxisLengths = GetRingPoint(AxisIndex, Piece);
-	const FVector3f FromMiddle = Axes[0] * AxisLengths.x + Axes[1] * AxisLengths.y + Axes[2] * AxisLengths.z;
-	return glm::dot(FromMiddle, ViewDirection) <= MaxRingPointDepth;
+	return glm::dot(GetRingPointDirection(AxisIndex, Piece), ViewDirection) <= MaxRingPointDepth;
 }
 
 FVector FTransformGizmo::GetPoint(const FVector3f& AxisLengths) const
@@ -307,7 +322,7 @@ FVector FTransformGizmo::GetPoint(const FVector3f& AxisLengths) const
 	return Pivot + FVector(FromPivot) * WorldAxisLength;
 }
 
-void FTransformGizmo::AddTranslateShapes(std::vector<FGizmoShape>& Shapes) const
+void FTransformGizmo::AddTranslateShapes(std::vector<FGizmoShape>& OutShapes) const
 {
 	const std::optional<FVector2f> Center = FindInPicture(Pivot);
 	for (int32 AxisIndex = 0; AxisIndex < AxisCount; ++AxisIndex)
@@ -323,7 +338,7 @@ void FTransformGizmo::AddTranslateShapes(std::vector<FGizmoShape>& Shapes) const
 		}
 
 		const EGizmoHandle Handle = AxisHandles[static_cast<std::size_t>(AxisIndex)];
-		Shapes.push_back({Handle, false, {*Center, *Neck}});
+		OutShapes.push_back({Handle, false, {*Center, *Neck}});
 
 		// The head is as wide in the picture whichever way the arrow points.
 		const FVector2f AlongPicture = *Tip - *Neck;
@@ -332,7 +347,7 @@ void FTransformGizmo::AddTranslateShapes(std::vector<FGizmoShape>& Shapes) const
 		{
 			const FVector2f Across =
 				FVector2f(-AlongPicture.y, AlongPicture.x) / HeadLength * (ArrowHeadHalfWidth * AxisLength);
-			Shapes.push_back({Handle, true, {*Tip, *Neck + Across, *Neck - Across}});
+			OutShapes.push_back({Handle, true, {*Tip, *Neck + Across, *Neck - Across}});
 		}
 	}
 
@@ -361,12 +376,12 @@ void FTransformGizmo::AddTranslateShapes(std::vector<FGizmoShape>& Shapes) const
 		constexpr std::size_t CornerCount = 4;
 		if (IsPlaneUsable(AxisIndex) && Square.Points.size() == CornerCount)
 		{
-			Shapes.push_back(std::move(Square));
+			OutShapes.push_back(std::move(Square));
 		}
 	}
 }
 
-void FTransformGizmo::AddRotateShapes(std::vector<FGizmoShape>& Shapes) const
+void FTransformGizmo::AddRotateShapes(std::vector<FGizmoShape>& OutShapes) const
 {
 	for (int32 AxisIndex = 0; AxisIndex < AxisCount; ++AxisIndex)
 	{
@@ -406,12 +421,12 @@ void FTransformGizmo::AddRotateShapes(std::vector<FGizmoShape>& Shapes) const
 		// A ring that reaches behind the camera's near plane is left out whole.
 		if (Ring.Points.size() == static_cast<std::size_t>(PointCount))
 		{
-			Shapes.push_back(std::move(Ring));
+			OutShapes.push_back(std::move(Ring));
 		}
 	}
 }
 
-void FTransformGizmo::AddScaleShapes(std::vector<FGizmoShape>& Shapes) const
+void FTransformGizmo::AddScaleShapes(std::vector<FGizmoShape>& OutShapes) const
 {
 	const std::optional<FVector2f> Center = FindInPicture(Pivot);
 	if (!Center.has_value())
@@ -420,7 +435,7 @@ void FTransformGizmo::AddScaleShapes(std::vector<FGizmoShape>& Shapes) const
 	}
 
 	// The box in the middle comes first: where the lines of the axes begin, the mouse is on the box.
-	Shapes.push_back({EGizmoHandle::All, true, MakeSquare(*Center, CenterBoxHalfSize * AxisLength)});
+	OutShapes.push_back({EGizmoHandle::All, true, MakeSquare(*Center, CenterBoxHalfSize * AxisLength)});
 	for (int32 AxisIndex = 0; AxisIndex < AxisCount; ++AxisIndex)
 	{
 		FVector3f Along(0.0f);
@@ -432,7 +447,7 @@ void FTransformGizmo::AddScaleShapes(std::vector<FGizmoShape>& Shapes) const
 		}
 
 		const EGizmoHandle Handle = AxisHandles[static_cast<std::size_t>(AxisIndex)];
-		Shapes.push_back({Handle, false, {*Center, *End}});
-		Shapes.push_back({Handle, true, MakeSquare(*End, AxisBoxHalfSize * AxisLength)});
+		OutShapes.push_back({Handle, false, {*Center, *End}});
+		OutShapes.push_back({Handle, true, MakeSquare(*End, AxisBoxHalfSize * AxisLength)});
 	}
 }

@@ -4,6 +4,7 @@
 #include <glm/geometric.hpp>
 
 #include <cmath>
+#include <limits>
 #include <optional>
 
 TEST_SUITE("FRay")
@@ -100,6 +101,30 @@ TEST_SUITE("FRay")
 		const std::optional<double> Distance = Ray.IntersectPlane(FVector(0.0), Up);
 		REQUIRE(Distance.has_value());
 		CHECK(*Distance == doctest::Approx(0.0));
+	}
+
+	TEST_CASE("A ray or a plane that is not made of finite numbers is gone through nowhere")
+	{
+		const double NoNumber = std::numeric_limits<double>::quiet_NaN();
+		const double Endless = std::numeric_limits<double>::infinity();
+		const float NoDirection = std::numeric_limits<float>::quiet_NaN();
+		const FVector3f Up(0.0f, 1.0f, 0.0f);
+		FRay Ray;
+		Ray.Origin = FVector(0.0, 5.0, 0.0);
+		Ray.Direction = FVector3f(0.0f, -1.0f, 0.0f);
+		REQUIRE(Ray.IntersectPlane(FVector(0.0), Up).has_value());
+
+		// A plane that is nowhere, one that is endlessly far away, and one that faces no way.
+		CHECK_FALSE(Ray.IntersectPlane(FVector(0.0, NoNumber, 0.0), Up).has_value());
+		CHECK_FALSE(Ray.IntersectPlane(FVector(0.0, -Endless, 0.0), Up).has_value());
+		CHECK_FALSE(Ray.IntersectPlane(FVector(0.0), FVector3f(0.0f, NoDirection, 0.0f)).has_value());
+
+		// A ray that goes no way, and one that begins nowhere.
+		Ray.Direction = FVector3f(NoDirection, -1.0f, 0.0f);
+		CHECK_FALSE(Ray.IntersectPlane(FVector(0.0), Up).has_value());
+		Ray.Direction = FVector3f(0.0f, -1.0f, 0.0f);
+		Ray.Origin = FVector(NoNumber, 5.0, 0.0);
+		CHECK_FALSE(Ray.IntersectPlane(FVector(0.0), Up).has_value());
 	}
 
 	TEST_CASE("Where a ray goes through a plane is exact far from the origin of the world")

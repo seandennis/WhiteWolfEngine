@@ -31,6 +31,13 @@ namespace
 	 */
 	constexpr float MinPlaneFacing = 1.0e-3f;
 
+	/**
+	 * How far away the mouse may point at the plane that a drag is taken in and still say something, in distances
+	 * of the gizmo from the camera. Towards the horizon of that plane a pixel of the picture is ever farther in the
+	 * world, and the last one before the horizon as far as one likes.
+	 */
+	constexpr double MaxPointingDistance = 100.0;
+
 	/** Returns a number as the nearest whole multiple of a step. */
 	double RoundToStep(double Number, double Step)
 	{
@@ -38,19 +45,39 @@ namespace
 	}
 
 	/**
-	 * Returns the factor that a drag multiplies a size by: in whole steps if sizes go in steps, and never less
-	 * than a step, or than the least that a drag leaves of a size.
+	 * Returns the factor that a drag multiplies a size by: one, and whole steps more or less if sizes go in steps,
+	 * and never less than the least that a drag leaves of a size.
 	 */
 	float LimitScaleFactor(double Factor, const FGizmoSettings& Settings)
 	{
 		double Least = static_cast<double>(FGizmoDrag::MinScaleFactor);
 		if (Settings.bSnapScale)
 		{
+			// It is the change that goes in steps, as a move and a turn do: a drag that has gone nowhere is no
+			// step, whatever the step is. The least is then the last of those sizes that is not below what a drag
+			// leaves of a size.
 			const double Step = static_cast<double>(Settings.ScaleSnap);
-			Factor = RoundToStep(Factor, Step);
-			Least = std::max(Least, Step);
+			Factor = 1.0 + RoundToStep(Factor - 1.0, Step);
+			Least = 1.0 + std::ceil((Least - 1.0) / Step) * Step;
 		}
 		return static_cast<float>(std::max(Factor, Least));
+	}
+
+	/**
+	 * Returns the point of a plane through the gizmo's place that the mouse points at, or nothing if it points
+	 * along the plane, away from it, or at a point of it that is farther away than MaxPointingDistance.
+	 */
+	std::optional<FVector> FindOnPlane(
+		const FTransformGizmo& Gizmo, const FVector2f& PicturePoint, const FVector3f& PlaneNormal)
+	{
+		const FRay Ray = Gizmo.GetRay(PicturePoint);
+		const std::optional<double> Distance = Ray.IntersectPlane(Gizmo.GetPivot(), PlaneNormal);
+		const double Farthest = glm::length(Gizmo.GetPivot() - Ray.Origin) * MaxPointingDistance;
+		if (!Distance.has_value() || *Distance > Farthest)
+		{
+			return std::nullopt;
+		}
+		return Ray.GetPoint(*Distance);
 	}
 }
 
@@ -58,7 +85,8 @@ FGizmoDrag::FGizmoDrag(
 	const FTransformGizmo& InGizmo, EGizmoMode InMode, EGizmoHandle InHandle, const FVector2f& InStartPoint)
 	: Gizmo(InGizmo)
 	, Mode(InMode)
-	, Handle(InHandle)
+	// A gizmo that is not visible has no handles: whatever is said to have been taken hold of, nothing was.
+	, Handle(InGizmo.IsVisible() ? InHandle : EGizmoHandle::None)
 	, StartPoint(InStartPoint)
 {
 	// Whatever the handle is measured by is taken where the mouse took hold. A drag whose handle is not measured
@@ -70,6 +98,12 @@ FGizmoDrag::FGizmoDrag(
 
 void FGizmoDrag::MoveTo(const FVector2f& PicturePoint, const FGizmoSettings& Settings)
 {
+	// A point that is no number is nowhere: the mouse says nothing, and the drag stays what it was.
+	if (!std::isfinite(PicturePoint.x) || !std::isfinite(PicturePoint.y))
+	{
+		return;
+	}
+
 	const std::optional<int32> AxisIndex = FTransformGizmo::GetAxisIndex(Handle);
 	const FVector2f MovedInPicture = PicturePoint - StartPoint;
 	switch (Mode)
@@ -186,13 +220,12 @@ std::optional<double> FGizmoDrag::FindAlongAxis(const FVector2f& PicturePoint) c
 		return std::nullopt;
 	}
 
-	const FRay Ray = Gizmo.GetRay(PicturePoint);
-	const std::optional<double> Distance = Ray.IntersectPlane(Gizmo.GetPivot(), glm::normalize(Facing));
-	if (!Distance.has_value())
+	const std::optional<FVector> OnPlane = FindOnPlane(Gizmo, PicturePoint, glm::normalize(Facing));
+	if (!OnPlane.has_value())
 	{
 		return std::nullopt;
 	}
-	return glm::dot(Ray.GetPoint(*Distance) - Gizmo.GetPivot(), FVector(Axis));
+	return glm::dot(*OnPlane - Gizmo.GetPivot(), FVector(Axis));
 }
 
 std::optional<FVector> FGizmoDrag::FindInPlane(const FVector2f& PicturePoint) const
@@ -204,13 +237,7 @@ std::optional<FVector> FGizmoDrag::FindInPlane(const FVector2f& PicturePoint) co
 	}
 
 	// The plane of a handle is the one that faces along the axis that the handle leaves out.
-	const FRay Ray = Gizmo.GetRay(PicturePoint);
-	const std::optional<double> Distance = Ray.IntersectPlane(Gizmo.GetPivot(), Gizmo.GetAxis(*AxisIndex));
-	if (!Distance.has_value())
-	{
-		return std::nullopt;
-	}
-	return Ray.GetPoint(*Distance);
+	return FindOnPlane(Gizmo, PicturePoint, Gizmo.GetAxis(*AxisIndex));
 }
 
 FVector2f FGizmoDrag::FindRingDirection() const
@@ -222,14 +249,12 @@ FVector2f FGizmoDrag::FindRingDirection() const
 		return AnyDirection;
 	}
 
-	// The point of the ring that the mouse took hold of: the nearest of those that the ring is drawn through. Of
-	// a ring that is seen from its edge, the near half and the far half lie on each other in the picture; where
-	// two points are as near as makes no difference, the mouse has the one in front.
+	// The point of the ring that the mouse took hold of: the nearest of those that the ring is drawn through. The
+	// part of a ring that is behind the gizmo is not drawn, and the mouse cannot have taken it, however near it
+	// lies in the picture. A ring that is seen from its edge still lies on itself at its two ends, where it goes
+	// around to the far side; where two points are as near as makes no difference, the mouse has the one in front.
 	const FVector3f& Axis = Gizmo.GetAxis(*AxisIndex);
-	const FVector3f& First = Gizmo.GetAxis((*AxisIndex + 1) % AxisCount);
-	const FVector3f& Second = Gizmo.GetAxis((*AxisIndex + 2) % AxisCount);
 	const double Radius = Gizmo.GetWorldAxisLength();
-	const float PieceAngle = 2.0f * std::numbers::pi_v<float> / static_cast<float>(FTransformGizmo::RingPieceCount);
 
 	/** A point that the ring is drawn through. */
 	struct FRingPoint
@@ -247,8 +272,12 @@ FVector2f FGizmoDrag::FindRingDirection() const
 	float NearestDistance = std::numeric_limits<float>::infinity();
 	for (int32 Piece = 0; Piece < FTransformGizmo::RingPieceCount; ++Piece)
 	{
-		const float RingAngle = PieceAngle * static_cast<float>(Piece);
-		const FVector3f Candidate = First * std::cos(RingAngle) + Second * std::sin(RingAngle);
+		if (!Gizmo.IsRingPointInFront(*AxisIndex, Piece))
+		{
+			continue;
+		}
+
+		const FVector3f Candidate = Gizmo.GetRingPointDirection(*AxisIndex, Piece);
 		if (const std::optional<FVector2f> InPicture =
 				Gizmo.FindInPicture(Gizmo.GetPivot() + FVector(Candidate) * Radius))
 		{
@@ -258,9 +287,12 @@ FVector2f FGizmoDrag::FindRingDirection() const
 		}
 	}
 
-	// As near as makes no difference: within half of what two points of the ring can be apart in the picture.
+	// As near as makes no difference: within half of what two points of a ring are apart in the picture where the
+	// ring is seen squarely. That is far more than the two sides of an end are apart, and less than two points of
+	// the same side.
+	const float PieceAngle = 2.0f * std::numbers::pi_v<float> / static_cast<float>(FTransformGizmo::RingPieceCount);
 	const float SameDistance = Gizmo.GetAxisLength() * PieceAngle * 0.5f;
-	FVector3f Outwards = First;
+	FVector3f Outwards = Gizmo.GetRingPointDirection(*AxisIndex, 0);
 	float FrontDepth = std::numeric_limits<float>::infinity();
 	for (const FRingPoint& RingPoint : RingPoints)
 	{
