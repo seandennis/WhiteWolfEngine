@@ -672,17 +672,203 @@ TEST_SUITE("FViewportGizmo")
 		CHECK(Test.Editor.GetViewportCamera().Yaw == doctest::Approx(Camera.Yaw - 10.0f));
 		CHECK(GetTransform(Test, Crate) == FTransform());
 
-		// The left button with Alt goes around what the camera looks at.
+		// The middle button moves it sideways.
+		Test.Editor.SetViewportCamera(Camera);
+		Test.DrawFrame();
+		PressAt(Test, OnHandle, EMouseButton::Middle);
+		MoveBy(Test, FVector2D(50.0, 0.0));
+		Release(Test, EMouseButton::Middle);
+		CHECK(Test.Editor.GetViewportCamera().Location.x < Camera.Location.x);
+		CHECK(Test.Editor.GetViewportCamera().Yaw == Camera.Yaw);
+
+		// The left button with Alt goes around what the camera looks at, beside the gizmo. On a handle, it
+		// drags a copy.
 		Test.Editor.SetViewportCamera(Camera);
 		Test.DrawFrame();
 		Test.SetKeyDown(EKey::LeftAlt, true);
-		PressAt(Test, OnHandle, EMouseButton::Left);
+		PressAt(Test, Test.RequireItem("Viewport").GetCenter() + FVector2D(0.0, 200.0), EMouseButton::Left);
 		MoveBy(Test, FVector2D(50.0, 0.0));
 		Release(Test, EMouseButton::Left);
 		Test.SetKeyDown(EKey::LeftAlt, false);
 		CHECK(Test.Editor.GetViewportCamera().Yaw == doctest::Approx(Camera.Yaw - 15.0f));
+
 		CHECK(GetTransform(Test, Crate) == FTransform());
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 1);
 		CHECK(CountSteps(Test, "Move") == 0);
+	}
+
+	TEST_CASE("With Alt held, a drag makes a copy of what is selected and moves the copy")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		const int64 Crate = AddEntity(Test, "Crate", FVector(0.0));
+		Test.Editor.SetSelection({Crate});
+		Test.DrawFrame();
+		const double PixelSize = GetPixelSize(Test);
+		const FViewportCamera Camera = Test.Editor.GetViewportCamera();
+
+		Test.SetKeyDown(EKey::LeftAlt, true);
+		Test.DragBy(Handle("X"), FVector2D(60.0, 0.0));
+		Test.SetKeyDown(EKey::LeftAlt, false);
+
+		// The crate is where it was. Beside it is a copy, which is selected in its place and has the gizmo.
+		REQUIRE(Test.Editor.GetScene().GetAllEntities().size() == 2);
+		CHECK(GetTransform(Test, Crate) == FTransform());
+		const std::vector<int64> Selection = Test.Editor.GetSelection();
+		REQUIRE(Selection.size() == 1);
+		const int64 Copy = Selection[0];
+		CHECK(Copy != Crate);
+		const FTransform CopyTransform = GetTransform(Test, Copy);
+		CHECK(CopyTransform.Location.x == doctest::Approx(60.0 * PixelSize).epsilon(DragTolerance));
+		CHECK(CopyTransform.Location.y == 0.0);
+		CHECK(CopyTransform.Location.z == 0.0);
+		CHECK(
+			IsNear(Test.RequireItem("Viewport/Gizmo").GetCenter(), FindInViewport(Test, CopyTransform.Location), 1.5));
+
+		// All of it is one step, called by what it made. The camera has not gone around anything, which is
+		// what Alt and the left button do beside the gizmo.
+		CHECK(GetLastStepName(Test) == "Duplicate");
+		CHECK(CountSteps(Test, "Duplicate") == 1);
+		CHECK(CountSteps(Test, "Move") == 0);
+		CHECK_FALSE(Test.Editor.IsStepOpen());
+		CHECK(Test.Editor.GetViewportCamera() == Camera);
+
+		// One undo takes the copy away again, and one redo brings it back to where it was dragged.
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 1);
+		CHECK(GetTransform(Test, Crate) == FTransform());
+		Test.PressKey(EKey::Y, {EKey::LeftControl});
+		REQUIRE(Test.Editor.GetScene().GetAllEntities().size() == 2);
+		CHECK(GetTransform(Test, Copy) == CopyTransform);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("A press with Alt that drags nowhere makes no copy")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		const int64 Crate = AddEntity(Test, "Crate", FVector(0.0));
+		Test.Editor.SetSelection({Crate});
+		FGizmoSettings Settings;
+		Settings.bSnapLocation = true;
+		Settings.LocationSnap = 10.0;
+		Test.Editor.SetGizmoSettings(Settings);
+		Test.DrawFrame();
+		const FViewportCamera Camera = Test.Editor.GetViewportCamera();
+
+		Test.SetKeyDown(EKey::LeftAlt, true);
+		Test.Click(Handle("X"));
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 1);
+
+		// Nor does a drag that does not come to one of the steps in which things are moved.
+		Test.DragBy(Handle("X"), FVector2D(30.0, 0.0));
+		Test.SetKeyDown(EKey::LeftAlt, false);
+
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 1);
+		CHECK(GetTransform(Test, Crate) == FTransform());
+		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Crate});
+		CHECK(CountSteps(Test, "Duplicate") == 0);
+		CHECK_FALSE(Test.Editor.IsStepOpen());
+		CHECK(Test.Editor.GetViewportCamera() == Camera);
+	}
+
+	TEST_CASE("With Alt held, everything that is selected is copied, with what is below it")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		const int64 Cart = AddEntity(Test, "Cart", FVector(-2.0, 1.0, 0.0));
+		const int64 Wheel =
+			AddEntity(Test, "Wheel", FVector(-2.0, 0.0, 0.0), Test.Editor.GetScene().FindEntityById(Cart));
+		const int64 Crate = AddEntity(Test, "Crate", FVector(0.0));
+		// The crate is selected last, and has the gizmo.
+		Test.Editor.SetSelection({Cart, Wheel, Crate});
+		Test.DrawFrame();
+
+		Test.SetKeyDown(EKey::LeftAlt, true);
+		Test.DragBy(Handle("X"), FVector2D(60.0, 0.0));
+		Test.SetKeyDown(EKey::LeftAlt, false);
+
+		// A copy of the cart, with a wheel of its own, and one of the crate: three entities more.
+		const WScene& Scene = Test.Editor.GetScene();
+		REQUIRE(Scene.GetAllEntities().size() == 6);
+		CHECK(GetTransform(Test, Cart).Location == FVector(-2.0, 1.0, 0.0));
+		CHECK(GetEntity(Test, Wheel).GetWorldLocation() == FVector(-2.0, 0.0, 0.0));
+		CHECK(GetTransform(Test, Crate) == FTransform());
+
+		// The copies are selected, in the order of what they are copies of, and have moved as one.
+		const std::vector<int64> Selection = Test.Editor.GetSelection();
+		REQUIRE(Selection.size() == 2);
+		const WEntity& CartCopy = GetEntity(Test, Selection[0]);
+		const WEntity& CrateCopy = GetEntity(Test, Selection[1]);
+		const double Distance = CrateCopy.GetRelativeTransform().Location.x;
+		CHECK(Distance > 0.5);
+		CHECK(CartCopy.GetRelativeTransform().Location == FVector(-2.0 + Distance, 1.0, 0.0));
+		REQUIRE(CartCopy.GetChildren().size() == 1);
+		CHECK(CartCopy.GetChildren()[0]->GetWorldLocation().x == doctest::Approx(-2.0 + Distance));
+		CHECK(CountSteps(Test, "Duplicate") == 1);
+
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 3);
+	}
+
+	TEST_CASE("With Alt held, a ring turns a copy and a box sizes one")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		const int64 Crate = AddEntity(Test, "Crate", FVector(0.0));
+		Test.Editor.SetSelection({Crate});
+		SetGizmo(Test, EGizmoMode::Rotate);
+
+		Test.SetKeyDown(EKey::LeftAlt, true);
+		Test.DragBy(Handle("Z"), FVector2D(-30.0, -30.0));
+
+		REQUIRE(Test.Editor.GetScene().GetAllEntities().size() == 2);
+		REQUIRE(Test.Editor.GetSelection().size() == 1);
+		const int64 Turned = Test.Editor.GetSelection()[0];
+		CHECK(GetTransform(Test, Crate) == FTransform());
+		CHECK(GetTurnAroundZ(GetTransform(Test, Turned).Rotation) > 10.0);
+		CHECK(GetTransform(Test, Turned).Location == FVector(0.0));
+
+		// The copy that is selected now is copied in its turn.
+		SetGizmo(Test, EGizmoMode::Scale);
+		Test.DragBy(Handle("All"), FVector2D(GetAxisLength(Test) * 0.5, 0.0));
+		Test.SetKeyDown(EKey::LeftAlt, false);
+
+		REQUIRE(Test.Editor.GetScene().GetAllEntities().size() == 3);
+		REQUIRE(Test.Editor.GetSelection().size() == 1);
+		const int64 Sized = Test.Editor.GetSelection()[0];
+		CHECK(GetTransform(Test, Turned).Scale == FVector3f(1.0f));
+		CHECK(GetTransform(Test, Sized).Scale.x == doctest::Approx(1.5f).epsilon(DragTolerance));
+		CHECK(GetTransform(Test, Sized).Rotation == GetTransform(Test, Turned).Rotation);
+		CHECK(CountSteps(Test, "Duplicate") == 2);
+	}
+
+	TEST_CASE("Undoing in the middle of a drag of copies takes the copies away and ends the drag")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+		const int64 Crate = AddEntity(Test, "Crate", FVector(0.0));
+		Test.Editor.SetSelection({Crate});
+		Test.DrawFrame();
+
+		Test.SetKeyDown(EKey::LeftAlt, true);
+		PressAt(Test, Test.RequireItem(Handle("X")).GetCenter(), EMouseButton::Left);
+		MoveBy(Test, FVector2D(40.0, 0.0));
+		Test.SetKeyDown(EKey::LeftAlt, false);
+		REQUIRE(Test.Editor.GetScene().GetAllEntities().size() == 2);
+
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 1);
+
+		// The button is still down, and the mouse moves on: nothing is copied a second time.
+		MoveBy(Test, FVector2D(40.0, 0.0));
+		Release(Test, EMouseButton::Left);
+		Test.DrawFrames(3);
+
+		CHECK(Test.Editor.GetScene().GetAllEntities().size() == 1);
+		CHECK(GetTransform(Test, Crate) == FTransform());
+		CHECK(CountSteps(Test, "Duplicate") == 0);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
 	}
 
 	TEST_CASE("Undoing in the middle of a drag ends the drag")

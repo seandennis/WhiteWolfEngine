@@ -264,17 +264,31 @@ void FUiCommands::DuplicateEntities(FEditor& Editor, const std::vector<int64>& E
 	}
 
 	const FUserStep Step(Editor, "Duplicate");
-	std::vector<int64> Copies;
-	for (const int64 EntityId : Originals)
+	CopyEntities(Editor, Originals);
+}
+
+std::vector<std::optional<int64>> FUiCommands::CopyEntities(FEditor& Editor, const std::vector<int64>& EntityIds)
+{
+	std::vector<std::optional<int64>> Copies;
+	std::vector<int64> NewSelection;
+	for (const int64 EntityId : EntityIds)
 	{
 		const FCommandResult Result = Editor.ExecuteCommand("Entity.Duplicate", MakeEntityArguments(EntityId));
 		if (Result.HasSucceeded())
 		{
-			Copies.push_back(Result.GetValue().FindMember("Id")->GetInteger());
+			const int64 CopyId = Result.GetValue().FindMember("Id")->GetInteger();
+			Copies.emplace_back(CopyId);
+			NewSelection.push_back(CopyId);
+		}
+		else
+		{
+			Copies.emplace_back(std::nullopt);
 		}
 	}
+
 	// The copies are what the user goes on to work with, as after a paste.
-	SetSelection(Editor, Copies);
+	SetSelection(Editor, NewSelection);
+	return Copies;
 }
 
 void FUiCommands::AttachEntities(FEditor& Editor, const std::vector<int64>& EntityIds, std::optional<int64> ParentId)

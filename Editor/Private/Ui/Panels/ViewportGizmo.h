@@ -22,6 +22,9 @@ struct FUiFrame;
  * draws the handles, lets the mouse take hold of them, and gives the editor what a drag comes to: in every frame
  * of it, a transform for each entity that is selected and not below another that is, all of them one step of the
  * history.
+ *
+ * With Alt held when the mouse takes hold, the drag is of copies: what is selected is copied as soon as the drag
+ * would move it, the copies are selected in its place, and it is they that are dragged.
  */
 class FViewportGizmo
 {
@@ -81,6 +84,12 @@ private:
 	/** Forgets the drag without ending a step: for a drag whose step something else has ended already. */
 	void DropDrag();
 
+	/** Returns true if the drag has come to anything yet: if it would change one of the things that it moves. */
+	bool HasDragMovedAnything() const;
+
+	/** Copies what the drag moves, selects the copies, and has the drag move them and not what they are copies of. */
+	void MakeCopies(FUiFrame& Frame);
+
 	/** Returns the transform that the drag has given an entity so far, relative to the entity's parent. */
 	FTransform FindDraggedTransform(const FDraggedEntity& Dragged) const;
 
@@ -90,6 +99,9 @@ private:
 	/** What was selected when that drag began, and those of it that the drag moves. */
 	std::vector<int64> DraggedSelection;
 	std::vector<FDraggedEntity> DraggedEntities;
+
+	/** True while the drag is to be of copies of what it moves, and has not made them yet. */
+	bool bWantsCopies = false;
 
 	/** True from the press of the button that takes a handle until the button comes up. */
 	bool bHasMouse = false;

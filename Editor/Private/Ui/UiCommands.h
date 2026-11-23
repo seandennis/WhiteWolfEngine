@@ -99,6 +99,16 @@ public:
 	static void DuplicateEntities(FEditor& Editor, const std::vector<int64>& EntityIds);
 
 	/**
+	 * Entity.Duplicate for each of the entities, and selects the copies. It is no step by itself: during a change
+	 * (BeginChange) it is part of that change, as the copies are that a drag of the gizmo makes before it moves
+	 * them.
+	 *
+	 * @return The identifier of the copy of each of the entities, in their order, or nothing where the editor
+	 * refused to copy one.
+	 */
+	static std::vector<std::optional<int64>> CopyEntities(FEditor& Editor, const std::vector<int64>& EntityIds);
+
+	/**
 	 * Entity.SetParent for each of the entities that is not below one of the others, as one step: they keep their
 	 * places in the world.
 	 *

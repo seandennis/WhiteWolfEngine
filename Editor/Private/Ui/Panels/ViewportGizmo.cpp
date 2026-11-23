@@ -21,11 +21,13 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <format>
 #include <initializer_list>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace
@@ -58,6 +60,9 @@ namespace
 	constexpr float HandlePlaceHalfSize = 0.5f;
 
 	const FQuat NoRotation(1.0f, 0.0f, 0.0f, 0.0f);
+
+	/** What the history calls a drag that makes copies of what is selected, and moves them. */
+	constexpr const char* CopyStepName = "Duplicate";
 
 	/** Returns what the history calls a drag of the gizmo. */
 	std::string GetStepName(EGizmoMode Mode)
@@ -210,8 +215,7 @@ void FViewportGizmo::Draw(FUiFrame& Frame, const FVector2f& PictureCorner, const
 
 	// A drag moves what was selected when it began. Once something else is selected, or one of those things is
 	// gone, as a command of an agent may have it in the middle of a drag, the drag is over.
-	const std::vector<int64> Selection = Editor.GetSelection();
-	if (Drag.has_value() && Selection != DraggedSelection)
+	if (Drag.has_value() && Editor.GetSelection() != DraggedSelection)
 	{
 		EndDrag(Frame);
 	}
@@ -229,7 +233,9 @@ void FViewportGizmo::Draw(FUiFrame& Frame, const FVector2f& PictureCorner, const
 		EndDrag(Frame);
 	}
 
-	// The gizmo is on the entity that was selected last, and with nothing selected there is none.
+	// The gizmo is on the entity that was selected last, and with nothing selected there is none. What is
+	// selected is asked now, after the drag: a drag of copies selects them when it makes them.
+	const std::vector<int64> Selection = Editor.GetSelection();
 	const WEntity* const PivotEntity = Selection.empty() ? nullptr : Editor.GetScene().FindEntityById(Selection.back());
 	if (PivotEntity == nullptr)
 	{
@@ -248,10 +254,10 @@ void FViewportGizmo::Draw(FUiFrame& Frame, const FVector2f& PictureCorner, const
 		bHasOwnAxes ? PivotTransform.Rotation : NoRotation,
 		FUiTheme::GetGizmoAxisLength());
 
-	// The mouse takes a handle with its left button. With Alt held that button steers the camera, and a button
-	// that is down on the picture already is doing something else there.
+	// The mouse takes a handle with its left button. A button that is down on the picture already is doing
+	// something else there.
 	EGizmoHandle Highlighted = Drag.has_value() ? Drag->GetHandle() : EGizmoHandle::None;
-	const bool bIsPressed = ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !Io.KeyAlt;
+	const bool bIsPressed = ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 	const bool bIsMouseFree = !ImGui::IsItemActive() || bIsPressed;
 	if (!Drag.has_value() && bIsMouseFree && bIsMouseKnown && ImGui::IsItemHovered())
 	{
@@ -302,10 +308,12 @@ void FViewportGizmo::BeginDrag(
 		DraggedEntities.push_back(Dragged);
 	}
 
+	// With Alt held, the drag is of copies, and the history calls it by what it makes.
 	Drag.emplace(Gizmo, Mode, Handle, MousePoint);
+	bWantsCopies = ImGui::GetIO().KeyAlt;
 	bHasMouse = true;
 	bHadMouse = true;
-	FUiCommands::BeginChange(Editor, GetStepName(Mode));
+	FUiCommands::BeginChange(Editor, bWantsCopies ? CopyStepName : GetStepName(Mode));
 }
 
 void FViewportGizmo::ContinueDrag(FUiFrame& Frame, const FVector2f& MousePoint)
@@ -320,7 +328,18 @@ void FViewportGizmo::ContinueDrag(FUiFrame& Frame, const FVector2f& MousePoint)
 		return;
 	}
 
+	// Copies are made when the drag first comes to something. A press that goes nowhere leaves no copy lying on
+	// what it is a copy of, where nobody would see it.
 	Drag->MoveTo(MousePoint, Editor.GetGizmoSettings());
+	if (bWantsCopies)
+	{
+		if (!HasDragMovedAnything())
+		{
+			return;
+		}
+		MakeCopies(Frame);
+	}
+
 	for (const FDraggedEntity& Dragged : DraggedEntities)
 	{
 		// A command that changes nothing is not worth giving.
@@ -347,6 +366,41 @@ void FViewportGizmo::DropDrag()
 	Drag.reset();
 	DraggedSelection.clear();
 	DraggedEntities.clear();
+	bWantsCopies = false;
+}
+
+bool FViewportGizmo::HasDragMovedAnything() const
+{
+	return std::ranges::any_of(DraggedEntities,
+		[this](const FDraggedEntity& Dragged)
+		{ return !(FindDraggedTransform(Dragged) == Dragged.RelativeTransform); });
+}
+
+void FViewportGizmo::MakeCopies(FUiFrame& Frame)
+{
+	FEditor& Editor = Frame.Editor;
+	std::vector<int64> Originals;
+	for (const FDraggedEntity& Dragged : DraggedEntities)
+	{
+		Originals.push_back(Dragged.EntityId);
+	}
+
+	// A copy is made beside what it is a copy of, below the same parent, so it begins where the original was
+	// when the drag began. The copies are selected, which makes them what the drag is of from here on.
+	const std::vector<std::optional<int64>> Copies = FUiCommands::CopyEntities(Editor, Originals);
+	std::vector<FDraggedEntity> DraggedCopies;
+	for (std::size_t Index = 0; Index < DraggedEntities.size(); ++Index)
+	{
+		if (Copies[Index].has_value())
+		{
+			FDraggedEntity Copy = DraggedEntities[Index];
+			Copy.EntityId = *Copies[Index];
+			DraggedCopies.push_back(Copy);
+		}
+	}
+	DraggedEntities = std::move(DraggedCopies);
+	DraggedSelection = Editor.GetSelection();
+	bWantsCopies = false;
 }
 
 FTransform FViewportGizmo::FindDraggedTransform(const FDraggedEntity& Dragged) const
