@@ -71,6 +71,11 @@ bool WStaticMesh::SetGeometry(
 
 	Vertices = std::move(InVertices);
 	Indices = std::move(InIndices);
+	Bounds = FBox3f();
+	for (const FStaticMeshVertex& Vertex : Vertices)
+	{
+		Bounds.Add(Vertex.Position);
+	}
 	++LastGeometryVersion;
 	GeometryVersion = LastGeometryVersion;
 	return true;
@@ -94,6 +99,11 @@ const std::vector<uint32>& WStaticMesh::GetIndices() const
 int32 WStaticMesh::GetTriangleCount() const
 {
 	return static_cast<int32>(Indices.size() / 3);
+}
+
+const FBox3f& WStaticMesh::GetBounds() const
+{
+	return Bounds;
 }
 
 uint64 WStaticMesh::GetGeometryVersion() const

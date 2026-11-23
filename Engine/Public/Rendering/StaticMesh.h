@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 
 #include "Assets/Asset.h"
+#include "Math/Box.h"
 #include "Object/ObjectMacros.h"
 #include "Rendering/StaticMeshVertex.h"
 
@@ -51,6 +52,12 @@ public:
 	int32 GetTriangleCount() const;
 
 	/**
+	 * Returns the room that the mesh takes up in its own space: the smallest box along its axes that contains every
+	 * vertex. Empty for a mesh without geometry.
+	 */
+	const FBox3f& GetBounds() const;
+
+	/**
 	 * Returns a number that identifies the geometry the mesh has now. It changes every time SetGeometry succeeds
 	 * and is never the same for two meshes, so whoever keeps a copy of the geometry, as the renderer does on the
 	 * graphics card, can tell whether the copy is current. Zero means the mesh has no geometry.
@@ -60,5 +67,6 @@ public:
 private:
 	std::vector<FStaticMeshVertex> Vertices;
 	std::vector<uint32> Indices;
+	FBox3f Bounds;
 	uint64 GeometryVersion = 0;
 };

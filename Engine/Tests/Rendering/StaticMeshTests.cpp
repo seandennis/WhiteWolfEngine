@@ -36,6 +36,7 @@ TEST_SUITE("WStaticMesh")
 		CHECK(Mesh->GetIndices().empty());
 		CHECK(Mesh->GetTriangleCount() == 0);
 		CHECK(Mesh->GetGeometryVersion() == 0);
+		CHECK(Mesh->GetBounds().bIsEmpty);
 	}
 
 	TEST_CASE("A mesh keeps the geometry it is given")
@@ -55,6 +56,28 @@ TEST_SUITE("WStaticMesh")
 		CHECK(Mesh->GetTriangleCount() == 2);
 	}
 
+	TEST_CASE("The bounds of a mesh are the box that holds its vertices")
+	{
+		const FScopedObjectTest ObjectTest;
+		WStaticMesh* const Mesh = NewObject<WStaticMesh>();
+		const FVector3f Normal(0.0f, 0.0f, 1.0f);
+		std::string Error;
+
+		REQUIRE(Mesh->SetGeometry({{FVector3f(-1.0f, 0.0f, 2.0f), Normal},
+									  {FVector3f(3.0f, -4.0f, 2.0f), Normal},
+									  {FVector3f(0.0f, 5.0f, -6.0f), Normal}},
+			{0, 1, 2},
+			Error));
+
+		CHECK_FALSE(Mesh->GetBounds().bIsEmpty);
+		CHECK(Mesh->GetBounds().Min == FVector3f(-1.0f, -4.0f, -6.0f));
+		CHECK(Mesh->GetBounds().Max == FVector3f(3.0f, 5.0f, 2.0f));
+
+		// New geometry has bounds of its own: nothing of the old ones is left.
+		REQUIRE(Mesh->SetGeometry(MakeTriangleVertices(), {0, 1, 2}, Error));
+		CHECK(Mesh->GetBounds().Min == FVector3f(0.0f, 0.0f, 0.0f));
+		CHECK(Mesh->GetBounds().Max == FVector3f(1.0f, 1.0f, 0.0f));
+	}
 	TEST_CASE("The geometry version changes with every new geometry and differs between meshes")
 	{
 		const FScopedObjectTest ObjectTest;
@@ -131,11 +154,13 @@ TEST_SUITE("WStaticMesh")
 		std::string Error;
 		REQUIRE(Mesh->SetGeometry(MakeTriangleVertices(), {0, 1, 2}, Error));
 		const uint64 Version = Mesh->GetGeometryVersion();
+		const FBox3f Bounds = Mesh->GetBounds();
 
 		CHECK_FALSE(Mesh->SetGeometry(MakeTriangleVertices(), {0, 1, 7}, Error));
 
 		CHECK(Mesh->GetVertices() == MakeTriangleVertices());
 		CHECK(Mesh->GetIndices() == std::vector<uint32>{0, 1, 2});
 		CHECK(Mesh->GetGeometryVersion() == Version);
+		CHECK(Mesh->GetBounds() == Bounds);
 	}
 }
