@@ -9,9 +9,6 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <span>
-#include <string>
-#include <string_view>
 #include <utility>
 
 namespace
@@ -35,16 +32,6 @@ namespace
 		float FaceSize = 1.0f;
 		float PicturePixelCount = 1.0f;
 	};
-
-	nvrhi::ShaderHandle CreateShader(nvrhi::IDevice& Device, std::string_view Name, nvrhi::ShaderType Type)
-	{
-		const std::span<const uint32> Code = FShaderLibrary::GetCode(Name);
-
-		nvrhi::ShaderDesc Description;
-		Description.shaderType = Type;
-		Description.debugName = std::string(Name);
-		return Device.createShader(Description, Code.data(), Code.size_bytes());
-	}
 
 	FHalfPixel ToHalfPixel(const FLinearColor& Color)
 	{
@@ -132,9 +119,10 @@ bool FEnvironmentCache::Initialize(std::shared_ptr<FRenderContext> InContext)
 			.addItem(nvrhi::BindingLayoutItem::Sampler(0))
 			.addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(FPrefilterConstants))));
 
-	const nvrhi::ShaderHandle VertexShader = CreateShader(Device, "FullScreen.vert", nvrhi::ShaderType::Vertex);
+	const nvrhi::ShaderHandle VertexShader =
+		FShaderLibrary::CreateShader(Device, "FullScreen.vert", nvrhi::ShaderType::Vertex);
 	const nvrhi::ShaderHandle FragmentShader =
-		CreateShader(Device, "PrefilterEnvironment.frag", nvrhi::ShaderType::Pixel);
+		FShaderLibrary::CreateShader(Device, "PrefilterEnvironment.frag", nvrhi::ShaderType::Pixel);
 	if (ReflectionsSampler == nullptr || PictureSampler == nullptr || PrefilterBindingLayout == nullptr ||
 		VertexShader == nullptr || FragmentShader == nullptr)
 	{

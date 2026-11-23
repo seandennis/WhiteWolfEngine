@@ -20,8 +20,6 @@
 #include <cstddef>
 #include <format>
 #include <map>
-#include <span>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -44,16 +42,6 @@ namespace
 
 	/** The buffers of vertices and indices are made for at least this many, and grow from there. */
 	constexpr std::size_t MinBufferElementCount = 4096;
-
-	nvrhi::ShaderHandle CreateShader(nvrhi::IDevice& Device, std::string_view Name, nvrhi::ShaderType Type)
-	{
-		const std::span<const uint32> Code = FShaderLibrary::GetCode(Name);
-
-		nvrhi::ShaderDesc Description;
-		Description.shaderType = Type;
-		Description.debugName = std::string(Name);
-		return Device.createShader(Description, Code.data(), Code.size_bytes());
-	}
 
 	/**
 	 * Checks that a list names only indices and vertices it has, and that each command can be drawn onto Target.
@@ -253,8 +241,10 @@ std::unique_ptr<FUiRenderer> FUiRenderer::Create(FRenderDevice& Device, std::str
 	NewImplementation->Context = Device.Context;
 	nvrhi::IDevice& RenderInterface = *NewImplementation->Context->GetDevice();
 
-	const nvrhi::ShaderHandle VertexShader = CreateShader(RenderInterface, "Ui.vert", nvrhi::ShaderType::Vertex);
-	const nvrhi::ShaderHandle FragmentShader = CreateShader(RenderInterface, "Ui.frag", nvrhi::ShaderType::Pixel);
+	const nvrhi::ShaderHandle VertexShader =
+		FShaderLibrary::CreateShader(RenderInterface, "Ui.vert", nvrhi::ShaderType::Vertex);
+	const nvrhi::ShaderHandle FragmentShader =
+		FShaderLibrary::CreateShader(RenderInterface, "Ui.frag", nvrhi::ShaderType::Pixel);
 	if (VertexShader == nullptr || FragmentShader == nullptr)
 	{
 		OutError = "the graphics card did not accept the engine's shaders for user interfaces";

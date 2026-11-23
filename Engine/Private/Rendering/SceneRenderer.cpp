@@ -38,7 +38,6 @@
 #include <format>
 #include <numbers>
 #include <span>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -320,16 +319,6 @@ namespace
 		return Contents;
 	}
 
-	nvrhi::ShaderHandle CreateShader(nvrhi::IDevice& Device, std::string_view Name, nvrhi::ShaderType Type)
-	{
-		const std::span<const uint32> Code = FShaderLibrary::GetCode(Name);
-
-		nvrhi::ShaderDesc Description;
-		Description.shaderType = Type;
-		Description.debugName = std::string(Name);
-		return Device.createShader(Description, Code.data(), Code.size_bytes());
-	}
-
 	/** Creates the buffers for a mesh's geometry on the graphics card. Their content is written separately. */
 	bool CreateMeshBuffers(nvrhi::IDevice& Device, WStaticMesh& Mesh, FStaticMeshBuffers& OutBuffers)
 	{
@@ -404,8 +393,10 @@ namespace
 		nvrhi::Format ColorFormat,
 		nvrhi::Format DepthFormat)
 	{
-		const nvrhi::ShaderHandle VertexShader = CreateShader(Device, "Sky.vert", nvrhi::ShaderType::Vertex);
-		const nvrhi::ShaderHandle FragmentShader = CreateShader(Device, "Sky.frag", nvrhi::ShaderType::Pixel);
+		const nvrhi::ShaderHandle VertexShader =
+			FShaderLibrary::CreateShader(Device, "Sky.vert", nvrhi::ShaderType::Vertex);
+		const nvrhi::ShaderHandle FragmentShader =
+			FShaderLibrary::CreateShader(Device, "Sky.frag", nvrhi::ShaderType::Pixel);
 		if (VertexShader == nullptr || FragmentShader == nullptr)
 		{
 			return nullptr;
@@ -435,8 +426,10 @@ namespace
 	nvrhi::GraphicsPipelineHandle CreateTonemapPipeline(
 		nvrhi::IDevice& Device, nvrhi::IBindingLayout* BindingLayout, nvrhi::Format OutputFormat)
 	{
-		const nvrhi::ShaderHandle VertexShader = CreateShader(Device, "FullScreen.vert", nvrhi::ShaderType::Vertex);
-		const nvrhi::ShaderHandle FragmentShader = CreateShader(Device, "Tonemap.frag", nvrhi::ShaderType::Pixel);
+		const nvrhi::ShaderHandle VertexShader =
+			FShaderLibrary::CreateShader(Device, "FullScreen.vert", nvrhi::ShaderType::Vertex);
+		const nvrhi::ShaderHandle FragmentShader =
+			FShaderLibrary::CreateShader(Device, "Tonemap.frag", nvrhi::ShaderType::Pixel);
 		if (VertexShader == nullptr || FragmentShader == nullptr)
 		{
 			return nullptr;
@@ -464,9 +457,11 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 	nvrhi::IDevice& RenderInterface = *NewImplementation->Context->GetDevice();
 
 	const nvrhi::ShaderHandle VertexShader =
-		CreateShader(RenderInterface, "StaticMesh.vert", nvrhi::ShaderType::Vertex);
-	const nvrhi::ShaderHandle LitShader = CreateShader(RenderInterface, "Lit.frag", nvrhi::ShaderType::Pixel);
-	const nvrhi::ShaderHandle UnlitShader = CreateShader(RenderInterface, "Unlit.frag", nvrhi::ShaderType::Pixel);
+		FShaderLibrary::CreateShader(RenderInterface, "StaticMesh.vert", nvrhi::ShaderType::Vertex);
+	const nvrhi::ShaderHandle LitShader =
+		FShaderLibrary::CreateShader(RenderInterface, "Lit.frag", nvrhi::ShaderType::Pixel);
+	const nvrhi::ShaderHandle UnlitShader =
+		FShaderLibrary::CreateShader(RenderInterface, "Unlit.frag", nvrhi::ShaderType::Pixel);
 	if (VertexShader == nullptr || LitShader == nullptr || UnlitShader == nullptr)
 	{
 		OutError = "the graphics card did not accept the engine's shaders";
@@ -569,7 +564,8 @@ std::unique_ptr<FSceneRenderer> FSceneRenderer::Create(FRenderDevice& Device, st
 												.setRegisterSpaceAndDescriptorSet(2)
 												.addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))
 												.addItem(nvrhi::BindingLayoutItem::Sampler(0)));
-	const nvrhi::ShaderHandle PrepassShader = CreateShader(RenderInterface, "Prepass.frag", nvrhi::ShaderType::Pixel);
+	const nvrhi::ShaderHandle PrepassShader =
+		FShaderLibrary::CreateShader(RenderInterface, "Prepass.frag", nvrhi::ShaderType::Pixel);
 	const bool bHasOcclusionPasses = NewImplementation->Occlusion.Initialize(NewImplementation->Context,
 		FRenderTarget::FImplementation::OcclusionFormat,
 		FRenderTarget::FImplementation::ColorFormat);

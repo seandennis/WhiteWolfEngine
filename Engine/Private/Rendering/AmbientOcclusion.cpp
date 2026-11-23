@@ -3,8 +3,6 @@
 #include "Rendering/ShaderLibrary.h"
 
 #include <cstddef>
-#include <span>
-#include <string>
 #include <string_view>
 #include <utility>
 
@@ -13,15 +11,6 @@ static_assert(sizeof(FAmbientOcclusion::FConstants) == 112,
 
 namespace
 {
-	nvrhi::ShaderHandle CreateShader(nvrhi::IDevice& Device, std::string_view Name, nvrhi::ShaderType Type)
-	{
-		const std::span<const uint32> Code = FShaderLibrary::GetCode(Name);
-
-		nvrhi::ShaderDesc Description;
-		Description.shaderType = Type;
-		Description.debugName = std::string(Name);
-		return Device.createShader(Description, Code.data(), Code.size_bytes());
-	}
 
 	/** Creates a pipeline that draws one triangle over the whole of a surface with a fragment shader. */
 	nvrhi::GraphicsPipelineHandle CreateFullScreenPipeline(nvrhi::IDevice& Device,
@@ -30,7 +19,8 @@ namespace
 		nvrhi::IBindingLayout* BindingLayout,
 		nvrhi::Format TargetFormat)
 	{
-		const nvrhi::ShaderHandle FragmentShader = CreateShader(Device, FragmentShaderName, nvrhi::ShaderType::Pixel);
+		const nvrhi::ShaderHandle FragmentShader =
+			FShaderLibrary::CreateShader(Device, FragmentShaderName, nvrhi::ShaderType::Pixel);
 		if (FragmentShader == nullptr)
 		{
 			return nullptr;
@@ -71,7 +61,8 @@ bool FAmbientOcclusion::Initialize(
 									   .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1))
 									   .addItem(nvrhi::BindingLayoutItem::Texture_SRV(2))
 									   .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(FConstants))));
-	const nvrhi::ShaderHandle VertexShader = CreateShader(Device, "FullScreen.vert", nvrhi::ShaderType::Vertex);
+	const nvrhi::ShaderHandle VertexShader =
+		FShaderLibrary::CreateShader(Device, "FullScreen.vert", nvrhi::ShaderType::Vertex);
 	if (InputLayout == nullptr || BlurLayout == nullptr || VertexShader == nullptr)
 	{
 		return false;
