@@ -1,5 +1,7 @@
 #include "Editor.h"
 
+#include "Logging/LogMessage.h"
+#include "Logging/LogVerbosity.h"
 #include "Object/ObjectGlobals.h"
 #include "Object/WeakObjectPtr.h"
 #include "Scene/Scene.h"
@@ -263,7 +265,7 @@ TEST_SUITE("FEditor")
 		const bool bWasLogged = std::ranges::any_of(Messages,
 			[](const FLogMessage& Message)
 			{
-				return Message.Category == "LogEditor" &&
+				return Message.Category == "LogEditor" && Message.Verbosity == ELogVerbosity::Warning &&
 					Message.Text == "Command Entity.Delete failed: There is no entity with the identifier 99.";
 			});
 		CHECK(bWasLogged);

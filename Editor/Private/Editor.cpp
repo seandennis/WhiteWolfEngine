@@ -87,7 +87,9 @@ FCommandResult FEditor::ExecuteCommand(std::string_view Name, const FJsonValue& 
 	}
 	else
 	{
-		WW_LOG(LogEditor, Log, "Command {} failed: {}", Name, Result.GetError());
+		// A warning: something was asked for that did not happen. Whoever reads the log for what went wrong, in
+		// the window or with Log.Read, finds it among that.
+		WW_LOG(LogEditor, Warning, "Command {} failed: {}", Name, Result.GetError());
 	}
 
 	// Whatever the command changed is a step, whether it succeeded or not: a command that fails should leave the

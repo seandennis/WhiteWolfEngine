@@ -4,6 +4,7 @@
 #include "Math/Quat.h"
 #include "Math/Transform.h"
 #include "Math/Vector.h"
+#include "Object/ObjectGlobals.h"
 #include "Rendering/Image.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
@@ -1080,6 +1081,39 @@ TEST_SUITE("FViewportGizmo")
 		CHECK(GetTransform(Test, Crate) == FTransform());
 		CHECK(Test.Editor.GetSelection() == std::vector<int64>{Crate});
 		CHECK(CountSteps(Test, "Move") == 0);
+		const std::vector<std::string> Undone = {"Move"};
+		CHECK(Test.Editor.GetHistory().GetRedoStepNames() == Undone);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("Undoing in the middle of the first drag of a scene undoes what the drag has done")
+	{
+		FEditorUiTest Test;
+		LookFromFront(Test);
+
+		// A scene as one that was opened is: with a crate in it, and nothing in its history to undo yet.
+		WScene* const Opened = NewObject<WScene>();
+		WEntity* const CrateEntity = Opened->CreateEntity("Crate");
+		REQUIRE(CrateEntity != nullptr);
+		const int64 Crate = CrateEntity->GetId();
+		Test.Editor.SetScene(*Opened, {});
+		Test.Editor.SetSelection({Crate});
+		Test.DrawFrame();
+
+		PressAt(Test, Test.RequireItem(Handle("X")).GetCenter(), EMouseButton::Left);
+		MoveBy(Test, FVector2D(40.0, 0.0));
+		REQUIRE(GetTransform(Test, Crate).Location.x > 0.1);
+		// What the drag has done is in a step that is still open, and the history has nothing else.
+		REQUIRE(Test.Editor.IsStepOpen());
+		REQUIRE_FALSE(Test.Editor.GetHistory().CanUndo());
+
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+
+		CHECK(GetTransform(Test, Crate) == FTransform());
+		CHECK_FALSE(Test.Editor.IsStepOpen());
+		Release(Test, EMouseButton::Left);
+		Test.DrawFrames(3);
+		CHECK(GetTransform(Test, Crate) == FTransform());
 		const std::vector<std::string> Undone = {"Move"};
 		CHECK(Test.Editor.GetHistory().GetRedoStepNames() == Undone);
 		CHECK(CountLoggedProblems(Test.Capture) == 0);

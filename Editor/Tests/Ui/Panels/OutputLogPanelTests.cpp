@@ -168,6 +168,10 @@ TEST_SUITE("FOutputLogPanel")
 		REQUIRE_FALSE(Test.Editor.ExecuteCommand("Entity.Delete", ParseTestJson(R"({"Entity": 99})")).HasSucceeded());
 		Test.DrawFrame();
 
+		// It is a warning: in the colour of one, and among what is left when only what went wrong is wanted.
+		REQUIRE(CountLines(Test) == 1);
+		CHECK(CountPixels(Test, Line(0), IsYellow) > 20);
+		Choose(Test, "Verbosity", "Warnings and errors");
 		CHECK(CountLines(Test) == 1);
 	}
 

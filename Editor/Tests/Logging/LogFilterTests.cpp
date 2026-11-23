@@ -2,6 +2,8 @@
 
 #include <doctest/doctest.h>
 
+#include <array>
+#include <cstddef>
 #include <initializer_list>
 #include <string>
 
@@ -51,6 +53,25 @@ TEST_SUITE("FLogFilter")
 		Filter.LeastVerbosity = ELogVerbosity::Fatal;
 		CHECK(Filter.Matches(MakeMessage(ELogVerbosity::Fatal, "LogCore", "Gone")));
 		CHECK_FALSE(Filter.Matches(MakeMessage(ELogVerbosity::Error, "LogCore", "Failed")));
+
+		// Every kind of message against each least importance: the kinds from the most important down.
+		constexpr std::array<ELogVerbosity, 7> Kinds = {ELogVerbosity::Fatal,
+			ELogVerbosity::Error,
+			ELogVerbosity::Warning,
+			ELogVerbosity::Display,
+			ELogVerbosity::Log,
+			ELogVerbosity::Verbose,
+			ELogVerbosity::VeryVerbose};
+		for (std::size_t Least = 0; Least < Kinds.size(); ++Least)
+		{
+			Filter.LeastVerbosity = Kinds[Least];
+			for (std::size_t Kind = 0; Kind < Kinds.size(); ++Kind)
+			{
+				CAPTURE(Least);
+				CAPTURE(Kind);
+				CHECK(Filter.Matches(MakeMessage(Kinds[Kind], "LogCore", "Text")) == (Kind <= Least));
+			}
+		}
 	}
 
 	TEST_CASE("A filter with a category wants the messages of that category, written exactly so")

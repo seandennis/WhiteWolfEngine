@@ -215,12 +215,20 @@ std::optional<std::vector<FUiAsset>> FUiCommands::DescribeAssetFile(
 
 void FUiCommands::Undo(FEditor& Editor)
 {
-	Editor.ExecuteCommand("Edit.Undo", FJsonValue());
+	// With nothing to undo the command would fail, and a key that is pressed once too often is no failure worth
+	// a line in the log. What a step that is open has changed is not in the history yet, and is undone too.
+	if (Editor.GetHistory().CanUndo() || Editor.IsStepOpen())
+	{
+		Editor.ExecuteCommand("Edit.Undo", FJsonValue());
+	}
 }
 
 void FUiCommands::Redo(FEditor& Editor)
 {
-	Editor.ExecuteCommand("Edit.Redo", FJsonValue());
+	if (Editor.GetHistory().CanRedo())
+	{
+		Editor.ExecuteCommand("Edit.Redo", FJsonValue());
+	}
 }
 
 void FUiCommands::SetSelection(FEditor& Editor, const std::vector<int64>& EntityIds)

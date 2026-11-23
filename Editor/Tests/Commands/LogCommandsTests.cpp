@@ -102,6 +102,12 @@ TEST_SUITE("Log commands")
 		const std::vector<std::string> Everything = {"Noted", "Shown", "Odd", "Failed"};
 		CHECK(GetTexts(ReadLog(Test.Editor, R"({"Verbosity": "VeryVerbose"})")) == Everything);
 		CHECK(GetTexts(ReadLog(Test.Editor, R"({"Verbosity": "Fatal"})")).empty());
+
+		// The kinds in between: what is shown and worse, and the two below it, which nothing here is less than.
+		const std::vector<std::string> ShownAndWorse = {"Shown", "Odd", "Failed"};
+		CHECK(GetTexts(ReadLog(Test.Editor, R"({"Verbosity": "Display"})")) == ShownAndWorse);
+		CHECK(GetTexts(ReadLog(Test.Editor, R"({"Verbosity": "Log"})")) == Everything);
+		CHECK(GetTexts(ReadLog(Test.Editor, R"({"Verbosity": "Verbose"})")) == Everything);
 	}
 
 	TEST_CASE("Log.Read returns the messages of a category, and those that have a text in them")
@@ -212,6 +218,23 @@ TEST_SUITE("Log commands")
 			"Command Entity.Delete failed: There is no entity with the identifier 99."};
 		CHECK(GetTexts(Value) == Expected);
 		CHECK(Value.FindMember("Messages")->GetElements()[0].FindMember("Category")->GetString() == "LogEditor");
+	}
+
+	TEST_CASE("Why a command failed is among what went wrong")
+	{
+		FQuietEditor Test;
+		REQUIRE(Test.Editor.ExecuteCommand("Entity.Create", ParseTestJson(R"({"Name": "Player"})")).HasSucceeded());
+		REQUIRE_FALSE(Test.Editor.ExecuteCommand("Entity.Delete", ParseTestJson(R"({"Entity": 99})")).HasSucceeded());
+
+		// Of the two commands, the one that failed is a warning, and the one that succeeded is none.
+		const FJsonValue Value = ReadLog(Test.Editor, R"({"Verbosity": "Warning"})");
+
+		const std::vector<std::string> Expected = {
+			"Command Entity.Delete failed: There is no entity with the identifier 99."};
+		REQUIRE(GetTexts(Value) == Expected);
+		const FJsonValue& Message = Value.FindMember("Messages")->GetElements()[0];
+		CHECK(Message.FindMember("Verbosity")->GetString() == "Warning");
+		CHECK(Message.FindMember("Category")->GetString() == "LogEditor");
 	}
 
 	TEST_CASE("Log.Clear forgets what was logged, and what is logged afterwards is kept")

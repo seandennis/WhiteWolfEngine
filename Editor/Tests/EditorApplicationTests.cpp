@@ -94,6 +94,26 @@ TEST_SUITE("FEditorApplication")
 		CHECK(Run.ErrorOutput.str() == Errors);
 	}
 
+	TEST_CASE("--mcp answers a tool call that fails on the output, and says why on the error output too")
+	{
+		const FEditorApplicationRun Run({"--mcp"},
+			"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"Entity.Delete\","
+			"\"arguments\":{\"Entity\":99}}}\n");
+
+		CHECK(Run.ExitCode == 0);
+		// The answer is one line that says that the call failed, and why.
+		const std::string Output = Run.Output.str();
+		CHECK(std::ranges::count(Output, '\n') == 1);
+		CHECK(Output.find(R"("isError":true)") != std::string::npos);
+		CHECK(Output.find("There is no entity with the identifier 99.") != std::string::npos);
+
+		// A command that fails is a warning of the log, and the warnings of the log go to the error output.
+		const std::string Errors = Run.ErrorOutput.str();
+		CHECK(Errors.find("Warning") != std::string::npos);
+		CHECK(Errors.find("Command Entity.Delete failed: There is no entity with the identifier 99.") !=
+			std::string::npos);
+	}
+
 	TEST_CASE("--help prints how to start the editor")
 	{
 		const FEditorApplicationRun Run({"--help"}, "");

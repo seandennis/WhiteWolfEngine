@@ -574,9 +574,13 @@ TEST_SUITE("FEditorUi")
 		const int64 Player = Test.Editor.GetScene().CreateEntity("Player")->GetId();
 		Test.Editor.SetSelection({Player});
 		Test.DrawFrame();
-		Test.PressKey(EKey::Z, {EKey::LeftControl});
-		Test.PressKey(EKey::Y, {EKey::LeftControl});
+		// The entity was made without a command, which the history has not seen yet. An undo and a redo have it
+		// written down, so that a step that follows is not this one.
+		REQUIRE(Test.Editor.ExecuteCommand("Edit.Undo", FJsonValue()).HasSucceeded());
+		REQUIRE(Test.Editor.ExecuteCommand("Edit.Redo", FJsonValue()).HasSucceeded());
+		Test.DrawFrame();
 		const std::size_t StepCountBefore = Test.Editor.GetHistory().GetUndoStepNames().size();
+		REQUIRE(StepCountBefore == 1);
 
 		Test.PressKey(EKey::F2);
 		REQUIRE(Test.HasItem("Outliner/Rename"));
@@ -800,6 +804,35 @@ TEST_SUITE("FEditorUi")
 
 		Test.PressKey(EKey::Z, {EKey::LeftControl, EKey::LeftShift});
 		CHECK(Test.Editor.GetScene().FindEntityByName("Player") != nullptr);
+	}
+
+	TEST_CASE("Ctrl+Z and Ctrl+Y with nothing to undo or redo give no command, and nothing is logged")
+	{
+		FEditorUiTest Test;
+		REQUIRE_FALSE(Test.Editor.GetHistory().CanUndo());
+
+		// A key that is pressed once too often is no failure: the command would fail, and that is a warning.
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		Test.PressKey(EKey::Y, {EKey::LeftControl});
+		Test.PressKey(EKey::Z, {EKey::LeftControl, EKey::LeftShift});
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+
+		// After the one step there is, the same holds.
+		REQUIRE(Test.Editor.ExecuteCommand("Entity.Create", ParseTestJson(R"({"Name": "Player"})")).HasSucceeded());
+		Test.DrawFrame();
+		Test.PressKey(EKey::Y, {EKey::LeftControl});
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		CHECK(Test.Editor.GetScene().GetAllEntities().empty());
+		Test.PressKey(EKey::Y, {EKey::LeftControl});
+		Test.PressKey(EKey::Y, {EKey::LeftControl});
+		CHECK(Test.Editor.GetScene().FindEntityByName("Player") != nullptr);
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+
+		// The command itself, given where there is nothing to undo, fails and is a warning in the log.
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		REQUIRE_FALSE(Test.Editor.ExecuteCommand("Edit.Undo", FJsonValue()).HasSucceeded());
+		CHECK(CountLoggedProblems(Test.Capture) == 1);
 	}
 
 	TEST_CASE("Z and Y without Ctrl change nothing")
