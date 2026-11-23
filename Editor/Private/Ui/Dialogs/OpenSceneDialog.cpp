@@ -8,7 +8,9 @@
 #include "Ui/UiFrame.h"
 #include "Ui/UiItems.h"
 
+#include <cstddef>
 #include <format>
+#include <string>
 
 namespace
 {
@@ -51,17 +53,24 @@ void FOpenSceneDialog::Draw(FUiFrame& Frame)
 			{
 				ImGui::TextDisabled("The project has no scenes yet.");
 			}
-			for (const std::string& Scene : Scenes)
+			for (std::size_t Index = 0; Index < Scenes.size(); ++Index)
 			{
-				// A click chooses a scene, which is then in the field; a double click opens it.
+				// A click chooses a scene, which is then in the field; a double click opens it. The row is known
+				// to Dear ImGui by its number and has no text of its own: as the text of a row, the name of a file
+				// would end at the first "##" in it. The name is written over the row, whatever is in it.
+				const std::string& Scene = Scenes[Index];
 				constexpr ImGuiSelectableFlags Flags =
 					ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_NoAutoClosePopups;
-				if (ImGui::Selectable(Scene.c_str(), Scene == PathText, Flags))
+				const ImVec2 TextCorner = ImGui::GetCursorScreenPos();
+				ImGui::PushID(static_cast<int>(Index));
+				if (ImGui::Selectable("##Scene", Scene == PathText, Flags))
 				{
 					PathText = Scene;
 					bWasSceneDoubleClicked = ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
 				}
+				ImGui::PopID();
 				Frame.Items.NameLastItem(std::format("OpenScene/{}", Scene));
+				ImGui::GetWindowDrawList()->AddText(TextCorner, ImGui::GetColorU32(ImGuiCol_Text), Scene.c_str());
 			}
 		}
 		ImGui::EndChild();

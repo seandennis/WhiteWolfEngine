@@ -1,5 +1,6 @@
 #include "Assets/TestAssets.h"
 #include "Core/FileHelper.h"
+#include "Rendering/Image.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
 #include "TestSupport/ScopedTempDirectory.h"
@@ -64,6 +65,44 @@ TEST_SUITE("FOpenSceneDialog")
 		// The outliner shows what was opened.
 		CHECK(Test.HasItem(std::format("Outliner/{}", Test.Editor.GetScene().FindEntityByName("Dragon")->GetId())));
 		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("The name of a scene is shown whole, whatever is in it")
+	{
+		FEditorUiTest Test;
+		const FScopedTempDirectory Directory;
+		CreateTestProject(Test.Editor, Directory.GetPath());
+		// Two number signs end the text of a row for the library that lays the list out, and are no more than
+		// two letters of the name of a file.
+		SaveSceneWithEntity(Test, "Level.wwscene", "Mayor");
+		SaveSceneWithEntity(Test, "Level##One.wwscene", "Dragon");
+
+		Test.PressKey(EKey::O, {EKey::LeftControl});
+		REQUIRE(Test.HasItem("OpenScene/Level.wwscene"));
+		REQUIRE(Test.HasItem("OpenScene/Level##One.wwscene"));
+
+		// The longer name is written with more ink than the shorter one, which it would not be if it ended
+		// after "Level".
+		const auto CountInk = [&Test](const char* ItemName)
+		{
+			const FUiRectangle Row = Test.RequireItem(ItemName);
+			const FImage Picture = Test.ReadPicture();
+			int32 Count = 0;
+			for (int32 Y = static_cast<int32>(Row.Top); Y < static_cast<int32>(Row.Bottom); ++Y)
+			{
+				for (int32 X = static_cast<int32>(Row.Left); X < static_cast<int32>(Row.Right); ++X)
+				{
+					Count += Picture.GetPixel(X, Y).R > 150 ? 1 : 0;
+				}
+			}
+			return Count;
+		};
+		CHECK(CountInk("OpenScene/Level##One.wwscene") > CountInk("OpenScene/Level.wwscene"));
+
+		// And it is the scene that a click on it chooses.
+		Test.Click("OpenScene/Level##One.wwscene");
+		Test.Click("OpenScene/Open");
+		CHECK(Test.Editor.GetScene().FindEntityByName("Dragon") != nullptr);
 	}
 
 	TEST_CASE("A double click on a scene of the list opens it")
