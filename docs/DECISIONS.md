@@ -1431,3 +1431,21 @@ A leak check finds memory by following pointers from what is loaded. Memory that
 **Limits.** The entries of the Edit menu that say what would be undone and redone have the name of the step in their text, and the step that removes a component is called by the component's class: for a class that is missing and has "##" in its name, the entry ends there. A line of `FUiNames` is named for tests by its whole row, and what it says cannot be read off the surface, only how much is written.
 
 **Testing.** In the user interface, by how much is written, which is more for a longer name: two entities whose names differ after "##", in the list of a reference and in its field; three categories of the log, one with "##" in its name and one without a name, with the list opened, a line chosen and the field read; two components of missing classes on one entity, whose headings differ after "##", and whose menu still removes one; two scenes in a folder whose path is longer than the list, told apart by their ends. Each fails when the name is cut at "##", and the list of categories fails a check of the library when a line has the name as its own text.
+
+## D-077: A rotation is read at unit length
+
+**Status:** Accepted.
+
+**Context.** A rotation is a unit quaternion (`FTransform`), and everything that turns something by one relies on that: the renderer makes a matrix of it without asking, a place is taken back through it, and the editor's gizmo lays its axes along it. A quaternion that was read from JSON was stored as it was written. An agent that gave an entity the rotation [1, 0, 1, 0], meaning a quarter turn, or a scene file written by hand, left the entity with a rotation that is none: its mesh was drawn sheared, and what was put below it went to the wrong place.
+
+**Decision.**
+
+- **A quaternion that is read is made of unit length** (`TPropertyValueTraits<FQuat>`): it is taken for the rotation that it turns as. That holds for every property of the type and for the rotation of a transform, in a scene file as in `Object.SetProperty`.
+- **One without a length is refused,** with the reason, as a value of the wrong kind is: a command fails and leaves the property as it was, and a scene file gets a warning for that value.
+- **One whose length is one to four digits is left exactly as it is written.** The engine writes a rotation to the last digit and has to read back what it wrote: undo and redo take any difference in the scene's text for a change (D-041). A rotation that a hand wrote to four digits is as good as it was meant.
+
+**Alternatives considered.** Refusing every quaternion that is not of unit length makes an agent do arithmetic that the engine can do, to say what it plainly means. Making a rotation of unit length where it is used, in the renderer, in `FTransform` and in each tool, is many places and one forgotten; the gizmo does it for its own axes all the same (D-069), because code can hand it anything. A check where an entity is given its transform is for code, which has `glm::normalize`, and would end the program for a mistake that data can make.
+
+**Limits.** Code can still give an entity a rotation that is none. `FTransform` says that it must not, and nothing checks it.
+
+**Testing.** The property: quaternions twice and three times too long, one written in whole numbers and one written to one digit, each read at unit length; one written to four digits and one that the engine wrote, each read back exactly; the rotation of a transform; one without a length, by itself and in a transform, refused with the old value kept. The command: a rotation in whole numbers given to an entity, which then faces as was meant; read back and given again, which is no further step of the history; and one without a length, refused with its reason.

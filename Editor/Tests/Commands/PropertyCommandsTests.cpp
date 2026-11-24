@@ -9,6 +9,8 @@
 #include "TestEditorObjects.h"
 
 #include <doctest/doctest.h>
+#include <glm/geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include <format>
 #include <ostream>
@@ -239,6 +241,45 @@ TEST_SUITE("Property commands")
 		REQUIRE(Written.HasSucceeded());
 		// Double precision survives: ten billion kilometres and a fraction of a metre.
 		CHECK(Test.Target->GetWorldLocation() == FVector(1.0e13, -2.5, 3.0));
+	}
+
+	TEST_CASE("A rotation that is given at another length than one is the entity's at unit length")
+	{
+		FPropertyCommandTest Test;
+
+		// A quarter turn around Y as a hand writes it, in whole numbers: no unit quaternion, and meant as a turn.
+		const FCommandResult Written = Test.Execute("Object.SetProperty",
+			std::format(R"({{"Object": {}, "Property": "RelativeTransform", "Value": {{"Rotation": [1, 0, 1, 0]}}}})",
+				Test.Player->GetId()));
+
+		REQUIRE(Written.HasSucceeded());
+		const FQuat Rotation = Test.Player->GetRelativeTransform().Rotation;
+		CHECK(glm::length(Rotation) == doctest::Approx(1.0f));
+		// What faced along -Z faces along -X.
+		const FVector3f Facing = Rotation * FVector3f(0.0f, 0.0f, -1.0f);
+		CHECK(glm::length(Facing - FVector3f(-1.0f, 0.0f, 0.0f)) < 1.0e-5f);
+
+		// It is one step, and what is read back and given again is no further one: the text of the scene is the
+		// same after as before.
+		REQUIRE(Test.Editor.GetHistory().GetUndoStepNames().size() == 1);
+		const FCommandResult Read = Test.Execute("Object.GetProperty",
+			std::format(R"({{"Object": {}, "Property": "RelativeTransform"}})", Test.Player->GetId()));
+		REQUIRE(Read.HasSucceeded());
+		REQUIRE(Test.Execute("Object.SetProperty",
+						std::format(R"({{"Object": {}, "Property": "RelativeTransform", "Value": {}}})",
+							Test.Player->GetId(),
+							WriteTestJson(Read.GetValue())))
+					.HasSucceeded());
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames().size() == 1);
+		CHECK(Test.Player->GetRelativeTransform().Rotation == Rotation);
+
+		// A rotation without a length is none, and is refused with the reason.
+		const FCommandResult Refused = Test.Execute("Object.SetProperty",
+			std::format(R"({{"Object": {}, "Property": "RelativeTransform", "Value": {{"Rotation": [0, 0, 0, 0]}}}})",
+				Test.Player->GetId()));
+		REQUIRE_FALSE(Refused.HasSucceeded());
+		CHECK(Refused.GetError().find("a quaternion without a length") != std::string::npos);
+		CHECK(Test.Player->GetRelativeTransform().Rotation == Rotation);
 	}
 
 	TEST_CASE("Object.SetProperty refuses a value the property cannot take, and leaves the property as it was")

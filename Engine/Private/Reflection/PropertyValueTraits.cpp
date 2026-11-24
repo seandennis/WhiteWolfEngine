@@ -1,10 +1,20 @@
 #include "Reflection/PropertyValueTraits.h"
 
+#include <glm/gtc/quaternion.hpp>
+
 #include <array>
+#include <cmath>
 #include <cstddef>
 
 namespace
 {
+	/**
+	 * How far the length of a quaternion that is read may be from one for the quaternion to be left exactly as it
+	 * is. What the engine writes is far nearer than that and is read back to the last digit, and so is a rotation
+	 * that someone wrote to four digits.
+	 */
+	constexpr float UnitLengthTolerance = 1.0e-4f;
+
 	/**
 	 * Reads a JSON array of exactly Count numbers into OutComponents.
 	 *
@@ -119,7 +129,20 @@ bool TPropertyValueTraits<FQuat>::FromJson(const FJsonValue& Json, FQuat& OutVal
 		return false;
 	}
 
-	OutValue = FQuat(Components[0], Components[1], Components[2], Components[3]);
+	// A quaternion is a rotation here, and whatever turns something by one relies on its being of unit length. One
+	// that is written longer or shorter, as a hand or an agent may write it, is taken for the rotation that it
+	// turns as. One of no length turns as nothing in particular, and is no rotation.
+	const FQuat Given(Components[0], Components[1], Components[2], Components[3]);
+	const float Length = glm::length(Given);
+	const bool bHasLength = std::isfinite(Length) && Length > 0.0f;
+	if (!bHasLength)
+	{
+		OutError = std::format("expected a rotation for {} but found a quaternion without a length", TypeName);
+		return false;
+	}
+
+	const bool bIsOfUnitLength = std::abs(Length - 1.0f) <= UnitLengthTolerance;
+	OutValue = bIsOfUnitLength ? Given : Given / Length;
 	return true;
 }
 

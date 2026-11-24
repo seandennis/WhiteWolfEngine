@@ -199,7 +199,12 @@ struct TPropertyValueTraits<FVector3f>
 	ENGINE_API static bool FromJson(const FJsonValue& Json, FVector3f& OutValue, std::string& OutError);
 };
 
-/** A quaternion is saved as [w, x, y, z], the order of FQuat's constructor. */
+/**
+ * A quaternion is saved as [w, x, y, z], the order of FQuat's constructor. It is a rotation, and is read at unit
+ * length: one that is written longer or shorter is read as the rotation that it turns as, and one without a length
+ * is refused. One whose length is one to four digits is read exactly as it is written, so that what the engine
+ * wrote is what it reads.
+ */
 template <>
 struct TPropertyValueTraits<FQuat>
 {

@@ -8,6 +8,7 @@
 #include "Reflection/TestReflectionObjects.h"
 
 #include <doctest/doctest.h>
+#include <glm/gtc/quaternion.hpp>
 
 #include <limits>
 #include <ostream>
@@ -337,6 +338,67 @@ TEST_SUITE("TValueProperty")
 
 		CHECK(Object->Location == FVector(1.0, 2.0, 3.0));
 		CHECK(Object->Rotation == FQuat(0.0f, 1.0f, 0.0f, 0.0f));
+	}
+
+	TEST_CASE("A quaternion is read as a rotation: at unit length, whatever length it is written with")
+	{
+		const FScopedObjectTest ObjectTest;
+		WTestValueObject* const Object = NewObject<WTestValueObject>();
+		std::string Error;
+
+		// Twice as long as a rotation is, and a quarter turn around Y written in whole numbers.
+		REQUIRE(Import(*Object, "Rotation", MakeNumberArray({2.0, 0.0, 0.0, 0.0}), Error));
+		CHECK(Object->Rotation == FQuat(1.0f, 0.0f, 0.0f, 0.0f));
+		REQUIRE(Import(*Object, "Rotation", MakeNumberArray({1.0, 0.0, 1.0, 0.0}), Error));
+		CHECK(glm::length(Object->Rotation) == doctest::Approx(1.0f));
+		CHECK(Object->Rotation.w == doctest::Approx(0.70710678f));
+		CHECK(Object->Rotation.x == 0.0f);
+		CHECK(Object->Rotation.y == doctest::Approx(0.70710678f));
+		CHECK(Object->Rotation.z == 0.0f);
+
+		// One whose length is one as nearly as it was written is left exactly as it was written: to four digits
+		// here, and to the last digit as the engine writes one.
+		REQUIRE(Import(*Object, "Rotation", MakeNumberArray({0.7071, 0.0, 0.7071, 0.0}), Error));
+		CHECK(Object->Rotation == FQuat(0.7071f, 0.0f, 0.7071f, 0.0f));
+		const FQuat Written = glm::normalize(FQuat(0.3f, -0.5f, 0.7f, 0.2f));
+		Object->Rotation = Written;
+		const FJsonValue Exported = Export(*Object, "Rotation");
+		Object->Rotation = FQuat(1.0f, 0.0f, 0.0f, 0.0f);
+		REQUIRE(Import(*Object, "Rotation", Exported, Error));
+		CHECK(Object->Rotation == Written);
+
+		// One that is off by more than that is not left.
+		REQUIRE(Import(*Object, "Rotation", MakeNumberArray({0.7, 0.0, 0.7, 0.0}), Error));
+		CHECK(glm::length(Object->Rotation) == doctest::Approx(1.0f));
+		CHECK(Object->Rotation.w == doctest::Approx(0.70710678f));
+
+		// The rotation of a transform is read the same way.
+		FJsonValue Transform = FJsonValue::MakeObject();
+		Transform.SetMember("Rotation", MakeNumberArray({0.0, 0.0, 3.0, 0.0}));
+		REQUIRE(Import(*Object, "Transform", Transform, Error));
+		CHECK(Object->Transform.Rotation == FQuat(0.0f, 0.0f, 1.0f, 0.0f));
+	}
+
+	TEST_CASE("A quaternion without a length is no rotation, and the old value is kept")
+	{
+		const FScopedObjectTest ObjectTest;
+		WTestValueObject* const Object = NewObject<WTestValueObject>();
+		Object->Rotation = FQuat(0.0f, 1.0f, 0.0f, 0.0f);
+		Object->Transform.Rotation = FQuat(0.0f, 0.0f, 1.0f, 0.0f);
+		Object->Transform.Location = FVector(1.0, 2.0, 3.0);
+		std::string Error;
+
+		CHECK_FALSE(Import(*Object, "Rotation", MakeNumberArray({0.0, 0.0, 0.0, 0.0}), Error));
+		CHECK(Error == "expected a rotation for FQuat but found a quaternion without a length");
+		CHECK(Object->Rotation == FQuat(0.0f, 1.0f, 0.0f, 0.0f));
+
+		// A transform with such a rotation is refused whole.
+		FJsonValue Transform = FJsonValue::MakeObject();
+		Transform.SetMember("Location", MakeNumberArray({7.0, 8.0, 9.0}));
+		Transform.SetMember("Rotation", MakeNumberArray({0.0, 0.0, 0.0, 0.0}));
+		CHECK_FALSE(Import(*Object, "Transform", Transform, Error));
+		CHECK(Object->Transform.Location == FVector(1.0, 2.0, 3.0));
+		CHECK(Object->Transform.Rotation == FQuat(0.0f, 0.0f, 1.0f, 0.0f));
 	}
 
 	TEST_CASE("A colour exports as red, green, blue and alpha, and imports what it exported")
