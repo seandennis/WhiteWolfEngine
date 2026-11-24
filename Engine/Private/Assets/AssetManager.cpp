@@ -28,7 +28,6 @@ constinit FLogCategory LogAssets("LogAssets", ELogVerbosity::Log);
 
 namespace
 {
-
 	/** What the manager remembers between calls. */
 	struct FAssetManagerState
 	{

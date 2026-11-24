@@ -73,7 +73,8 @@ void FMainToolbar::Draw(FUiFrame& Frame)
 	// As high as a row of buttons with the room of a window around it, and as wide as the main window.
 	const float Height = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f;
 	constexpr ImGuiWindowFlags Flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings;
-	if (ImGui::BeginViewportSideBar("##MainToolbar", ImGui::GetMainViewport(), ImGuiDir_Up, Height, Flags))
+	// The bar shows no title. The name is what the list of windows calls it that Ctrl+Tab goes through.
+	if (ImGui::BeginViewportSideBar("Toolbar###MainToolbar", ImGui::GetMainViewport(), ImGuiDir_Up, Height, Flags))
 	{
 		if (ImGui::Button("Save"))
 		{
