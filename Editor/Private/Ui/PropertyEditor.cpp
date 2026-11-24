@@ -1070,21 +1070,18 @@ FPropertyEditor::FValueEdit FPropertyEditor::EditReference(
 		const char* const Hint = Asset != nullptr && Path.empty() ? UnsavedAssetLabel : NoReferenceLabel;
 		const float ButtonWidth = ImGui::GetFrameHeight();
 		const float ButtonSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
-		ImGui::SetNextItemWidth(Width - ButtonWidth - ButtonSpacing);
+		// Never less than a pixel: a width below zero is no width to the library, but a distance to keep from the
+		// end of the line, and the button would then be where nobody sees it.
+		constexpr float LeastWidth = 1.0f;
+		ImGui::SetNextItemWidth(std::max(Width - ButtonWidth - ButtonSpacing, LeastWidth));
 		if (const std::optional<std::string> Typed = EditText("##Value", Path, Hint))
 		{
 			Edit.NewValue = Typed->empty() ? FJsonValue() : FJsonValue(*Typed);
 		}
 		Frame.Items.NameLastItem(ItemName);
 
-		// Beside the path, a button that opens the list of what there is to choose from.
+		// Beside the path, the button that opens the list of what there is to choose from.
 		ImGui::SameLine(0.0f, ButtonSpacing);
-		if (ImGui::ArrowButton("##Choose", ImGuiDir_Down))
-		{
-			ImGui::OpenPopup(FAssetPicker::PopupId);
-		}
-		ImGui::SetItemTooltip("%s", "Choose from the assets of the project");
-		Frame.Items.NameLastItem(std::format("{}/Choose", ItemName));
 		if (const std::optional<std::string> Chosen = AssetPicker.Draw(Frame, ReferencedClass, ItemName))
 		{
 			Edit.NewValue = Chosen->empty() ? FJsonValue() : FJsonValue(*Chosen);

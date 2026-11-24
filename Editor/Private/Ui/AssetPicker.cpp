@@ -25,7 +25,7 @@ namespace
 	/** What the line says that chooses no asset. */
 	constexpr const char* NoAssetLabel = "None";
 
-	/** What the list of a file says that holds nothing for the property. */
+	/** What the lines below a file say that holds nothing for the property. */
 	constexpr const char* NothingLabel = "Nothing of this kind";
 
 	/** How many lines the list shows before it is scrolled. */
@@ -41,16 +41,32 @@ namespace
 
 std::optional<std::string> FAssetPicker::Draw(FUiFrame& Frame, const WClass& AssetClass, const std::string& ItemName)
 {
+	// The button is that of a list without a field: an arrow. Such a list is placed anew in every frame, below
+	// its button or above it and to the side that has the room, so one that grows when a file is opened stays on
+	// the surface. It opens towards the left: the button is at the end of its row, and often at the window's edge.
 	// A list of many files is scrolled rather than as long as the window.
 	const float MaxHeight = ImGui::GetTextLineHeightWithSpacing() * ListLineCount;
 	ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, MaxHeight));
-	if (!ImGui::BeginPopup(PopupId))
+	constexpr ImGuiComboFlags Flags = ImGuiComboFlags_NoPreview | ImGuiComboFlags_PopupAlignLeft;
+	std::optional<std::string> Chosen;
+	if (ImGui::BeginCombo("##Choose", nullptr, Flags))
 	{
-		return std::nullopt;
+		Chosen = DrawLines(Frame, AssetClass, ItemName);
+		ImGui::EndCombo();
 	}
 
+	// The list is a window of its own; ending it makes the button the last item again.
+	ImGui::SetItemTooltip("%s", "Choose from the assets of the project");
+	Frame.Items.NameLastItem(std::format("{}/Choose", ItemName));
+	return Chosen;
+}
+
+std::optional<std::string> FAssetPicker::DrawLines(
+	FUiFrame& Frame, const WClass& AssetClass, const std::string& ItemName)
+{
 	// Which files there are is found out when the list opens, and not again in every frame that it is open.
-	if (ImGui::IsWindowAppearing())
+	const bool bIsOpening = ImGui::IsWindowAppearing();
+	if (bIsOpening)
 	{
 		Files.clear();
 		FilesLookedInto.clear();
@@ -100,8 +116,16 @@ std::optional<std::string> FAssetPicker::Draw(FUiFrame& Frame, const WClass& Ass
 			continue;
 		}
 
-		// A file of several assets opens a list of its own, and is looked into when that list is opened.
-		const bool bIsOpen = ImGui::BeginMenu(File.c_str());
+		// A file of several assets is a line that a click opens, and it is looked into then. It is no menu: the
+		// list of a menu opens under a mouse that only passes over its line, and a model may be large. The library
+		// remembers which lines were open by the list, and all lists of this kind are one list to it: every line
+		// is closed when the list opens, whatever was opened the last time.
+		if (bIsOpening)
+		{
+			ImGui::SetNextItemOpen(false);
+		}
+		const bool bIsOpen = ImGui::TreeNodeEx(File.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth);
+		Frame.Items.NameLastItem(std::format("{}/Assets/{}", ItemName, File));
 		if (bIsOpen)
 		{
 			const FFileAssets& Found = FindAssets(Frame.Editor, File, AssetClass);
@@ -122,13 +146,9 @@ std::optional<std::string> FAssetPicker::Draw(FUiFrame& Frame, const WClass& Ass
 			{
 				AddChoice(Path, GetKey(Path));
 			}
-			ImGui::EndMenu();
+			ImGui::TreePop();
 		}
-		// The list of the file is a window of its own; ending it makes the file's line the last item again.
-		Frame.Items.NameLastItem(std::format("{}/Assets/{}", ItemName, File));
 	}
-
-	ImGui::EndPopup();
 	return Chosen;
 }
 
