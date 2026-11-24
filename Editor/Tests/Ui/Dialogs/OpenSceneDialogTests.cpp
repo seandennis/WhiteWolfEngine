@@ -34,6 +34,23 @@ namespace
 		REQUIRE(Test.Editor.ExecuteCommand("Scene.New", FJsonValue()).HasSucceeded());
 		Test.DrawFrame();
 	}
+
+	/** Returns how many pixels of an item are as light as letters are: how much is written on it. */
+	int32 CountInk(const FEditorUiTest& Test, const std::string& ItemName)
+	{
+		constexpr uint8 LeastInk = 150;
+		const FUiRectangle Row = Test.RequireItem(ItemName);
+		const FImage Picture = Test.ReadPicture();
+		int32 Count = 0;
+		for (int32 Y = static_cast<int32>(Row.Top); Y < static_cast<int32>(Row.Bottom); ++Y)
+		{
+			for (int32 X = static_cast<int32>(Row.Left); X < static_cast<int32>(Row.Right); ++X)
+			{
+				Count += Picture.GetPixel(X, Y).R > LeastInk ? 1 : 0;
+			}
+		}
+		return Count;
+	}
 }
 
 TEST_SUITE("FOpenSceneDialog")
@@ -83,24 +100,38 @@ TEST_SUITE("FOpenSceneDialog")
 
 		// The longer name is written with more ink than the shorter one, which it would not be if it ended
 		// after "Level".
-		const auto CountInk = [&Test](const char* ItemName)
-		{
-			const FUiRectangle Row = Test.RequireItem(ItemName);
-			const FImage Picture = Test.ReadPicture();
-			int32 Count = 0;
-			for (int32 Y = static_cast<int32>(Row.Top); Y < static_cast<int32>(Row.Bottom); ++Y)
-			{
-				for (int32 X = static_cast<int32>(Row.Left); X < static_cast<int32>(Row.Right); ++X)
-				{
-					Count += Picture.GetPixel(X, Y).R > 150 ? 1 : 0;
-				}
-			}
-			return Count;
-		};
-		CHECK(CountInk("OpenScene/Level##One.wwscene") > CountInk("OpenScene/Level.wwscene"));
+		CHECK(CountInk(Test, "OpenScene/Level##One.wwscene") > CountInk(Test, "OpenScene/Level.wwscene"));
 
 		// And it is the scene that a click on it chooses.
 		Test.Click("OpenScene/Level##One.wwscene");
+		Test.Click("OpenScene/Open");
+		CHECK(Test.Editor.GetScene().FindEntityByName("Dragon") != nullptr);
+	}
+
+	TEST_CASE("A scene whose path is longer than the list is shown by its end")
+	{
+		FEditorUiTest Test;
+		const FScopedTempDirectory Directory;
+		CreateTestProject(Test.Editor, Directory.GetPath());
+		// Two scenes of one folder whose path alone is longer than the list is wide. What tells them apart is
+		// their ends, one of wide letters and one of narrow ones.
+		const std::string Folder =
+			"Scenes/Chapters/TheLongWayRound/PartOne/Interiors/TheCellarsBelowTheOldTown/NorthWing/LowerLevel/";
+		const std::string Wide = Folder + "MMMMMMMM.wwscene";
+		const std::string Narrow = Folder + "iiiiiiii.wwscene";
+		SaveSceneWithEntity(Test, Wide, "Mayor");
+		SaveSceneWithEntity(Test, Narrow, "Dragon");
+
+		Test.PressKey(EKey::O, {EKey::LeftControl});
+		REQUIRE(Test.HasItem("OpenScene/" + Wide));
+		REQUIRE(Test.HasItem("OpenScene/" + Narrow));
+
+		// Shown from their beginnings, the two rows would be the same picture. Shown from their ends, the one
+		// that ends in wide letters is written with more ink.
+		CHECK(CountInk(Test, "OpenScene/" + Wide) > CountInk(Test, "OpenScene/" + Narrow));
+
+		// The row is still the scene that a click on it chooses.
+		Test.Click("OpenScene/" + Narrow);
 		Test.Click("OpenScene/Open");
 		CHECK(Test.Editor.GetScene().FindEntityByName("Dragon") != nullptr);
 	}

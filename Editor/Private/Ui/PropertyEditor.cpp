@@ -21,6 +21,7 @@
 #include "Ui/UiFrame.h"
 #include "Ui/UiIcons.h"
 #include "Ui/UiItems.h"
+#include "Ui/UiNames.h"
 #include "Ui/UiText.h"
 #include "Ui/UiTheme.h"
 
@@ -1112,10 +1113,15 @@ FPropertyEditor::FValueEdit FPropertyEditor::EditReference(
 	}
 	const auto CurrentChoice = std::ranges::find(
 		Choices, CurrentId, [](const FReferenceChoice& Choice) { return std::optional<int64>(Choice.Id); });
-	const char* const Preview = CurrentChoice != Choices.end() ? CurrentChoice->Label.c_str() : NoReferenceLabel;
+	// Both of one type: of a name and a text between quotes, the two would become a name that is gone by the next
+	// line.
+	const std::string_view Preview =
+		CurrentChoice != Choices.end() ? std::string_view(CurrentChoice->Label) : std::string_view(NoReferenceLabel);
 
+	// The names of entities are theirs and not the list's: neither the field nor a line has one as its own text,
+	// which would end at the first "##" in it. They are written by FUiNames, whole.
 	ImGui::SetNextItemWidth(Width);
-	if (ImGui::BeginCombo("##Value", Preview))
+	if (ImGui::BeginCombo("##Value", nullptr))
 	{
 		if (ImGui::Selectable(NoReferenceLabel, !CurrentId.has_value()))
 		{
@@ -1127,16 +1133,17 @@ FPropertyEditor::FValueEdit FPropertyEditor::EditReference(
 		{
 			// Told apart by identifier, so that two entities may have the same name.
 			ImGui::PushID(reinterpret_cast<const void*>(static_cast<std::intptr_t>(Choice.Id)));
-			if (ImGui::Selectable(Choice.Label.c_str(), Choice.Id == CurrentId))
+			const std::string LineName = std::format("{}/{}", ItemName, Choice.Id);
+			if (FUiNames::Selectable(Frame, LineName, Choice.Label, Choice.Id == CurrentId))
 			{
 				Edit.NewValue = FJsonValue(Choice.Id);
 			}
-			Frame.Items.NameLastItem(std::format("{}/{}", ItemName, Choice.Id));
 			ImGui::PopID();
 		}
 		ImGui::EndCombo();
 	}
 	// The list is a window of its own; ending it makes the field the last item again.
 	Frame.Items.NameLastItem(ItemName);
+	FUiNames::WriteInField(Preview);
 	return Edit;
 }

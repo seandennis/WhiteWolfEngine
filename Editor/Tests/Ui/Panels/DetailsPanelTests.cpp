@@ -67,6 +67,18 @@ namespace
 		return Pixels;
 	}
 
+	/** Returns how many pixels of an item are as light as letters are: how much is written on it. */
+	int32 CountInk(const FEditorUiTest& Test, const std::string& ItemName)
+	{
+		constexpr uint8 LeastInk = 150;
+		int32 Count = 0;
+		for (const FColor& Pixel : ReadItem(Test, ItemName))
+		{
+			Count += Pixel.R > LeastInk ? 1 : 0;
+		}
+		return Count;
+	}
+
 	/** Creates an entity in the editor's scene, selects it and shows it in the panel. */
 	int64 AddSelectedEntity(FEditorUiTest& Test, const char* Name)
 	{
@@ -548,6 +560,36 @@ TEST_SUITE("FDetailsPanel")
 		CHECK(GetGadget(Test, Ids).Partner != nullptr);
 	}
 
+	TEST_CASE("The name of an entity is written whole in the list of a reference and in its field")
+	{
+		FEditorUiTest Test(SurfaceWidth, SurfaceHeight);
+		WScene& Scene = Test.Editor.GetScene();
+		// Two number signs end the text of a row for the library that lays the list out, and are no more than two
+		// letters of a name.
+		const int64 Lamp = Scene.CreateEntity("Lamp")->GetId();
+		const int64 LampTwo = Scene.CreateEntity("Lamp##Two")->GetId();
+		const FGadgetIds Ids = AddSelectedGadget(Test);
+		const std::string Field = Row(Ids.Component, "Watched");
+		const std::string ShortRow = Row(Ids.Component, std::format("Watched/{}", Lamp));
+		const std::string LongRow = Row(Ids.Component, std::format("Watched/{}", LampTwo));
+
+		Test.Click(Field);
+		REQUIRE(Test.HasItem(ShortRow));
+		REQUIRE(Test.HasItem(LongRow));
+		// The longer name is written with more ink than the shorter one, which it would not be if it ended after
+		// "Lamp".
+		CHECK(CountInk(Test, LongRow) > CountInk(Test, ShortRow));
+
+		// And so it is in the field, once it is chosen.
+		Test.Click(ShortRow);
+		REQUIRE(GetGadget(Test, Ids).Watched.Get() == &GetEntity(Test, Lamp));
+		const int32 ShortInk = CountInk(Test, Field);
+		Test.Click(Field);
+		Test.Click(LongRow);
+		REQUIRE(GetGadget(Test, Ids).Watched.Get() == &GetEntity(Test, LampTwo));
+		CHECK(CountInk(Test, Field) > ShortInk);
+	}
+
 	TEST_CASE("A reference to an asset is the path that is typed, and an empty field is none")
 	{
 		FEditorUiTest Test(SurfaceWidth, SurfaceHeight);
@@ -816,6 +858,48 @@ TEST_SUITE("FDetailsPanel")
 
 		CHECK(GetEntity(Test, CrateId).GetComponents().empty());
 		CHECK(GetLastStepName(Test) == "Remove Plugin Rigid Body Component");
+	}
+
+	TEST_CASE("The heading of a component whose class is missing says all of what the file calls the class")
+	{
+		FEditorUiTest Test;
+		{
+			// A scene with two components of classes that no build has. The name of the second has in it what
+			// the library that lays the panel out takes for the end of a text.
+			WScene* const Original = NewObject<WScene>();
+			WEntity* const Entity = Original->CreateEntity("Crate");
+			REQUIRE(Entity->AddComponent<WEditorTestComponent>() != nullptr);
+			REQUIRE(Entity->AddComponent<WEditorTestComponent>() != nullptr);
+			std::string Text = FSceneSerializer::SaveToText(*Original);
+			Original->Destroy();
+			const std::string KnownClass = "WEditorTestComponent";
+			const std::size_t First = Text.find(KnownClass);
+			REQUIRE(First != std::string::npos);
+			Text.replace(First, KnownClass.size(), "WGone");
+			const std::size_t Second = Text.find(KnownClass);
+			REQUIRE(Second != std::string::npos);
+			Text.replace(Second, KnownClass.size(), "WGone##AndMuchMoreThanThat");
+
+			std::string Error;
+			WScene* const Loaded = FSceneSerializer::LoadFromText(Text, Error);
+			REQUIRE(Loaded != nullptr);
+			Test.Editor.SetScene(*Loaded, std::filesystem::path());
+		}
+		const WEntity* const Crate = Test.Editor.GetScene().FindEntityByName("Crate");
+		REQUIRE(Crate != nullptr);
+		REQUIRE(Crate->GetComponents().size() == 2);
+		const int64 ShortId = Crate->GetComponents()[0]->GetId();
+		const int64 LongId = Crate->GetComponents()[1]->GetId();
+		Test.Editor.SetSelection({Crate->GetId()});
+		Test.DrawFrames(3);
+
+		// The longer name is written with more ink, which it would not be if it ended after the first word.
+		CHECK(CountInk(Test, std::format("Details/{}", LongId)) > CountInk(Test, std::format("Details/{}", ShortId)));
+
+		// The heading still closes and opens what is below it, and still has its menu.
+		Test.Click(std::format("Details/{}/Menu", LongId));
+		Test.Click("Details/Menu/Remove Component");
+		CHECK(GetEntity(Test, Crate->GetId()).GetComponents().size() == 1);
 	}
 
 	TEST_CASE("The step that a dragged number began ends when the number is no longer shown")

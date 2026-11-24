@@ -61,7 +61,9 @@ void FOpenSceneDialog::Draw(FUiFrame& Frame)
 				const std::string& Scene = Scenes[Index];
 				constexpr ImGuiSelectableFlags Flags =
 					ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_NoAutoClosePopups;
+				// A path that is longer than the list is wide is shown by its end, which says which file it is.
 				const ImVec2 TextCorner = ImGui::GetCursorScreenPos();
+				const std::string ShownScene = FUiDialog::FitPath(Scene, ImGui::GetContentRegionAvail().x);
 				ImGui::PushID(static_cast<int>(Index));
 				if (ImGui::Selectable("##Scene", Scene == PathText, Flags))
 				{
@@ -70,7 +72,7 @@ void FOpenSceneDialog::Draw(FUiFrame& Frame)
 				}
 				ImGui::PopID();
 				Frame.Items.NameLastItem(std::format("OpenScene/{}", Scene));
-				ImGui::GetWindowDrawList()->AddText(TextCorner, ImGui::GetColorU32(ImGuiCol_Text), Scene.c_str());
+				ImGui::GetWindowDrawList()->AddText(TextCorner, ImGui::GetColorU32(ImGuiCol_Text), ShownScene.c_str());
 			}
 		}
 		ImGui::EndChild();

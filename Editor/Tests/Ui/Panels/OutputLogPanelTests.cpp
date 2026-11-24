@@ -1,5 +1,7 @@
 #include "Assets/TestAssets.h"
 #include "Logging/Log.h"
+#include "Logging/LogCategory.h"
+#include "Logging/LogVerbosity.h"
 #include "Logging/MemoryLogSink.h"
 #include "Math/Color.h"
 #include "Rendering/Image.h"
@@ -101,6 +103,18 @@ namespace
 	{
 		return Pixel.R > 200 && Pixel.G > 160 && Pixel.B < 110;
 	}
+
+	/** As light as letters are: what is written, on a ground that is dark. */
+	bool IsInk(FColor Pixel)
+	{
+		return Pixel.R > 150;
+	}
+
+	// Categories as a module might name them: an ordinary name, one with what the library that lays the list out
+	// takes for the end of a text, and one of no letters.
+	constinit FLogCategory LogGame("Game", ELogVerbosity::Log);
+	constinit FLogCategory LogGameNet("Game##Net", ELogVerbosity::Log);
+	constinit FLogCategory LogNameless("", ELogVerbosity::Log);
 }
 
 TEST_SUITE("FOutputLogPanel")
@@ -263,6 +277,34 @@ TEST_SUITE("FOutputLogPanel")
 		Test.Click("OutputLog/Category");
 		REQUIRE(Test.HasItem("OutputLog/Category/LogEditor"));
 		CHECK_FALSE(Test.HasItem("OutputLog/Category/LogCore"));
+	}
+
+	TEST_CASE("A category is offered by its whole name, whatever is in the name")
+	{
+		FLogTest Test;
+		WW_LOG(LogGame, Log, "From a category with a short name");
+		WW_LOG(LogGameNet, Log, "From a category with two number signs in its name");
+		WW_LOG(LogNameless, Log, "From a category without a name");
+		Test.DrawFrames(2);
+		REQUIRE(CountLines(Test) == 3);
+
+		// Laying the open list out fails no check of the library, which a line without a text of its own would.
+		Test.Click("OutputLog/Category");
+		REQUIRE(Test.HasItem("OutputLog/Category/Game"));
+		REQUIRE(Test.HasItem("OutputLog/Category/Game##Net"));
+		// The longer name is written with more ink than the shorter one, which it would not be if it ended after
+		// "Game".
+		CHECK(CountPixels(Test, "OutputLog/Category/Game##Net", IsInk) >
+			CountPixels(Test, "OutputLog/Category/Game", IsInk));
+
+		// It chooses the messages of its category, and the field then says the whole name too.
+		Test.Click("OutputLog/Category/Game##Net");
+		CHECK(CountLines(Test) == 1);
+		const int32 LongInk = CountPixels(Test, "OutputLog/Category", IsInk);
+		Choose(Test, "Category", "Game");
+		CHECK(CountLines(Test) == 1);
+		CHECK(LongInk > CountPixels(Test, "OutputLog/Category", IsInk));
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
 	}
 
 	TEST_CASE("The field shows the messages that have what is typed into it")

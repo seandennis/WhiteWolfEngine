@@ -8,6 +8,7 @@
 #include "Ui/Panels/UiPanel.h"
 #include "Ui/UiFrame.h"
 #include "Ui/UiItems.h"
+#include "Ui/UiNames.h"
 #include "Ui/UiTheme.h"
 #include "Ui/UiWorkspace.h"
 
@@ -179,7 +180,10 @@ void FOutputLogPanel::DrawFilter(FUiFrame& Frame)
 	}
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(GetListWidth(WidestCategory));
-	if (ImGui::BeginCombo("##Category", Filter.Category.empty() ? AnyCategoryLabel : Filter.Category.c_str()))
+	// The name of a category is a module's to give, and is neither the field's own text nor a line's: one with
+	// "##" in it would be shown cut off, and one of no letters fails a check of the library.
+	const std::string ShownCategory = Filter.Category.empty() ? std::string(AnyCategoryLabel) : Filter.Category;
+	if (ImGui::BeginCombo("##Category", nullptr))
 	{
 		if (ImGui::Selectable(AnyCategoryLabel, Filter.Category.empty()))
 		{
@@ -187,17 +191,21 @@ void FOutputLogPanel::DrawFilter(FUiFrame& Frame)
 		}
 		Frame.Items.NameLastItem(std::format("OutputLog/Category/{}", AnyCategoryLabel));
 
-		for (const std::string& Category : Categories)
+		for (std::size_t Index = 0; Index < Categories.size(); ++Index)
 		{
-			if (ImGui::Selectable(Category.c_str(), Category == Filter.Category))
+			const std::string& Category = Categories[Index];
+			ImGui::PushID(static_cast<int>(Index));
+			const std::string LineName = std::format("OutputLog/Category/{}", Category);
+			if (FUiNames::Selectable(Frame, LineName, Category, Category == Filter.Category))
 			{
 				Filter.Category = Category;
 			}
-			Frame.Items.NameLastItem(std::format("OutputLog/Category/{}", Category));
+			ImGui::PopID();
 		}
 		ImGui::EndCombo();
 	}
 	Frame.Items.NameLastItem("OutputLog/Category");
+	FUiNames::WriteInField(ShownCategory);
 
 	// What it has to say.
 	ImGui::SameLine();

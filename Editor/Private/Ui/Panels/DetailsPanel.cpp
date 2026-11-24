@@ -16,6 +16,7 @@
 #include "Ui/UiCommands.h"
 #include "Ui/UiFrame.h"
 #include "Ui/UiItems.h"
+#include "Ui/UiNames.h"
 #include "Ui/UiText.h"
 #include "Ui/UiTheme.h"
 #include "Ui/UiWorkspace.h"
@@ -335,8 +336,9 @@ bool FDetailsPanel::DrawComponentHeading(FUiFrame& Frame, const WComponent& Comp
 	// The heading lets what lies on it be clicked: the button at its end.
 	const float HeadingRight = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
 	FUiTheme::PushHeadingColors();
-	const bool bIsOpen =
-		ImGui::CollapsingHeader(Label.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+	// What the heading says is the name of a class, which for a component whose class is missing is whatever the
+	// scene file calls it: it is written by FUiNames, and is not the heading's own text.
+	const bool bIsOpen = FUiNames::Heading(Label);
 	FUiTheme::PopHeadingColors();
 	const float HeadingTop = ImGui::GetItemRectMin().y;
 	Frame.Items.NameLastItem(std::format("Details/{}", ComponentId));
