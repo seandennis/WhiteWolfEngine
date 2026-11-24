@@ -312,6 +312,28 @@ TEST_SUITE("FDetailsPanel")
 		CHECK_FALSE(std::signbit(Y));
 	}
 
+	TEST_CASE("A number that is typed is taken as it was typed, with more digits than a dragged one is given")
+	{
+		FEditorUiTest Test;
+		const int64 Player = AddSelectedEntity(Test, "Player");
+		const std::string Field = Row(Player, "RelativeTransform/Location/Y");
+
+		// A dragged number is rounded to six digits after the point, which is finer than any drag. A typed one is
+		// what was typed, to the last digit that the number can hold.
+		TypeNumber(Test, Field, "0.123456789");
+		CHECK(GetEntity(Test, Player).GetRelativeTransform().Location.y == 0.123456789);
+
+		// Closer to zero than those six digits can say, it is still not zero.
+		TypeNumber(Test, Field, "0.0000004");
+		CHECK(GetEntity(Test, Player).GetRelativeTransform().Location.y == 0.0000004);
+
+		// A drag from there is rounded as a drag is.
+		Test.DragBy(Field, FVector2D(40.0, 0.0));
+		const double Dragged = GetEntity(Test, Player).GetRelativeTransform().Location.y;
+		CHECK(Dragged > 0.001);
+		CHECK(Dragged == doctest::Approx(std::round(Dragged * 1.0e6) / 1.0e6).epsilon(1.0e-12));
+	}
+
 	TEST_CASE("The arrow beside a part of the transform puts that part back, and is there only if it is changed")
 	{
 		FEditorUiTest Test;

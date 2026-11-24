@@ -234,6 +234,10 @@ namespace
 		const bool bShowsZero = !bIsBeingChanged && ReadsAsZero(static_cast<double>(Number), MaxDecimals);
 		NumberType NewNumber = bShowsZero ? NumberType(0) : Number;
 
+		// Whether the number is being typed has to be asked before it is laid out: the frame in which a typed
+		// number is handed over is the one in which its text field goes away again.
+		const bool bIsBeingTyped = ImGui::TempInputIsActive(ImGui::GetID(Id));
+
 		// The library would round a dragged number to the digits that are shown, which here are as few as the
 		// number needs. It is rounded below instead, to more digits than that.
 		const bool bChanged = ImGui::DragScalar(Id,
@@ -250,8 +254,7 @@ namespace
 		}
 
 		// A number that was typed is taken as it was typed.
-		const bool bWasTyped = ImGui::TempInputIsActive(ImGui::GetItemID());
-		if (!bWasTyped)
+		if (!bIsBeingTyped)
 		{
 			const double Scale = std::pow(10.0, DraggedNumberDecimals);
 			NewNumber = static_cast<NumberType>(std::round(static_cast<double>(NewNumber) * Scale) / Scale);
