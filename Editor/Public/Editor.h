@@ -67,7 +67,10 @@ public:
 	/** Creates an editor with an empty scene and the editor's own commands. */
 	EDITOR_API FEditor();
 
-	/** Destroys the editor's scene. */
+	/**
+	 * Gives up the assets that the editor keeps, as SetProject does, destroys the editor's scene, and gives up the
+	 * content directory of its project.
+	 */
 	EDITOR_API ~FEditor();
 
 	FEditor(const FEditor&) = delete;
@@ -240,10 +243,12 @@ public:
 	}
 
 	/**
-	 * Makes a project the one being worked on. Its content directory becomes the directory that asset paths are
-	 * relative to (FAssetManager), and the scene is replaced by an empty one, with a history that starts anew. The
-	 * editor gives the content directory up again when it is destroyed. The project becomes the first of the
-	 * projects that the settings remember as opened last.
+	 * Makes a project the one being worked on. It first gives up the assets that the editor keeps (FEditedAssets):
+	 * changes to them that were not saved are lost, each asset put back to what its file says, with one warning in
+	 * the log that names them. Its content directory then becomes the directory that asset paths are relative to
+	 * (FAssetManager), and the scene is replaced by an empty one, with a history that starts anew. The editor gives
+	 * the content directory up again when it is destroyed. The project becomes the first of the projects that the
+	 * settings remember as opened last.
 	 */
 	EDITOR_API void SetProject(FProject NewProject);
 

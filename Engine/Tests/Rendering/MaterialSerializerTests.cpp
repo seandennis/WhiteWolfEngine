@@ -257,16 +257,45 @@ TEST_SUITE("FMaterialSerializer")
 		CHECK(FMaterialSerializer::SaveToText(*Material) == Before);
 	}
 
-	TEST_CASE("Loading logs nothing: what was wrong is returned to whoever knows where the document comes from")
+	TEST_CASE("What was wrong with a document is returned, not logged, and its textures are loaded as any file is")
 	{
 		const FScopedObjectTest ObjectTest;
 		const FScopedContentDirectory Content;
+		Content.WritePicture("Textures/Wood.png");
 		const FScopedLogCapture Capture;
 		WMaterial* const Material = NewObject<WMaterial>();
 
-		CHECK(Load(MakeDocument(R"({"Colour": 1, "BaseColorTexture": "Textures/Gone.png"})"), *Material).size() == 2);
+		const std::string Properties = R"({"Colour": 1, "BaseColorTexture": "Textures/Wood.png", )"
+									   R"("NormalTexture": "Textures/Gone.png"})";
 
-		CHECK(Capture.GetMessages().empty());
+		const std::vector<std::string> Warnings = Load(MakeDocument(Properties), *Material);
+
+		CHECK(Warnings.size() == 2);
+		// The one line is the asset manager's, of the picture that the document names and that was loaded.
+		REQUIRE(Capture.GetMessages().size() == 1);
+		CHECK(Capture.GetMessages()[0].Verbosity == ELogVerbosity::Log);
+		CHECK(Capture.GetMessages()[0].Text == "Loaded 'Textures/Wood.png': 0 assets, 0 warnings");
+	}
+
+	TEST_CASE("The warning about a texture that cannot be written names a material that has an asset path by it")
+	{
+		const FScopedObjectTest ObjectTest;
+		const FScopedContentDirectory Content;
+		Content.WriteMaterial("Materials/Red.wwmaterial");
+		std::string Error;
+		WMaterial* const Material = FAssetManager::Load<WMaterial>("Materials/Red.wwmaterial", Error);
+		REQUIRE(Material != nullptr);
+		Material->BaseColorTexture = NewObject<WTexture>();
+		const FScopedLogCapture Capture;
+
+		const FJsonValue Document = FMaterialSerializer::SaveToJson(*Material);
+
+		CHECK(Document.FindMember("Properties")->FindMember("BaseColorTexture")->IsNull());
+		REQUIRE(CountMessages(Capture, ELogVerbosity::Warning) == 1);
+		CHECK(Capture.GetMessages().back().Text ==
+			"Saving the material 'Materials/Red.wwmaterial': property BaseColorTexture refers to a WTexture that has "
+			"no "
+			"asset path; the reference is saved as null");
 	}
 
 	TEST_CASE("A document that is not a material of this build is refused, and the material is left as it was")

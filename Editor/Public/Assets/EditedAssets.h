@@ -40,9 +40,10 @@ struct FAssetPath;
 class FEditedAssets
 {
 public:
+	/** Creates a set that keeps no asset. */
 	EDITOR_API FEditedAssets();
 
-	/** Takes the assets that are kept out of the root set. */
+	/** Gives up the assets that are kept, as ReleaseAll does. */
 	EDITOR_API ~FEditedAssets();
 
 	FEditedAssets(const FEditedAssets&) = delete;
@@ -76,7 +77,8 @@ public:
 	 * Writes an asset to its file if it has changes that are not saved, or if its file is not there. An asset that
 	 * the editor does not keep is what its file says, and is written only if the file is gone.
 	 *
-	 * @param Asset An asset that the editor can change (CanChange). Anything else is a fatal error.
+	 * @param Asset An asset that the editor can change (CanChange), and the object that the editor keeps for its path
+	 * if it keeps one. Anything else is a fatal error.
 	 * @param bOutWritten Receives whether the file was written.
 	 * @param OutError Receives the reason if the file could not be written; the asset then stays as unsaved as it was.
 	 * @return False if the file had to be written and could not be.

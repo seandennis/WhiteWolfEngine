@@ -5,18 +5,15 @@
 #include "Assets/AssetPath.h"
 #include "Assets/TestAssets.h"
 #include "Assets/TestEditedAssets.h"
+#include "Core/FileHelper.h"
 #include "Editor.h"
 #include "Json/JsonValue.h"
 #include "Logging/LogMessage.h"
 #include "Logging/LogVerbosity.h"
-#include "Object/Class.h"
 #include "Object/ObjectGlobals.h"
 #include "Object/WeakObjectPtr.h"
-#include "Rendering/EnvironmentMap.h"
 #include "Rendering/Material.h"
 #include "Rendering/MaterialSerializer.h"
-#include "Rendering/StaticMesh.h"
-#include "Rendering/Texture.h"
 #include "TestEditorObjects.h"
 #include "TestSupport/FatalErrorException.h"
 #include "TestSupport/ScopedLogCapture.h"
@@ -285,6 +282,34 @@ TEST_SUITE("FEditedAssets")
 		CHECK_THROWS_AS(
 			Assets.SetProperty(Material, FindMaterialProperty("Package"), FJsonValue(), Error), FFatalErrorException);
 		CHECK_FALSE(Assets.IsKept(RedPath));
+	}
+
+	TEST_CASE("Changing or saving another object of the path of a kept asset is a mistake in the code")
+	{
+		const FScopedContentDirectory Content;
+		Content.WriteMaterial(std::string(RedPath));
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		WMaterial& Kept = LoadTestMaterial(RedPath);
+		ChangeMaterial(Editor, Kept, "Metallic", "1.0");
+		const std::string FileText = ReadContentFile(Content, RedPath);
+		// The asset manager that forgets what it has loaded reads the file anew, as another object.
+		FAssetManager::SetContentDirectory(Content.GetPath());
+		WMaterial& Other = LoadTestMaterial(RedPath);
+		REQUIRE(&Other != &Kept);
+		const FScopedLogCapture Capture;
+		std::string Error;
+		bool bWritten = false;
+
+		CHECK_THROWS_AS(
+			Editor.GetEditedAssets().SetProperty(Other, FindMaterialProperty("Roughness"), FJsonValue(0.0), Error),
+			FFatalErrorException);
+		CHECK_THROWS_AS(Editor.GetEditedAssets().Save(Other, bWritten, Error), FFatalErrorException);
+
+		CHECK(Kept.Metallic == 1.0f);
+		CHECK(Kept.Roughness == 0.5f);
+		CHECK(Other.Roughness == 0.5f);
+		CHECK(ReadContentFile(Content, RedPath) == FileText);
 	}
 
 	TEST_CASE("An asset that the editor keeps and something else destroyed is a mistake in the code")

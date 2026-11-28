@@ -67,7 +67,9 @@ void FEditCommands::Register(FCommandRegistry& Registry)
 		{"Edit.Undo",
 			"Undoes the last change to the scene or to a material: puts both back as they were before the last "
 			"command that changed one of them. Returns the name of that command. Entities and components keep their "
-			"identifiers. No file is written: a material that is put back differs from its file until Asset.Save.",
+			"identifiers. No file is written: a material is put back in memory, and is unsaved while it then differs "
+			"from "
+			"its file, as Asset.GetProperties says (\"Unsaved\"); Asset.Save writes it.",
 			{}},
 		Undo);
 

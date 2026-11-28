@@ -74,8 +74,9 @@ public:
 
 	/**
 	 * Gives a material the values of a material document. The whole document is checked before the material is
-	 * changed, so a document that is refused leaves the material as it was. Nothing is logged: whoever knows where
-	 * the document comes from says what was wrong with it.
+	 * changed, so a document that is refused leaves the material as it was. What was wrong with the document is not
+	 * logged but returned, for whoever knows where the document comes from to say it; loading the files that the
+	 * document names, its textures, is logged by the asset manager, as every load is.
 	 *
 	 * @param OutError Receives the reason if the document is refused.
 	 * @param OutWarnings A sentence is added for each problem that did not stop the load.
