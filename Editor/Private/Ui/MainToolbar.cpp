@@ -78,9 +78,9 @@ void FMainToolbar::Draw(FUiFrame& Frame)
 	{
 		if (ImGui::Button("Save"))
 		{
-			Frame.Requests.bSaveScene = true;
+			Frame.Requests.bSave = true;
 		}
-		ImGui::SetItemTooltip("Save the scene (Ctrl+S)");
+		ImGui::SetItemTooltip("Save the scene and the materials that were changed (Ctrl+S)");
 		Frame.Items.NameLastItem("Toolbar/Save");
 
 		ImGui::SameLine();

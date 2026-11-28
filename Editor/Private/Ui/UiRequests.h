@@ -14,10 +14,11 @@ struct FUiRequests
 	std::optional<int64> EntityToRename;
 
 	/**
-	 * True if the scene is to be saved, as the Save button of the toolbar asks: to its file, or, if it has none
-	 * yet, to one that the user is then asked for. The menu bar, which has the windows that ask, does it.
+	 * True if what was changed is to be saved, as the Save button of the toolbar asks: the materials that were
+	 * changed, and then the scene, to its file or, if it has none yet, to one that the user is then asked for. The
+	 * menu bar, which has the windows that ask, does it.
 	 */
-	bool bSaveScene = false;
+	bool bSave = false;
 
 	/**
 	 * True if the user is to be asked which project to work on, as the editor asks when it starts. The menu bar

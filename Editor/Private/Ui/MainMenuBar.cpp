@@ -1,5 +1,6 @@
 #include "Ui/MainMenuBar.h"
 
+#include "Assets/EditedAssets.h"
 #include "Commands/CommandResult.h"
 #include "Core/EngineVersion.h"
 #include "Editor.h"
@@ -14,6 +15,7 @@
 
 #include <format>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -167,9 +169,9 @@ void FMainMenuBar::Draw(FUiFrame& Frame)
 				SaveSceneDialog.Open(Frame.Editor);
 			}
 			// What another part of the user interface asked for, such as the toolbar's button, is done here too.
-			if (IsShortcutPressed(ImGuiMod_Ctrl | ImGuiKey_S) || Frame.Requests.bSaveScene)
+			if (IsShortcutPressed(ImGuiMod_Ctrl | ImGuiKey_S) || Frame.Requests.bSave)
 			{
-				SaveScene(Frame);
+				Save(Frame);
 			}
 			if (IsShortcutPressed(ImGuiMod_Ctrl | ImGuiKey_Z))
 			{
@@ -213,16 +215,44 @@ void FMainMenuBar::Draw(FUiFrame& Frame)
 		ImGui::EndMainMenuBar();
 	}
 	// A request that came while a window had to be answered is dropped with it, not kept for later.
-	Frame.Requests.bSaveScene = false;
+	Frame.Requests.bSave = false;
 	Frame.Requests.bOpenProject = false;
 	Frame.Requests.bNewProject = false;
 
 	DrawAboutWindow(Frame);
 	OpenProjectDialog.Draw(Frame);
 	NewProjectDialog.Draw(Frame);
+	// The scene is saved once the user has read what could not be: one window to answer at a time, and a material
+	// that cannot be written does not keep the scene from being saved.
+	if (NotSavedDialog.Draw(Frame))
+	{
+		SaveScene(Frame);
+	}
 	SaveSceneDialog.Draw(Frame);
 	OpenSceneDialog.Draw(Frame);
 	NewMaterialDialog.Draw(Frame);
+}
+
+void FMainMenuBar::Save(FUiFrame& Frame)
+{
+	// The materials first, and the scene that may refer to them after them.
+	std::vector<std::string> Problems;
+	for (const std::string& AssetPath : Frame.Editor.GetEditedAssets().GetUnsaved())
+	{
+		const FCommandResult Result = FUiCommands::SaveAsset(Frame.Editor, AssetPath);
+		if (!Result.HasSucceeded())
+		{
+			Problems.push_back(Result.GetError());
+		}
+	}
+
+	// What could not be written must not look saved: the user is told at once, and the scene is saved after that.
+	if (!Problems.empty())
+	{
+		NotSavedDialog.Open(std::move(Problems));
+		return;
+	}
+	SaveScene(Frame);
 }
 
 void FMainMenuBar::SaveScene(FUiFrame& Frame)
@@ -266,9 +296,9 @@ void FMainMenuBar::DrawFileMenu(FUiFrame& Frame)
 		OpenSceneDialog.Open(Frame.Editor);
 	}
 	ImGui::Separator();
-	if (MenuEntry(Frame, "File", "Save Scene", "Ctrl+S"))
+	if (MenuEntry(Frame, "File", "Save", "Ctrl+S"))
 	{
-		SaveScene(Frame);
+		Save(Frame);
 	}
 	if (MenuEntry(Frame, "File", "Save Scene As...", "Ctrl+Shift+S"))
 	{

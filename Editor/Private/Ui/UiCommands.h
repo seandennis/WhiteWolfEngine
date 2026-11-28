@@ -55,6 +55,12 @@ public:
 	 */
 	static FCommandResult CreateMaterial(FEditor& Editor, const std::string& Path);
 
+	/**
+	 * Asset.Save: writes a material whose changes are not saved to its file. The result says why if it was not
+	 * written, which the user has to be told and not only the log.
+	 */
+	static FCommandResult SaveAsset(FEditor& Editor, const std::string& AssetPath);
+
 	/** Scene.Open: replaces the scene being edited with the one in a file. */
 	static FCommandResult OpenScene(FEditor& Editor, const std::string& Path);
 

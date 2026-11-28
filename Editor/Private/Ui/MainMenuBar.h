@@ -4,6 +4,7 @@
 
 #include "Ui/Dialogs/NewMaterialDialog.h"
 #include "Ui/Dialogs/NewProjectDialog.h"
+#include "Ui/Dialogs/NotSavedDialog.h"
 #include "Ui/Dialogs/OpenProjectDialog.h"
 #include "Ui/Dialogs/OpenSceneDialog.h"
 #include "Ui/Dialogs/SaveSceneDialog.h"
@@ -28,6 +29,13 @@ private:
 	void DrawAboutWindow(FUiFrame& Frame);
 
 	/**
+	 * Saves what was changed: each material whose changes are not saved, and then the scene (SaveScene). If a
+	 * material cannot be written, the user is told which and why, and the scene is saved when the window that says
+	 * so is closed.
+	 */
+	void Save(FUiFrame& Frame);
+
+	/**
 	 * Saves the scene to its file. A scene that has no file yet, or that could not be saved to its file, has the
 	 * user asked where to save it.
 	 */
@@ -41,4 +49,5 @@ private:
 	FSaveSceneDialog SaveSceneDialog;
 	FOpenSceneDialog OpenSceneDialog;
 	FNewMaterialDialog NewMaterialDialog;
+	FNotSavedDialog NotSavedDialog;
 };

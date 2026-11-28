@@ -220,7 +220,7 @@ TEST_SUITE("FSaveSceneDialog")
 
 		AddEntity(Test, "Knight");
 		Test.Click("Menu/File");
-		Test.Click("Menu/File/Save Scene");
+		Test.Click("Menu/File/Save");
 		CHECK(ReadFile(Content / "Town.wwscene").find("\"Knight\"") != std::string::npos);
 
 		Test.Click("Menu/File");
