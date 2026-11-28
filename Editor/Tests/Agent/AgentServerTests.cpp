@@ -1,10 +1,15 @@
 #include "Agent/AgentServer.h"
 
+#include "Commands/CommandEffect.h"
+#include "Core/Base64.h"
 #include "Core/EngineVersion.h"
 #include "Core/FileHelper.h"
 #include "Core/Version.h"
 #include "Editor.h"
 #include "Json/JsonValue.h"
+#include "Math/Color.h"
+#include "Rendering/Image.h"
+#include "Rendering/ImageFile.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
 #include "TestEditorObjects.h"
@@ -254,6 +259,56 @@ TEST_SUITE("FAgentServer")
 			R"(waits unchanged until the game stops: the scene being edited, its file, its history, the project or a )"
 			R"(material. Play.Stop stops the game."}])");
 		CHECK(Test.Editor.IsPlaying());
+	}
+
+	TEST_CASE("A tool's picture follows its text as an image, in both revisions of the protocol")
+	{
+		FAgentServerTest Test;
+		std::vector<std::byte> PngFile;
+		std::string Error;
+		REQUIRE(FImageFile::SavePngToMemory(FImage(2, 1, FColor(255, 0, 0, 255)), PngFile, Error));
+		Test.Editor.GetCommands().Register({"Test.Picture", "Returns a picture.", {}, ECommandEffect::LeavesScene},
+			[PngFile](FEditor& /*CommandEditor*/, const FCommandArguments& /*Arguments*/)
+			{ return FCommandResult::SuccessWithPicture(FJsonValue(7), PngFile); });
+		std::string Message;
+		SUBCASE("The revisions with a handshake")
+		{
+			Message =
+				R"({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"Test.Picture","arguments":{}}})";
+		}
+		SUBCASE("The revision without one")
+		{
+			Message = std::format(
+				R"({{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"Test.Picture","arguments":{{}},{}}}}})",
+				ModernMeta);
+		}
+
+		const FJsonValue Result = ParseTestJson(Test.SendForResult(Message));
+
+		CHECK(*Result.FindMember("isError") == FJsonValue(false));
+		const FJsonValue::FArray& Content = Result.FindMember("content")->GetElements();
+		REQUIRE(Content.size() == 2);
+		CHECK(WriteTestJson(Content[0]) == R"({"type":"text","text":"7"})");
+		CHECK(*Content[1].FindMember("type") == FJsonValue("image"));
+		CHECK(*Content[1].FindMember("mimeType") == FJsonValue("image/png"));
+		const std::optional<std::vector<std::byte>> Decoded =
+			FBase64::Decode(Content[1].FindMember("data")->GetString());
+		REQUIRE(Decoded.has_value());
+		CHECK(*Decoded == PngFile);
+		FImage Picture;
+		REQUIRE(FImageFile::LoadFromMemory(*Decoded, Picture, Error));
+		CHECK(Picture.GetWidth() == 2);
+		CHECK(Picture.GetHeight() == 1);
+	}
+
+	TEST_CASE("A tool that fails answers with its text alone")
+	{
+		FAgentServerTest Test;
+
+		const FJsonValue Result = ParseTestJson(Test.CallTool("Entity.Delete", R"({"Entity": 99})"));
+
+		CHECK(*Result.FindMember("isError") == FJsonValue(true));
+		CHECK(Result.FindMember("content")->GetElements().size() == 1);
 	}
 
 	TEST_CASE("A tool's schema is made from the parameters of its command")

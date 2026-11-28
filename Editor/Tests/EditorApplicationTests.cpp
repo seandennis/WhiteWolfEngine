@@ -114,6 +114,20 @@ TEST_SUITE("FEditorApplication")
 			std::string::npos);
 	}
 
+	TEST_CASE("--mcp hands an agent the picture of Viewport.Capture as an image")
+	{
+		const FEditorApplicationRun Run({"--mcp"},
+			"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"Viewport.Capture\","
+			"\"arguments\":{\"Width\":64,\"Height\":36}}}\n");
+
+		CHECK(Run.ExitCode == 0);
+		const std::string Output = Run.Output.str();
+		CHECK(std::ranges::count(Output, '\n') == 1);
+		CHECK(Output.find(R"("isError":false)") != std::string::npos);
+		CHECK(Output.find(R"("type":"image")") != std::string::npos);
+		CHECK(Output.find(R"("mimeType":"image/png")") != std::string::npos);
+	}
+
 	TEST_CASE("--help prints how to start the editor")
 	{
 		const FEditorApplicationRun Run({"--help"}, "");

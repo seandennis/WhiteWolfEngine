@@ -1,7 +1,6 @@
 #include "Ui/Panels/ViewportPanel.h"
 
 #include "Editor.h"
-#include "Math/LinearColor.h"
 #include "Math/Ray.h"
 #include "Rendering/CameraView.h"
 #include "Rendering/RenderDevice.h"
@@ -9,7 +8,6 @@
 #include "Rendering/SceneRayCast.h"
 #include "Rendering/SceneRayHit.h"
 #include "Rendering/SceneRenderer.h"
-#include "Rendering/SceneViewMode.h"
 #include "Rendering/StaticMeshComponent.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
@@ -22,6 +20,7 @@
 #include "Ui/UiTheme.h"
 #include "Ui/UiWorkspace.h"
 #include "Viewport/ViewportCamera.h"
+#include "Viewport/ViewportPicture.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,16 +29,6 @@
 
 namespace
 {
-	/** What the viewport shows where the scene has nothing: a dark grey, a little darker than the panels around it. */
-	constexpr FLinearColor EmptySpaceColor(0.012f, 0.012f, 0.012f);
-
-	/**
-	 * The amount of light that the lit view mode shows as about that grey when the camera's exposure is one. There
-	 * the background is light like any other, which the exposure scales and the tone mapper bends: it darkens what
-	 * is dim, so that more light is needed for the same grey.
-	 */
-	constexpr FLinearColor EmptySpaceLight(0.044f, 0.044f, 0.044f);
-
 	// How far the camera turns for each pixel that the mouse moves, in degrees: looking around, and going around.
 	constexpr float LookSpeed = 0.2f;
 	constexpr float OrbitSpeed = 0.3f;
@@ -276,8 +265,7 @@ bool FViewportPanel::RenderScene(FSceneRenderer& Renderer, const FEditor& Editor
 		return true;
 	}
 
-	Renderer.ViewMode = Editor.GetViewMode();
-	Renderer.BackgroundColor = Renderer.ViewMode == ESceneViewMode::Lit ? EmptySpaceLight : EmptySpaceColor;
+	FViewportPicture::Configure(Renderer, Editor.GetViewMode());
 
 	// What is selected has a line around it, with everything below it.
 	Renderer.OutlinedEntities = Editor.GetSelection();

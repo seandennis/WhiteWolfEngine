@@ -3,6 +3,7 @@
 #include "Assets/Asset.h"
 #include "Assets/AssetManager.h"
 #include "Assets/AssetPackage.h"
+#include "Core/Base64.h"
 #include "Core/FileHelper.h"
 #include "Math/LinearColor.h"
 #include "Object/ObjectGlobals.h"
@@ -123,59 +124,6 @@ namespace
 			default:
 				return "the file could not be read";
 		}
-	}
-
-	/** Decodes base64 text, as found in "data:" addresses. Returns nothing if the text is not valid base64. */
-	std::optional<std::vector<std::byte>> DecodeBase64(std::string_view Text)
-	{
-		std::vector<std::byte> Bytes;
-		Bytes.reserve(Text.size() / 4 * 3);
-
-		uint32 Accumulator = 0;
-		int32 BitCount = 0;
-		for (const char Character : Text)
-		{
-			uint32 Value = 0;
-			if (Character >= 'A' && Character <= 'Z')
-			{
-				Value = static_cast<uint32>(Character - 'A');
-			}
-			else if (Character >= 'a' && Character <= 'z')
-			{
-				Value = static_cast<uint32>(Character - 'a') + 26;
-			}
-			else if (Character >= '0' && Character <= '9')
-			{
-				Value = static_cast<uint32>(Character - '0') + 52;
-			}
-			else if (Character == '+' || Character == '-')
-			{
-				Value = 62;
-			}
-			else if (Character == '/' || Character == '_')
-			{
-				Value = 63;
-			}
-			else if (Character == '=')
-			{
-				// Padding: the data is complete.
-				break;
-			}
-			else
-			{
-				return std::nullopt;
-			}
-
-			Accumulator = (Accumulator << 6) | Value;
-			BitCount += 6;
-			if (BitCount >= 8)
-			{
-				BitCount -= 8;
-				Bytes.push_back(static_cast<std::byte>((Accumulator >> BitCount) & 0xffu));
-			}
-		}
-
-		return Bytes;
 	}
 
 	/** Reads every element of an accessor as Components floats each. False if the accessor is of another shape. */
@@ -844,7 +792,7 @@ namespace
 				constexpr std::string_view Base64Marker = ";base64,";
 				const std::size_t MarkerPosition = Uri.find(Base64Marker);
 				const std::optional<std::vector<std::byte>> Bytes = MarkerPosition != std::string_view::npos
-					? DecodeBase64(Uri.substr(MarkerPosition + Base64Marker.size()))
+					? FBase64::Decode(Uri.substr(MarkerPosition + Base64Marker.size()))
 					: std::nullopt;
 				if (!Bytes.has_value())
 				{

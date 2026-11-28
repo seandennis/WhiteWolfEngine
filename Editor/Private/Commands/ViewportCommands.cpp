@@ -3,13 +3,17 @@
 #include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
 #include "Commands/CommandTargets.h"
+#include "Core/FileHelper.h"
 #include "Editor.h"
+#include "EditorGraphics.h"
 #include "Json/JsonValue.h"
 #include "Math/Box.h"
 #include "Object/ObjectGlobals.h"
 #include "Object/ObjectPtr.h"
 #include "Reflection/PropertyValueTraits.h"
 #include "Rendering/CameraView.h"
+#include "Rendering/Image.h"
+#include "Rendering/ImageFile.h"
 #include "Rendering/SceneViewMode.h"
 #include "Rendering/StaticMeshComponent.h"
 #include "Scene/Component.h"
@@ -19,7 +23,10 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
+#include <cstddef>
+#include <filesystem>
 #include <format>
 #include <optional>
 #include <string>
@@ -41,6 +48,16 @@ namespace
 	 * nothing, or something tiny, is looked at from about an arm's length and not from inside it.
 	 */
 	constexpr double MinFocusRadius = 0.5;
+
+	/**
+	 * The largest picture that Viewport.Capture takes either way, in pixels: a surface of that size takes hundreds of
+	 * megabytes.
+	 */
+	constexpr int64 MaxCaptureSize = 4096;
+
+	/** The size of a picture that Viewport.Capture is not given a size for. */
+	constexpr int64 DefaultCaptureWidth = 960;
+	constexpr int64 DefaultCaptureHeight = 540;
 
 	constexpr std::array<FViewModeName, 3> ViewModeNames{{
 		{ESceneViewMode::Lit, "Lit"},
@@ -107,6 +124,108 @@ namespace
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * Reads one of the sizes of a picture, which may be left out.
+	 *
+	 * @return False, with the reason in OutError, if the size is not from 1 to MaxCaptureSize pixels.
+	 */
+	bool ReadCaptureSize(const FCommandArguments& Arguments,
+		std::string_view Name,
+		int64 DefaultSize,
+		int32& OutSize,
+		std::string& OutError)
+	{
+		const int64 Size = Arguments.Has(Name) ? Arguments.GetInteger(Name) : DefaultSize;
+		if (Size < 1 || Size > MaxCaptureSize)
+		{
+			OutError = std::format("{} must be from 1 to {} pixels, and {} was given.", Name, MaxCaptureSize, Size);
+			return false;
+		}
+		OutSize = static_cast<int32>(Size);
+		return true;
+	}
+
+	/** Returns true if the name of a file ends in ".png", in capitals or not. */
+	bool IsPngFile(const std::filesystem::path& File)
+	{
+		const std::string Extension = FFileHelper::PathToUtf8(File.extension());
+		constexpr std::string_view PngExtension = ".png";
+		return std::ranges::equal(Extension,
+			PngExtension,
+			[](char Letter, char PngLetter)
+			{ return std::tolower(static_cast<unsigned char>(Letter)) == static_cast<unsigned char>(PngLetter); });
+	}
+
+	FCommandResult Capture(FEditor& Editor, const FCommandArguments& Arguments)
+	{
+		int32 Width = 0;
+		int32 Height = 0;
+		std::string Error;
+		if (!ReadCaptureSize(Arguments, "Width", DefaultCaptureWidth, Width, Error) ||
+			!ReadCaptureSize(Arguments, "Height", DefaultCaptureHeight, Height, Error))
+		{
+			return FCommandResult::Failure(std::move(Error));
+		}
+
+		std::filesystem::path File;
+		if (Arguments.Has("Path"))
+		{
+			File = FFileHelper::PathFromUtf8(Arguments.GetString("Path"));
+			// A picture is no asset: written into the content directory, a PNG file would become a texture of the
+			// project.
+			if (!File.is_absolute())
+			{
+				return FCommandResult::Failure(
+					"Path must be a whole path, such as C:/Pictures/Level1.png: a picture is no file of the project, "
+					"and a relative path would be taken as one.");
+			}
+			if (!IsPngFile(File))
+			{
+				return FCommandResult::Failure("Path must name a PNG file, whose name ends in \".png\".");
+			}
+		}
+
+		FImage Picture;
+		if (!Editor.GetGraphics().DrawPicture(Editor.GetScene(),
+				Editor.GetViewportCamera().GetView(),
+				Editor.GetViewMode(),
+				Width,
+				Height,
+				Picture,
+				Error))
+		{
+			return FCommandResult::Failure(std::format("No picture could be drawn: {}.", Error));
+		}
+
+		FJsonValue Value = FJsonValue::MakeObject();
+		Value.SetMember("Width", Width);
+		Value.SetMember("Height", Height);
+		Value.SetMember("Playing", Editor.IsPlaying());
+		if (Editor.IsPlaying())
+		{
+			// Which moment of the game the picture shows.
+			Value.SetMember("Frame", Editor.GetScene().GetPlayedFrameCount());
+		}
+
+		if (!File.empty())
+		{
+			if (!FImageFile::SavePng(Picture, File, Error))
+			{
+				return FCommandResult::Failure(
+					std::format("The picture was drawn and could not be written: {}.", Error));
+			}
+			Value.SetMember("Path", FFileHelper::PathToUtf8(File));
+			return FCommandResult::Success(std::move(Value));
+		}
+
+		std::vector<std::byte> PngFile;
+		if (!FImageFile::SavePngToMemory(Picture, PngFile, Error))
+		{
+			return FCommandResult::Failure(std::format("The picture was drawn and could not be encoded: {}.", Error));
+		}
+		return FCommandResult::SuccessWithPicture(std::move(Value), std::move(PngFile));
 	}
 
 	FCommandResult GetCamera(FEditor& Editor, const FCommandArguments& /*Arguments*/)
@@ -362,4 +481,24 @@ void FViewportCommands::Register(FCommandRegistry& Registry)
 				"exactly its base colour; AmbientOcclusion for the ambient occlusion by itself, in shades of grey.")},
 			ECommandEffect::LeavesScene},
 		SetViewMode);
+
+	Registry.Register(
+		{"Viewport.Capture",
+			"Takes a screenshot: draws the scene as the viewport's camera sees it (set it with Viewport.SetCamera or "
+			"Viewport.Focus), in the viewport's view mode, without the editor's marks (the line around what is "
+			"selected, the gizmo, the toolbar), and returns it as a PNG image, or writes it to Path instead. While a "
+			"game plays it is the game's scene, and the result says at which frame (\"Frame\"). Needs Vulkan 1.3, on a "
+			"graphics card or in software; the first picture opens it, which takes a moment.",
+			{FCommandParameter::Optional("Width",
+				 ECommandArgumentType::Integer,
+				 "The width of the picture in pixels, from 1 to 4096. 960 if left out."),
+				FCommandParameter::Optional("Height",
+					ECommandArgumentType::Integer,
+					"The height of the picture in pixels, from 1 to 4096. 540 if left out."),
+				FCommandParameter::Optional("Path",
+					ECommandArgumentType::String,
+					"A whole path to a PNG file, such as C:/Pictures/Level1.png, to write the picture to instead of "
+					"returning it. Folders that are not there are made, and a file that is there is replaced.")},
+			ECommandEffect::LeavesScene},
+		Capture);
 }

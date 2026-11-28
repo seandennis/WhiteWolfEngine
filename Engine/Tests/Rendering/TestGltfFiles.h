@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Core/Base64.h"
 #include "Core/FileHelper.h"
 
 #include <doctest/doctest.h>
@@ -44,33 +45,11 @@ public:
 	std::vector<std::byte> Bytes;
 };
 
-/** Returns bytes as base64 text. */
-inline std::string EncodeTestBase64(std::span<const std::byte> Bytes)
-{
-	constexpr std::string_view Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-	std::string Text;
-	for (std::size_t Index = 0; Index < Bytes.size(); Index += 3)
-	{
-		const std::size_t Remaining = Bytes.size() - Index;
-		const uint32 First = std::to_integer<uint32>(Bytes[Index]);
-		const uint32 Second = Remaining > 1 ? std::to_integer<uint32>(Bytes[Index + 1]) : 0;
-		const uint32 Third = Remaining > 2 ? std::to_integer<uint32>(Bytes[Index + 2]) : 0;
-		const uint32 Group = (First << 16) | (Second << 8) | Third;
-
-		Text += Alphabet[(Group >> 18) & 63];
-		Text += Alphabet[(Group >> 12) & 63];
-		Text += Remaining > 1 ? Alphabet[(Group >> 6) & 63] : '=';
-		Text += Remaining > 2 ? Alphabet[Group & 63] : '=';
-	}
-	return Text;
-}
-
 /** Returns the address that embeds bytes in a glTF file. */
 inline std::string MakeTestDataUri(
 	std::span<const std::byte> Bytes, std::string_view MimeType = "application/octet-stream")
 {
-	return std::string("data:") + std::string(MimeType) + ";base64," + EncodeTestBase64(Bytes);
+	return std::string("data:") + std::string(MimeType) + ";base64," + FBase64::Encode(Bytes);
 }
 
 /**

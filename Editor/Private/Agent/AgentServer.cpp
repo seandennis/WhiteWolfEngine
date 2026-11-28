@@ -6,6 +6,7 @@
 #include "Commands/CommandRegistry.h"
 #include "Commands/CommandResult.h"
 #include "Commands/CommandWhilePlaying.h"
+#include "Core/Base64.h"
 #include "Core/EngineVersion.h"
 #include "Core/Version.h"
 #include "Editor.h"
@@ -52,7 +53,8 @@ namespace
 		"scene and the assets as they were. Edit.Undo undoes the last change to the scene or to a material. "
 		"Scene.Save writes the scene to its file, and Asset.Save a changed material to its own. Play.Start plays a "
 		"copy of the scene: until Play.Stop, every tool that reads or changes the scene acts on that copy, nothing is "
-		"a step of the history, and the game goes on only through Play.Step, in frames of a sixtieth of a second.";
+		"a step of the history, and the game goes on only through Play.Step, in frames of a sixtieth of a second. "
+		"Viewport.Capture returns a picture of what the viewport's camera sees.";
 
 	/** What the description of a tool that cannot be given while a game plays ends with. */
 	constexpr std::string_view RefusedWhilePlayingNote = " Refused while a game plays (Play.Stop stops it).";
@@ -283,6 +285,15 @@ namespace
 										 : CommandResult.GetError());
 		FJsonValue Content = FJsonValue::MakeArray();
 		Content.AddElement(std::move(Text));
+		// A picture follows the text as an image, which the protocol carries as base64 text and an agent sees.
+		if (CommandResult.HasSucceeded() && !CommandResult.GetPicture().empty())
+		{
+			FJsonValue Image = FJsonValue::MakeObject();
+			Image.SetMember("type", "image");
+			Image.SetMember("data", FBase64::Encode(CommandResult.GetPicture()));
+			Image.SetMember("mimeType", "image/png");
+			Content.AddElement(std::move(Image));
+		}
 
 		FJsonValue Result = FJsonValue::MakeObject();
 		Result.SetMember("content", std::move(Content));
