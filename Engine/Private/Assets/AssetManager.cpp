@@ -431,19 +431,14 @@ bool FAssetManager::HasFileSystemSpelling(std::string_view File, std::string& Ou
 		return false;
 	}
 
-	// Each part is looked for among the entries of the folder above it, under the name that the folder gives it.
+	// Windows keeps no name that ends in a period or a space: it makes and opens the name without them, which is
+	// another name, also where nothing of that name is there yet. Every part is asked about before anything is
+	// looked for, the parts below one that is not there, or below a file, too.
 	const std::string_view FileText = Path->File;
-	std::filesystem::path Folder = ContentDirectory;
-	std::size_t PartStart = 0;
-	while (true)
+	for (std::size_t PartStart = 0; PartStart <= FileText.size();)
 	{
-		const std::size_t Slash = FileText.find('/', PartStart);
-		const bool bIsLastPart = Slash == std::string_view::npos;
-		const std::size_t PartEnd = bIsLastPart ? FileText.size() : Slash;
+		const std::size_t PartEnd = std::min(FileText.find('/', PartStart), FileText.size());
 		const std::string_view PartText = FileText.substr(PartStart, PartEnd - PartStart);
-
-		// Windows keeps no name that ends in a period or a space: it makes and opens the name without them, which is
-		// another name, also where nothing of that name is there yet.
 		const bool bEndsInPeriod = PartText.ends_with('.');
 		if (bEndsInPeriod || PartText.ends_with(' '))
 		{
@@ -452,7 +447,18 @@ bool FAssetManager::HasFileSystemSpelling(std::string_view File, std::string& Ou
 				bEndsInPeriod ? "period" : "space");
 			return false;
 		}
+		PartStart = PartEnd + 1;
+	}
 
+	// Each part is looked for among the entries of the folder above it, under the name that the folder gives it.
+	std::filesystem::path Folder = ContentDirectory;
+	std::size_t PartStart = 0;
+	while (true)
+	{
+		const std::size_t Slash = FileText.find('/', PartStart);
+		const bool bIsLastPart = Slash == std::string_view::npos;
+		const std::size_t PartEnd = bIsLastPart ? FileText.size() : Slash;
+		const std::string_view PartText = FileText.substr(PartStart, PartEnd - PartStart);
 		const std::filesystem::path Part = FFileHelper::PathFromUtf8(PartText);
 		const std::filesystem::path PartPath = Folder / Part;
 

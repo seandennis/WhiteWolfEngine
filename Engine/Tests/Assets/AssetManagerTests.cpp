@@ -753,6 +753,10 @@ TEST_SUITE("FAssetManager")
 			{"Materials/Red.wwmaterial.", "period", "Red.wwmaterial."},
 			// A folder that is not there yet: Windows would make it under the name without the period.
 			{"New./Brick.wwmaterial", "period", "New."},
+			// And below one, and below a file, where nothing is looked for.
+			{"New/Sub./Brick.wwmaterial", "period", "Sub."},
+			{"New/Sub /Brick.wwmaterial", "space", "Sub "},
+			{"Materials/Red.wwmaterial/Deeper./Brick.wwmaterial", "period", "Deeper."},
 		};
 		for (const FName& Name : Names)
 		{

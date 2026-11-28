@@ -230,6 +230,16 @@ TEST_SUITE("Asset commands for materials")
 			Path = "New./Brick.wwmaterial";
 			Expected = "The material was not created: the name \"New.\" ends in a period, which Windows does not keep.";
 		}
+		SUBCASE("Such a folder below one that is not there")
+		{
+			Path = "New/Sub./Brick.wwmaterial";
+			Expected = "The material was not created: the name \"Sub.\" ends in a period, which Windows does not keep.";
+		}
+		SUBCASE("A folder whose name ends in a space, below one that is not there")
+		{
+			Path = "New/Sub /Brick.wwmaterial";
+			Expected = "The material was not created: the name \"Sub \" ends in a space, which Windows does not keep.";
+		}
 		SUBCASE("A file that is there")
 		{
 			Path = "Materials/Red.wwmaterial";
