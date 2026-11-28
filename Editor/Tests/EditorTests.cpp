@@ -75,6 +75,7 @@ TEST_SUITE("FEditor")
 		}
 
 		const std::vector<std::string> ExpectedNames = {
+			"Asset.CreateMaterial",
 			"Asset.Describe",
 			"Asset.Import",
 			"Asset.List",
@@ -130,6 +131,7 @@ TEST_SUITE("FEditor")
 		}
 
 		const std::vector<std::string> ExpectedNames = {
+			"Asset.CreateMaterial",
 			"Asset.Describe",
 			"Asset.Import",
 			"Asset.List",

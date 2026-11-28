@@ -13,6 +13,8 @@
 #include "Object/Class.h"
 #include "Object/ObjectGlobals.h"
 #include "Rendering/GltfImporter.h"
+#include "Rendering/Material.h"
+#include "Rendering/MaterialSerializer.h"
 #include "Rendering/Texture.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
@@ -250,6 +252,74 @@ namespace
 		return FCommandResult::Success(std::move(Value));
 	}
 
+	FCommandResult CreateMaterial(FEditor& Editor, const FCommandArguments& Arguments)
+	{
+		if (Editor.GetProject() == nullptr)
+		{
+			return FCommandResult::Failure(std::string(NoProjectError));
+		}
+
+		// Everything is checked before anything is written, and nothing of the project is replaced.
+		const auto Refuse = [](std::string_view Reason)
+		{
+			return FCommandResult::Failure(std::format("The material was not created: {}.", Reason));
+		};
+		const std::string& Text = Arguments.GetString("Path");
+		std::string Error;
+		const std::optional<FAssetPath> Path = FAssetPath::Parse(Text, Error);
+		if (!Path.has_value())
+		{
+			return Refuse(Error);
+		}
+		if (!Path->Key.empty())
+		{
+			return Refuse(
+				std::format("\"{}\" names an asset inside a file, and a material is a file of its own", Text));
+		}
+		if (!FMaterialSerializer::IsMaterialFile(FFileHelper::PathFromUtf8(Path->File)))
+		{
+			return Refuse(std::format("the name of a material file ends in \"{}\", as in \"Materials/Brick{}\", "
+									  "and \"{}\" does not",
+				FMaterialSerializer::FileExtension,
+				FMaterialSerializer::FileExtension,
+				Text));
+		}
+		// A folder that the project spells otherwise is the same folder where capitals are not told apart, and a
+		// material file is loaded only under the name that its directory gives it: the path would not load.
+		if (!FAssetManager::HasFileSystemSpelling(Path->File, Error))
+		{
+			return Refuse(Error);
+		}
+		const std::filesystem::path FilePath = FAssetManager::GetPathOfAssetFile(Path->File);
+		std::error_code ErrorCode;
+		if (std::filesystem::exists(FilePath, ErrorCode))
+		{
+			return Refuse(std::format("the project already has a file \"{}\"", Path->File));
+		}
+		// The material of a file that was removed while it was in use is what loading the path gives: a new file
+		// there would not be the material that is used.
+		if (FAssetManager::FindLoaded(Path->File) != nullptr)
+		{
+			return Refuse(std::format("\"{}\" is still in use although its file is gone", Path->File));
+		}
+
+		// The file of a new material says what its class gives a new one.
+		const WMaterial* const Material = NewObject<WMaterial>();
+		if (!FMaterialSerializer::SaveToFile(*Material, FilePath, Error))
+		{
+			return Refuse(Error);
+		}
+
+		FJsonValue Value;
+		if (!DescribeAssetFile(Path->File, Value, Error))
+		{
+			// A file that cannot be loaded is no material, and is not left in the project.
+			RemoveFiles({FilePath});
+			return Refuse(Error);
+		}
+		return FCommandResult::Success(std::move(Value));
+	}
+
 	FCommandResult PlaceAsset(FEditor& Editor, const FCommandArguments& Arguments)
 	{
 		if (Editor.GetProject() == nullptr)
@@ -338,6 +408,20 @@ void FAssetCommands::Register(FCommandRegistry& Registry)
 				"The file's name as Asset.List returns it, for example \"Models/Crate.glb\" or \"Engine/Shapes\".")},
 			ECommandEffect::LeavesScene},
 		DescribeAsset);
+
+	Registry.Register(
+		{"Asset.CreateMaterial",
+			"Makes a material in the project: a file of its own in the content directory, with the values of a new "
+			"material (white, not a metal, roughness 0.5, no textures). Returns the file's name, which is the "
+			"material's asset path, as Asset.Import returns it. That path is what the Material of a "
+			"WStaticMeshComponent takes, with Object.SetProperty. Nothing of the project is replaced, and Edit.Undo "
+			"does not take the file away.",
+			{FCommandParameter::Required("Path",
+				ECommandArgumentType::String,
+				"Where in the content directory the material's file is to be: a name that ends in \".wwmaterial\", "
+				"for example \"Materials/Brick.wwmaterial\". Folders that are not there are made.")},
+			ECommandEffect::LeavesScene},
+		CreateMaterial);
 
 	Registry.Register(
 		{"Asset.Place",

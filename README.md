@@ -72,7 +72,7 @@ Everything the editor can do is a command, and `WhiteWolfEditor --mcp` offers ev
 }
 ```
 
-The tool `Editor.ListCommands` describes all the others. A session usually begins with `Project.New` or `Project.Open`; `Asset.Import` then brings models, pictures, environments and materials into the project and `Asset.Place` puts a model into the scene. `Scene.Save` writes the scene to a file of the project, such as `Scenes/Level1.wwscene`, and `Scene.List` and `Scene.Open` find it again. Entities and components are referred to by the identifiers that `Scene.GetHierarchy` lists, and `Edit.Undo` undoes any change to the scene.
+The tool `Editor.ListCommands` describes all the others. A session usually begins with `Project.New` or `Project.Open`; `Asset.Import` then brings models, pictures, environments and materials into the project, `Asset.CreateMaterial` makes a new material there, whose path the `Material` of a mesh component takes, and `Asset.Place` puts a model into the scene. `Scene.Save` writes the scene to a file of the project, such as `Scenes/Level1.wwscene`, and `Scene.List` and `Scene.Open` find it again. Entities and components are referred to by the identifiers that `Scene.GetHierarchy` lists, and `Edit.Undo` undoes any change to the scene.
 
 ## Repository layout
 

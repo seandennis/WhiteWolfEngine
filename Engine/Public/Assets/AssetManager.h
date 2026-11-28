@@ -113,6 +113,14 @@ public:
 	 */
 	ENGINE_API static WAssetPackage* LoadPackage(std::string_view File, std::string& OutError);
 
+	/**
+	 * Returns the asset with the given path if its file is loaded, and loads nothing. Null for text that is not an
+	 * asset path, for a file that is not loaded or whose assets have been collected, and for a key that the loaded
+	 * file does not have, such as a picture's data texture that has not been asked for. It does not look at the file
+	 * system and needs no content directory, so it finds an asset that is still in use after its file was removed.
+	 */
+	ENGINE_API static WAsset* FindLoaded(std::string_view AssetPath);
+
 	/** Returns true if a file with this name is of a kind that can be loaded, going by the end of the name. */
 	ENGINE_API static bool IsAssetFile(const std::filesystem::path& Path);
 

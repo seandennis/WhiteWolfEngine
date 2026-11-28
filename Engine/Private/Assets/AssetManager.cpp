@@ -269,6 +269,25 @@ WAssetPackage* FAssetManager::LoadPackage(std::string_view File, std::string& Ou
 	return FindOrLoadPackage(Path->File, OutError);
 }
 
+WAsset* FAssetManager::FindLoaded(std::string_view AssetPath)
+{
+	std::string Error;
+	const std::optional<FAssetPath> Path = FAssetPath::Parse(AssetPath, Error);
+	if (!Path.has_value())
+	{
+		return nullptr;
+	}
+
+	const FAssetManagerState& State = GetState();
+	const auto Found = State.Packages.find(Path->File);
+	if (Found == State.Packages.end())
+	{
+		return nullptr;
+	}
+	const WAssetPackage* const Package = Found->second.Get();
+	return Package != nullptr ? Package->FindAsset(Path->Key) : nullptr;
+}
+
 bool FAssetManager::IsAssetFile(const std::filesystem::path& Path)
 {
 	return GetFileKind(Path) != EAssetFileKind::Unknown;

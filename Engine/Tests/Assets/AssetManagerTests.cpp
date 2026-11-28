@@ -406,6 +406,62 @@ TEST_SUITE("FAssetManager")
 		CHECK(FAssetManager::Load(FAssetManager::CubeShape, Error) == Cube);
 	}
 
+	TEST_CASE("FindLoaded returns an asset only while its file is loaded, and loads nothing")
+	{
+		const FScopedObjectTest ObjectTest;
+		const FScopedContentDirectory Content;
+		Content.WritePicture("Textures/Wood.png");
+		Content.WriteSquare("Models/Square.gltf");
+
+		CHECK(FAssetManager::FindLoaded("Textures/Wood.png") == nullptr);
+		CHECK(FAssetManager::FindLoaded("Textures/Wood.png") == nullptr);
+
+		std::string Error;
+		WTexture* const Wood = FAssetManager::Load<WTexture>("Textures/Wood.png", Error);
+		const FScopedRoot WoodRoot(Wood);
+		WAssetPackage* const Square = FAssetManager::LoadPackage("Models/Square.gltf", Error);
+		const FScopedRoot SquareRoot(Square);
+
+		CHECK(FAssetManager::FindLoaded("Textures/Wood.png") == Wood);
+		CHECK(FAssetManager::FindLoaded("Models/Square.gltf#Meshes/0/Primitives/0") ==
+			Square->FindAsset("Meshes/0/Primitives/0"));
+		// A key that the file does not have, and a picture's data texture that nothing has asked for.
+		CHECK(FAssetManager::FindLoaded("Models/Square.gltf#Meshes/7/Primitives/0") == nullptr);
+		CHECK(FAssetManager::FindLoaded("Textures/Wood.png#Linear") == nullptr);
+		// Text that is no asset path.
+		CHECK(FAssetManager::FindLoaded("../Textures/Wood.png") == nullptr);
+		CHECK(FAssetManager::FindLoaded("") == nullptr);
+
+		// The file system is not asked: an asset that is in use is found after its file is gone.
+		std::filesystem::remove(Content.GetPath() / "Textures" / "Wood.png");
+		CHECK(FAssetManager::FindLoaded("Textures/Wood.png") == Wood);
+	}
+
+	TEST_CASE("FindLoaded finds nothing of a file whose assets were collected")
+	{
+		const FScopedObjectTest ObjectTest;
+		const FScopedContentDirectory Content;
+		Content.WritePicture("Textures/Wood.png");
+		std::string Error;
+		REQUIRE(FAssetManager::Load("Textures/Wood.png", Error) != nullptr);
+		REQUIRE(FAssetManager::FindLoaded("Textures/Wood.png") != nullptr);
+
+		CollectGarbage();
+
+		CHECK(FAssetManager::FindLoaded("Textures/Wood.png") == nullptr);
+	}
+
+	TEST_CASE("FindLoaded finds a built-in shape that is in use, without a content directory")
+	{
+		const FScopedObjectTest ObjectTest;
+		REQUIRE(FAssetManager::GetContentDirectory().empty());
+		std::string Error;
+		WAsset* const Cube = FAssetManager::Load(FAssetManager::CubeShape, Error);
+		const FScopedRoot Root(Cube);
+
+		CHECK(FAssetManager::FindLoaded(FAssetManager::CubeShape) == Cube);
+	}
+
 	TEST_CASE("Without a content directory nothing of one can be loaded")
 	{
 		const FScopedObjectTest ObjectTest;
