@@ -7,6 +7,7 @@
 #include "Object/ObjectPtr.h"
 #include "Object/WeakObjectPtr.h"
 #include "Scene/Component.h"
+#include "Scene/EndPlayReason.h"
 #include "Scene/Entity.h"
 
 #include <string>
@@ -27,7 +28,14 @@ extern ENGINE_API FLogCategory LogScene;
  *
  * Destroy() destroys the scene together with everything in it, and asks the garbage collector to start a
  * collection on its next tick instead of waiting for its timer, so that the memory of the old scene is on its way
- * out before a new one is loaded.
+ * out before a new one is loaded. A scene that plays ends its game first; destroying it from inside a component's
+ * BeginPlay, Tick or EndPlay is a fatal error.
+ *
+ * A scene is also what plays a game. Between BeginPlay and EndPlay it plays in frames (StepFrame), each of which
+ * stands for the same length of game time, and in which its components begin play, tick and end play
+ * (WComponent::BeginPlay, Tick and EndPlay), in the order of the scene: each root entity followed by its
+ * descendants, parents before children, and the components of an entity in the order they were added. Nothing in
+ * a frame reads a clock, so the same scene played for the same number of frames comes out the same.
  */
 WCLASS()
 class ENGINE_API WScene : public WObject
@@ -35,6 +43,9 @@ class ENGINE_API WScene : public WObject
 	WW_DECLARE_CLASS(WScene, WObject)
 
 public:
+	/** The length of a frame of the game unless BeginPlay is given another: a sixtieth of a second. */
+	static constexpr double DefaultFrameSeconds = 1.0 / 60.0;
+
 	WFUNCTION(BlueprintPure, Category = "Scene")
 	const std::string& GetName() const;
 
@@ -89,12 +100,68 @@ public:
 	/** Destroys every entity in the scene. The scene itself stays usable, and identifiers are not reused. */
 	void DestroyAllEntities();
 
+	/**
+	 * Begins the game: the scene plays from frame 0, and every component begins play before this returns. Nothing
+	 * ticks until the first StepFrame.
+	 *
+	 * A fatal error if the scene plays already or has been destroyed, if FrameSeconds is not a number of seconds
+	 * above zero, or if it is called from inside a component's BeginPlay, Tick or EndPlay.
+	 *
+	 * @param FrameSeconds The game time that a frame stands for.
+	 */
+	void BeginPlay(double FrameSeconds = DefaultFrameSeconds);
+
+	/**
+	 * Plays one frame. First the components that were attached since the last frame begin play, now that whoever
+	 * attached them has set them up; then every component whose class ticks (WComponent::bCanEverTick) ticks. A
+	 * component attached during the frame begins at the start of the next one. A component destroyed during the frame
+	 * ends play at once and does not tick.
+	 *
+	 * A fatal error if the scene does not play, or if it is called from inside a component's BeginPlay, Tick or
+	 * EndPlay.
+	 */
+	void StepFrame();
+
+	/**
+	 * Ends the game: every component that began play ends it (EEndPlayReason::PlayEnded), in the reverse of the order
+	 * of the scene, so that what began first ends last. A component that was attached since the last frame has not
+	 * begun, and is not told. The frame count is kept until the scene begins play again, which it can. Destroying a
+	 * scene that plays ends its game first. Does nothing if the scene does not play.
+	 *
+	 * A fatal error if it is called from inside a component's BeginPlay, Tick or EndPlay.
+	 */
+	void EndPlay();
+
+	/** Returns true from BeginPlay until EndPlay. */
+	bool IsPlaying() const;
+
+	/** Returns the game time that a frame stands for: what BeginPlay was given last, or DefaultFrameSeconds. */
+	double GetFrameSeconds() const;
+
+	/** Returns the number of frames played since the game began; during a frame, the number of that frame, from 1. */
+	int64 GetPlayedFrameCount() const;
+
+	/**
+	 * Returns the game time played: the number of frames times the length of a frame, which is exact however the
+	 * frames were stepped.
+	 */
+	double GetPlayedSeconds() const;
+
 protected:
 	void OnDestroyed() override;
 
 private:
 	friend class FSceneSerializer;
 	friend class WEntity;
+
+	/** Has a component begin play, counting the call in PlayCallDepth. */
+	void BeginComponentPlay(WComponent& Component);
+
+	/** Has a component tick through one frame, counting the call in PlayCallDepth. */
+	void TickComponent(WComponent& Component);
+
+	/** Has a component that began play end it, counting the call in PlayCallDepth. Does nothing for any other. */
+	void EndComponentPlay(WComponent& Component, EEndPlayReason Reason);
 
 	/** Creates an entity with a given identifier. ParentEntity, if not null, must be a valid entity of this scene. */
 	WEntity* CreateEntityWithId(const std::string& EntityName, WEntity* ParentEntity, int64 EntityId);
@@ -121,4 +188,16 @@ private:
 
 	/** Every entity and component of the scene by identifier. Weak, because the tree above is what owns them. */
 	std::unordered_map<int64, FWeakObjectPtr> ObjectsById;
+
+	/** True from BeginPlay until EndPlay. */
+	bool bIsPlaying = false;
+
+	/** The game time that a frame stands for. */
+	double PlayFrameSeconds = DefaultFrameSeconds;
+
+	/** The number of frames played since the game began. */
+	int64 PlayedFrameCount = 0;
+
+	/** How many calls of components' BeginPlay, Tick and EndPlay are running, one inside another. */
+	int32 PlayCallDepth = 0;
 };

@@ -77,6 +77,25 @@ TEST_SUITE("Renderer test scene")
 		CHECK(Statistics.AmbientOcclusionPassCount == 1);
 	}
 
+	TEST_CASE("The test scene is drawn as its reference image shows it after it has played for a second")
+	{
+		FSceneRenderTest Test(ESceneViewMode::Lit);
+		BuildRendererTestScene(*Test.Scene.Get(), FVector(0.0));
+		Test.Scene->BeginPlay();
+		for (int32 Frame = 0; Frame < 60; ++Frame)
+		{
+			Test.Scene->StepFrame();
+		}
+
+		const FImage Image =
+			Test.Render(MakeRendererTestSceneView(FVector(0.0)), RendererTestSceneWidth, RendererTestSceneHeight);
+		Test.Scene->EndPlay();
+
+		CHECK(Test.Scene->GetPlayedSeconds() == 1.0);
+		CheckAgainstReference(Image, "RendererTestScene", "AfterPlay");
+		CHECK(CountLoggedErrors(Test.Capture) == 0);
+	}
+
 	TEST_CASE("The reference image would not match the test scene without its sky light, shadows or ambient occlusion")
 	{
 		// A reference image tests only what its picture depends on. The scene is drawn whole and then with one of

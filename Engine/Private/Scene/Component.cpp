@@ -19,11 +19,28 @@ int64 WComponent::GetId() const
 	return Id;
 }
 
+bool WComponent::HasBegunPlay() const
+{
+	return bHasBegunPlay;
+}
+
 void WComponent::OnAttached()
 {
 }
 
 void WComponent::OnDetached()
+{
+}
+
+void WComponent::BeginPlay()
+{
+}
+
+void WComponent::Tick([[maybe_unused]] double DeltaSeconds)
+{
+}
+
+void WComponent::EndPlay([[maybe_unused]] EEndPlayReason Reason)
 {
 }
 

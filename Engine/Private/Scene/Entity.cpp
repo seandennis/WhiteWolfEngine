@@ -1,6 +1,7 @@
 #include "Scene/Entity.h"
 
 #include "Object/Class.h"
+#include "Scene/EndPlayReason.h"
 #include "Scene/Scene.h"
 
 #include <utility>
@@ -229,9 +230,15 @@ bool WEntity::RemoveComponent(WComponent* Component)
 
 void WEntity::DetachComponent(WComponent& Component)
 {
+	WScene* const OwningScene = Scene;
+	if (OwningScene != nullptr)
+	{
+		// A component that leaves a game that goes on ends play first, while its entity and scene are still its own.
+		OwningScene->EndComponentPlay(Component, EEndPlayReason::Destroyed);
+	}
+
 	Component.OnDetached();
 
-	WScene* const OwningScene = Scene;
 	if (OwningScene != nullptr)
 	{
 		OwningScene->UnregisterObject(Component.Id);

@@ -6,26 +6,46 @@
 #include "Object/ObjectPtr.h"
 #include "Object/WeakObjectPtr.h"
 #include "Scene/Component.h"
+#include "Scene/EndPlayReason.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
 
+#include <functional>
 #include <string>
 #include <vector>
+
+class WTestComponent;
 
 /** Records what happens to the test components, so tests can observe their lifecycle. */
 struct FTestComponentStats
 {
-	/** One entry per lifecycle call, in order: "Attached <Label>" or "Detached <Label>". */
+	/**
+	 * One entry per lifecycle call, in order: "Attached <Label>", "Detached <Label>", "BeginPlay <Label>",
+	 * "Tick <Label> <frame> <DeltaSeconds>" or "EndPlay <Label> <PlayEnded or Destroyed>".
+	 */
 	std::vector<std::string> Events;
 
 	/** Detached calls during which GetOwner still returned the entity. */
 	int32 DetachedWithOwnerCount = 0;
 
+	/**
+	 * Called by every test component in BeginPlay, Tick and EndPlay, after the event is recorded, if they are set:
+	 * how a test has a component do something in a game. They refer to nothing that a test destroys before the
+	 * scenes they act in, because a scene that still plays when it is destroyed ends its game, which calls them.
+	 */
+	std::function<void(WTestComponent& Component)> OnBeginPlay;
+	std::function<void(WTestComponent& Component)> OnTick;
+	std::function<void(WTestComponent& Component, EEndPlayReason Reason)> OnEndPlay;
+
 	/** Returns the stats shared by every test component. */
 	static FTestComponentStats& Get();
 };
 
-/** A component with properties of several kinds, including references to entities and components. */
+/**
+ * A component with properties of several kinds, including references to entities and components. It records its
+ * lifecycle in FTestComponentStats, play included. Its class does not tick, but records a tick all the same, so that
+ * a frame that ticked it would be seen.
+ */
 WCLASS()
 class WTestComponent : public WComponent
 {
@@ -57,6 +77,33 @@ public:
 protected:
 	void OnAttached() override;
 	void OnDetached() override;
+	void BeginPlay() override;
+	void Tick(double DeltaSeconds) override;
+	void EndPlay(EEndPlayReason Reason) override;
+};
+
+/** A test component that ticks: it counts the frames, moves its entity and records every frame. */
+WCLASS()
+class WTestPlayComponent : public WTestComponent
+{
+	WW_DECLARE_CLASS(WTestPlayComponent, WTestComponent)
+
+public:
+	WTestPlayComponent();
+
+	/**
+	 * The number of frames the component has ticked in. Saved, so that the text of a scene shows how long it
+	 * played.
+	 */
+	WPROPERTY()
+	int32 TickCount = 0;
+
+	/** How far the component moves its entity in a second of the game, in metres. */
+	WPROPERTY()
+	FVector Velocity = FVector(0.0);
+
+protected:
+	void Tick(double DeltaSeconds) override;
 };
 
 /** A second, unrelated component class. */
