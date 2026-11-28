@@ -1,7 +1,7 @@
-#include "Assets/AssetManager.h"
 #include "Assets/EditedAssets.h"
 #include "Assets/TestAssets.h"
 #include "Assets/TestEditedAssets.h"
+#include "Commands/CommandResult.h"
 #include "Core/FileHelper.h"
 #include "Editor.h"
 #include "History/UndoHistory.h"
