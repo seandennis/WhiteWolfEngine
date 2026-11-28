@@ -46,25 +46,33 @@ namespace
 	/**
 	 * Returns the suggested folder as the content directory spells it: where the file system does not tell capitals
 	 * apart, a folder of the same name in other capitals is that folder, and a material is loaded only under the name
-	 * that its directory gives it.
+	 * that its directory gives it. A folder of another name is never suggested, though it be a link to that one.
 	 */
 	std::string FindSuggestedFolder(const FEditor& Editor)
 	{
 		const std::filesystem::path Suggested = Editor.ResolveFilePath(FFileHelper::PathFromUtf8(SuggestedFolder));
+		std::string OtherSpelling;
 		std::error_code ErrorCode;
 		for (std::filesystem::directory_iterator Entry(Suggested.parent_path(), ErrorCode);
 			 !ErrorCode && Entry != std::filesystem::directory_iterator();
 			 Entry.increment(ErrorCode))
 		{
-			std::error_code EntryError;
-			if (std::filesystem::equivalent(Entry->path(), Suggested, EntryError))
+			const std::string Name = FFileHelper::PathToUtf8(Entry->path().filename());
+			if (Name == SuggestedFolder)
 			{
-				return FFileHelper::PathToUtf8(Entry->path().filename());
+				return Name;
+			}
+			std::error_code EntryError;
+			const bool bIsOtherSpelling = OtherSpelling.empty() &&
+				FFileHelper::IsSameNameIgnoringCase(Name, SuggestedFolder) &&
+				std::filesystem::equivalent(Entry->path(), Suggested, EntryError);
+			if (bIsOtherSpelling)
+			{
+				OtherSpelling = Name;
 			}
 		}
-		return std::string(SuggestedFolder);
+		return OtherSpelling.empty() ? std::string(SuggestedFolder) : OtherSpelling;
 	}
-
 	/**
 	 * Returns true if a material can be made under a name: no file has it, and no material that is loaded has it or
 	 * the same name in other capitals, as one that is in use although its file is gone.

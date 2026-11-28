@@ -1,5 +1,7 @@
 #include "Assets/TestAssets.h"
+#include "Commands/CommandResult.h"
 #include "Core/FileHelper.h"
+#include "Json/JsonValue.h"
 #include "Logging/LogMessage.h"
 #include "Logging/LogVerbosity.h"
 #include "TestSupport/ScopedTempDirectory.h"
@@ -95,6 +97,31 @@ TEST_SUITE("FNewMaterialDialog")
 
 		CHECK_FALSE(Test.HasItem("NewMaterial/Path"));
 		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("The window does not suggest a folder of another name that leads to the folder of materials")
+	{
+		FEditorUiTest Test;
+		const FScopedTempDirectory Directory;
+		const std::filesystem::path Content = CreateTestProject(Test.Editor, Directory.GetPath());
+		std::filesystem::create_directories(Content / "Materials");
+		// A link whose name comes first in the list of the content directory, to the folder of materials.
+		std::error_code ErrorCode;
+		std::filesystem::create_directory_symlink(Content / "Materials", Content / "Library", ErrorCode);
+		if (ErrorCode)
+		{
+			// Windows lets only some users make links.
+			MESSAGE("No link could be made here, so there is nothing to test: ", ErrorCode.message());
+			return;
+		}
+
+		OpenNewMaterialWindow(Test);
+		Test.PressKey(EKey::Enter);
+
+		CHECK_FALSE(Test.HasItem("NewMaterial/Path"));
+		const FCommandResult Listed = Test.Editor.ExecuteCommand("Asset.List", FJsonValue());
+		REQUIRE(Listed.HasSucceeded());
+		CHECK(WriteTestJson(Listed.GetValue()) == R"(["Engine/Shapes","Materials/NewMaterial.wwmaterial"])");
 	}
 
 	TEST_CASE("The window does not suggest the name of a material that is in use although its file is gone")
