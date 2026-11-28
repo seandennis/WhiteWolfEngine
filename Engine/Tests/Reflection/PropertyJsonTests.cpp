@@ -4,7 +4,6 @@
 #include "Object/Class.h"
 #include "Object/ObjectGlobals.h"
 #include "Object/TestObjects.h"
-#include "Reflection/ArrayProperty.h"
 #include "Reflection/TestReflectionObjects.h"
 
 #include <doctest/doctest.h>
@@ -268,21 +267,5 @@ TEST_SUITE("FProperty JSON")
 		CHECK(Error == "element 2: there is no object 5");
 		REQUIRE(Object->StrongArray.size() == 1);
 		CHECK(Object->StrongArray[0].Get() == Object);
-	}
-
-	TEST_CASE("SetNum resizes an array through its property")
-	{
-		const FScopedObjectTest ObjectTest;
-		WTestValueObject* const Object = NewObject<WTestValueObject>();
-		Object->Numbers = {1, 2, 3};
-		const FArrayProperty* const ArrayProperty = dynamic_cast<const FArrayProperty*>(&FindValueProperty("Numbers"));
-		REQUIRE(ArrayProperty != nullptr);
-
-		ArrayProperty->SetNum(&Object->Numbers, 5);
-		CHECK(Object->Numbers == std::vector<int32>{1, 2, 3, 0, 0});
-
-		ArrayProperty->SetNum(&Object->Numbers, 1);
-		CHECK(Object->Numbers == std::vector<int32>{1});
-		CHECK(ArrayProperty->GetNum(&Object->Numbers) == 1);
 	}
 }

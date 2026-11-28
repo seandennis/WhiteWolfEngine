@@ -32,12 +32,6 @@ public:
 	/** Returns the number of elements in the array at Value. */
 	virtual int32 GetNum(const void* Value) const = 0;
 
-	/**
-	 * Resizes the array at Value to Num elements, which must not be negative. Elements that are added are
-	 * value-initialized; elements beyond Num are removed.
-	 */
-	virtual void SetNum(void* Value, int32 Num) const = 0;
-
 	/** Returns the address of the element at Index in the array at Value. Index must be in range. */
 	virtual void* GetElementPtr(void* Value, int32 Index) const = 0;
 	virtual const void* GetElementPtr(const void* Value, int32 Index) const = 0;
@@ -80,12 +74,6 @@ public:
 	int32 GetNum(const void* Value) const override
 	{
 		return static_cast<int32>(static_cast<const std::vector<ElementType>*>(Value)->size());
-	}
-
-	void SetNum(void* Value, int32 Num) const override
-	{
-		WW_CHECKF(Num >= 0, "An array cannot have {} elements", Num);
-		static_cast<std::vector<ElementType>*>(Value)->resize(static_cast<std::size_t>(Num));
 	}
 
 	void* GetElementPtr(void* Value, int32 Index) const override
