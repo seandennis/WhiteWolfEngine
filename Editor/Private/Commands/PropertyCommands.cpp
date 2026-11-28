@@ -9,6 +9,7 @@
 #include "Json/JsonValue.h"
 #include "Object/Class.h"
 #include "Object/Object.h"
+#include "Reflection/ObjectProperties.h"
 #include "Reflection/Property.h"
 
 #include <format>
@@ -28,16 +29,10 @@ namespace
 		}
 
 		FScenePropertyContext Context(Editor.GetScene());
-		FJsonValue PropertyValues = FJsonValue::MakeObject();
-		for (const FProperty* const Property : FSavedProperties::GetAll(*Object->GetClass()))
-		{
-			PropertyValues.SetMember(Property->GetName(), Property->ExportJson(Property->GetValuePtr(Object), Context));
-		}
-
 		FJsonValue Value = FJsonValue::MakeObject();
 		Value.SetMember("Id", ObjectId);
 		Value.SetMember("Class", Object->GetClass()->GetName());
-		Value.SetMember("Properties", std::move(PropertyValues));
+		Value.SetMember("Properties", FObjectProperties::Export(*Object, Context));
 		return FCommandResult::Success(std::move(Value));
 	}
 

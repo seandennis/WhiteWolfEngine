@@ -8,6 +8,7 @@
 #include "Json/JsonWriter.h"
 #include "Object/Class.h"
 #include "Object/ObjectGlobals.h"
+#include "Reflection/ObjectProperties.h"
 #include "Reflection/Property.h"
 #include "Reflection/PropertyJsonContext.h"
 #include "Scene/Component.h"
@@ -19,8 +20,7 @@
 #include <cstddef>
 #include <format>
 #include <initializer_list>
-#include <memory>
-#include <ranges>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -29,28 +29,8 @@ namespace
 {
 	constexpr std::string_view FormatName = "WhiteWolfScene";
 
-	/** Returns the properties of Class that are saved with an object: base classes first, in declaration order. */
-	std::vector<const FProperty*> GetSavedProperties(const WClass& Class)
-	{
-		std::vector<const WClass*> Hierarchy;
-		for (const WClass* Current = &Class; Current != nullptr; Current = Current->GetSuperClass())
-		{
-			Hierarchy.push_back(Current);
-		}
-
-		std::vector<const FProperty*> Properties;
-		for (const WClass* const Current : Hierarchy | std::views::reverse)
-		{
-			for (const std::unique_ptr<FProperty>& Property : Current->GetOwnProperties())
-			{
-				if (!Property->HasAnyFlags(EPropertyFlags::Transient))
-				{
-					Properties.push_back(Property.get());
-				}
-			}
-		}
-		return Properties;
-	}
+	/** What a scene's objects are saved with, as the sentence about a property that is not saved says it. */
+	constexpr std::string_view SavedWith = "a scene";
 }
 
 /** Writes one scene. It is also the context through which the scene's properties write their object references. */
@@ -86,7 +66,7 @@ private:
 		CurrentOwner = std::move(OwnerDescription);
 
 		FJsonValue Json = FJsonValue::MakeObject();
-		for (const FProperty* const Property : GetSavedProperties(*Object.GetClass()))
+		for (const FProperty* const Property : FObjectProperties::GetSaved(*Object.GetClass()))
 		{
 			CurrentProperty = Property->GetName();
 			Json.SetMember(Property->GetName(), Property->ExportJson(Property->GetValuePtr(&Object), *this));
@@ -607,28 +587,11 @@ private:
 			return;
 		}
 
-		for (const FJsonValue::FMember& Member : Properties->GetMembers())
+		std::vector<std::string> Problems;
+		FObjectProperties::Import(Object, *Properties, *this, SavedWith, Problems);
+		for (const std::string& Problem : Problems)
 		{
-			const FProperty* const Property = Object.GetClass()->FindProperty(Member.first);
-			if (Property == nullptr)
-			{
-				AddWarning(std::format(
-					"{}: there is no property named \"{}\"; the value was ignored", Description, Member.first));
-				continue;
-			}
-			if (Property->HasAnyFlags(EPropertyFlags::Transient))
-			{
-				AddWarning(std::format("{}: the property \"{}\" is not saved with a scene; the value was ignored",
-					Description,
-					Member.first));
-				continue;
-			}
-
-			std::string Error;
-			if (!Property->ImportJson(Property->GetValuePtr(&Object), Member.second, *this, Error))
-			{
-				AddWarning(std::format("{}: property \"{}\": {}", Description, Member.first, Error));
-			}
+			AddWarning(std::format("{}: {}", Description, Problem));
 		}
 	}
 
@@ -787,7 +750,7 @@ private:
 	/** Gives Copy the value of every saved property of Original, which is of the same class. */
 	void CopyProperties(const WObject& Original, WObject& Copy)
 	{
-		for (const FProperty* const Property : GetSavedProperties(*Original.GetClass()))
+		for (const FProperty* const Property : FObjectProperties::GetSaved(*Original.GetClass()))
 		{
 			References.clear();
 			const FJsonValue Value = Property->ExportJson(Property->GetValuePtr(&Original), *this);

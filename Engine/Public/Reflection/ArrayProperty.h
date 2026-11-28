@@ -2,10 +2,13 @@
 
 #include "CoreMinimal.h"
 
+#include "Json/JsonValue.h"
 #include "Reflection/Property.h"
 
 #include <cstddef>
+#include <format>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -14,7 +17,8 @@
  *
  * This base class gives type-independent access to the array; TArrayProperty implements it for a concrete element
  * type. Each array property owns an element property that describes one element. In JSON the value is an array of
- * the elements.
+ * the elements. An array is read whole or not at all: if one of its elements cannot be read, the array keeps the
+ * elements it had.
  */
 class ENGINE_API FArrayProperty : public FProperty
 {
@@ -47,6 +51,17 @@ public:
 
 protected:
 	FArrayProperty(std::string InName, FValueAccessor InAccessor, std::unique_ptr<FProperty> InElementProperty);
+
+	/**
+	 * Reads the elements of a JSON array into an array of the property's type and, if every one of them could be
+	 * read, gives the array at Value those elements. One that cannot be read leaves the array at Value as it was.
+	 *
+	 * @param OutError Receives "element <index>: " and why the element could not be read.
+	 */
+	virtual bool ImportElements(void* Value,
+		const FJsonValue::FArray& Elements,
+		IPropertyJsonContext& Context,
+		std::string& OutError) const = 0;
 
 private:
 	std::unique_ptr<FProperty> ElementProperty;
@@ -85,6 +100,29 @@ public:
 		const std::vector<ElementType>& Array = *static_cast<const std::vector<ElementType>*>(Value);
 		CheckIndex(Index, Array.size());
 		return &Array[static_cast<std::size_t>(Index)];
+	}
+
+protected:
+	bool ImportElements(void* Value,
+		const FJsonValue::FArray& Elements,
+		IPropertyJsonContext& Context,
+		std::string& OutError) const override
+	{
+		std::vector<ElementType> NewArray(Elements.size());
+		for (std::size_t Index = 0; Index < Elements.size(); ++Index)
+		{
+			std::string ElementError;
+			if (!GetElementProperty().ImportJson(&NewArray[Index], Elements[Index], Context, ElementError))
+			{
+				OutError = std::format("element {}: {}", Index, ElementError);
+				return false;
+			}
+		}
+
+		// Copied and not moved: storing an object reference has to tell the garbage collector, and a moved
+		// vector would hand over its references without storing any.
+		*static_cast<std::vector<ElementType>*>(Value) = NewArray;
+		return true;
 	}
 
 private:

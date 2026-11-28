@@ -3,15 +3,14 @@
 #include "CoreMinimal.h"
 
 #include <string>
-#include <vector>
 
 class FProperty;
-class WClass;
 class WObject;
 
 /**
- * The properties that the editor reads and changes: those that are saved with a scene, which are the ones the
- * commands Object.GetProperty and Object.SetProperty work on and the ones the Details panel shows.
+ * Finds a property that the editor reads and changes by its name, with the sentence that says why there is none. The
+ * properties are those that are saved (FObjectProperties::GetSaved), which are the ones the commands
+ * Object.GetProperty and Object.SetProperty work on and the ones the Details panel shows.
  *
  * A Transient property holds what an object works out for itself, such as an entity's place in the hierarchy, and
  * changing one behind the object's back would break it; the hierarchy has commands of its own.
@@ -19,9 +18,6 @@ class WObject;
 class FSavedProperties
 {
 public:
-	/** Returns the saved properties of a class, those of its base classes first, each in declaration order. */
-	static std::vector<const FProperty*> GetAll(const WClass& Class);
-
 	/**
 	 * Returns the saved property of that name of Object's class.
 	 *

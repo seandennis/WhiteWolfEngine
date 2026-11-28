@@ -155,6 +155,17 @@ public:
 	std::string Describe() const override;
 };
 
+/** Has a property of its own beside those of its base class. */
+WCLASS()
+class WTestExtendedValueObject : public WTestValueObject
+{
+	WW_DECLARE_CLASS(WTestExtendedValueObject, WTestValueObject)
+
+public:
+	WPROPERTY()
+	int32 ExtraValue = 7;
+};
+
 /**
  * Identifies objects by their position in a list, for tests that convert object references to and from JSON.
  * An object that is not in the list cannot be referred to.

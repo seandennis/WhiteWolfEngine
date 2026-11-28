@@ -1,9 +1,9 @@
 #include "Ui/PropertyDefaults.h"
 
-#include "Commands/SavedProperties.h"
 #include "Commands/ScenePropertyContext.h"
 #include "Object/Class.h"
 #include "Object/ObjectGlobals.h"
+#include "Reflection/ObjectProperties.h"
 #include "Reflection/Property.h"
 
 #include <utility>
@@ -19,7 +19,7 @@ const FJsonValue* FPropertyDefaults::Find(WClass& Class, const FProperty& Proper
 			// The object belongs to nothing: no entity, no scene. It is read here and then is garbage.
 			const WObject* const NewlyCreated = NewObject(&Class);
 			FScenePropertyContext Context(Scene);
-			for (const FProperty* const Saved : FSavedProperties::GetAll(Class))
+			for (const FProperty* const Saved : FObjectProperties::GetSaved(Class))
 			{
 				Values.emplace(Saved, Saved->ExportJson(Saved->GetValuePtr(NewlyCreated), Context));
 			}

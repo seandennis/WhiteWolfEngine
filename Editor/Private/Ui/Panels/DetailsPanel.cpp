@@ -1,12 +1,12 @@
 #include "Ui/Panels/DetailsPanel.h"
 
 #include "Commands/ComponentClasses.h"
-#include "Commands/SavedProperties.h"
 #include "Editor.h"
 #include "Math/Transform.h"
 #include "Object/Class.h"
 #include "Object/ObjectGlobals.h"
 #include "Object/ObjectPtr.h"
+#include "Reflection/ObjectProperties.h"
 #include "Reflection/Property.h"
 #include "Scene/Component.h"
 #include "Scene/Entity.h"
@@ -74,7 +74,7 @@ namespace
 	{
 		FShownProperties Shown;
 		const bool bComponentIsSearchedFor = FUiText::ContainsIgnoringCase(Label, SearchText);
-		for (const FProperty* const Property : FSavedProperties::GetAll(*Component.GetClass()))
+		for (const FProperty* const Property : FObjectProperties::GetSaved(*Component.GetClass()))
 		{
 			const std::string_view Category = Property->GetCategory();
 			const bool bIsSearchedFor = bComponentIsSearchedFor ||

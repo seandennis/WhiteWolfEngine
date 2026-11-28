@@ -25,7 +25,7 @@ public:
 	 *
 	 * @param Class The class of the object that is shown, which may give a property of a base class a value of its
 	 * own.
-	 * @param Property A saved property of that class (FSavedProperties).
+	 * @param Property A saved property of that class (FObjectProperties::GetSaved).
 	 * @param Scene The scene being edited, for writing down a reference that a new object might hold.
 	 * @return The value, or null if no object of the class can be created.
 	 */

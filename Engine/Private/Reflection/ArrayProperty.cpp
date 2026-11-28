@@ -67,18 +67,5 @@ bool FArrayProperty::ImportJson(
 		return false;
 	}
 
-	const int32 Num = static_cast<int32>(Elements.size());
-	SetNum(Value, Num);
-	for (int32 Index = 0; Index < Num; ++Index)
-	{
-		std::string ElementError;
-		const FJsonValue& Element = Elements[static_cast<std::size_t>(Index)];
-		if (!ElementProperty->ImportJson(GetElementPtr(Value, Index), Element, Context, ElementError))
-		{
-			OutError = std::format("element {}: {}", Index, ElementError);
-			return false;
-		}
-	}
-
-	return true;
+	return ImportElements(Value, Elements, Context, OutError);
 }

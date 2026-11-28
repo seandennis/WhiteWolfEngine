@@ -89,8 +89,7 @@ public:
 	 *
 	 * @param Context Finds the objects that references refer to.
 	 * @param OutError Receives the reason on failure, for example "expected a number but found a string".
-	 * @return True if the value was set. On failure the value is unchanged, except that an array may have been
-	 * resized and filled up to the element that failed.
+	 * @return True if the value was set. On failure the value is unchanged, an array's included.
 	 */
 	virtual bool ImportJson(
 		void* Value, const FJsonValue& Json, IPropertyJsonContext& Context, std::string& OutError) const = 0;

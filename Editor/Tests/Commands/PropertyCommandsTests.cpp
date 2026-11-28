@@ -286,6 +286,7 @@ TEST_SUITE("Property commands")
 	{
 		FPropertyCommandTest Test;
 		Test.Component->TargetEntity = Test.Player;
+		Test.Component->Scores = {7, 8};
 		std::string PropertyName;
 		std::string ValueText;
 
@@ -319,6 +320,11 @@ TEST_SUITE("Property commands")
 			PropertyName = "TargetEntity";
 			ValueText = "\"Target\"";
 		}
+		SUBCASE("A list with one element that cannot be read, after others that can")
+		{
+			PropertyName = "Scores";
+			ValueText = R"([1, 2, "three"])";
+		}
 
 		const FCommandResult Result = Test.SetComponentProperty(PropertyName, ValueText);
 
@@ -331,6 +337,7 @@ TEST_SUITE("Property commands")
 		CHECK(Test.Component->Health == 100);
 		CHECK(Test.Component->Label == "Unnamed");
 		CHECK(Test.Component->TargetEntity.Get() == Test.Player);
+		CHECK(Test.Component->Scores == std::vector<int32>{7, 8});
 	}
 
 	TEST_CASE("Properties that are not saved with the scene are neither read nor changed")

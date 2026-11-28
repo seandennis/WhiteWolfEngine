@@ -240,11 +240,14 @@ TEST_SUITE("FProperty JSON")
 		CHECK(Object->Numbers == std::vector<int32>{4});
 	}
 
-	TEST_CASE("An array reports which element could not be imported")
+	TEST_CASE("An array reports which element could not be imported, and keeps the elements it had")
 	{
 		const FScopedObjectTest ObjectTest;
 		WTestValueObject* const Object = NewObject<WTestValueObject>();
+		Object->Numbers = {7, 8};
+		Object->StrongArray = {Object};
 		FTestPropertyJsonContext Context;
+		Context.KnownObjects = {Object};
 		std::string Error;
 
 		CHECK_FALSE(Import(*Object,
@@ -254,6 +257,17 @@ TEST_SUITE("FProperty JSON")
 			Error));
 
 		CHECK(Error == "element 1: expected a number but found a string");
+		CHECK(Object->Numbers == std::vector<int32>{7, 8});
+
+		// A reference that cannot be found, after one that can: the array is read whole or not at all.
+		CHECK_FALSE(Import(*Object,
+			"StrongArray",
+			FJsonValue(FJsonValue::FArray{FJsonValue(), FJsonValue(0), FJsonValue(5)}),
+			Context,
+			Error));
+		CHECK(Error == "element 2: there is no object 5");
+		REQUIRE(Object->StrongArray.size() == 1);
+		CHECK(Object->StrongArray[0].Get() == Object);
 	}
 
 	TEST_CASE("SetNum resizes an array through its property")
