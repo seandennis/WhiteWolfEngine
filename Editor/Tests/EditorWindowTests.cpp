@@ -300,6 +300,27 @@ TEST_SUITE("FEditorWindow")
 		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 
+	TEST_CASE("The window lets the time of each frame pass for a game that plays, unless it is paused")
+	{
+		FEditorWindowTest Test;
+		Test.Editor.StartPlay();
+
+		Test.RunFrames(3);
+		CHECK(Test.Editor.GetScene().GetPlayedFrameCount() == 3);
+
+		// A frame of a second plays the five frames that are played at once, and no more.
+		FPlatform::PollEvents();
+		std::string Error;
+		REQUIRE(Test.Window->RunFrame(1.0, Error));
+		CHECK(Test.Editor.GetScene().GetPlayedFrameCount() == 8);
+
+		Test.Editor.PausePlay();
+		Test.RunFrames(3);
+		CHECK(Test.Editor.GetScene().GetPlayedFrameCount() == 8);
+		Test.Editor.StopPlay();
+		CHECK(CountLoggedErrors(Test.Capture) == 0);
+	}
+
 	TEST_CASE("A window that was asked to close says so")
 	{
 		FEditorWindowTest Test;

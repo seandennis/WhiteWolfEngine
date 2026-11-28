@@ -160,17 +160,18 @@ void FPlayCommands::Register(FCommandRegistry& Registry)
 
 	Registry.Register(
 		{"Play.Pause",
-			"Pauses the game, as Play.GetState then says; Play.Step still plays frames. In an agent's session only "
-			"Play.Step plays frames, so only the state changes. Returns the game's state; pausing a paused game "
-			"changes nothing.",
+			"Pauses the game: in the editor's window, time no longer passes for it; Play.Step still plays frames. In "
+			"an agent's session only Play.Step plays frames, so only the state changes. Returns the game's state; "
+			"pausing a paused game changes nothing.",
 			{},
 			ECommandEffect::LeavesScene},
 		PausePlay);
 
 	Registry.Register(
 		{"Play.Resume",
-			"Lets a paused game go on. In an agent's session only Play.Step plays frames, so only the state changes. "
-			"Returns the game's state; resuming a game that is not paused changes nothing.",
+			"Lets a paused game go on with the time that passes in the editor's window. In an agent's session only "
+			"Play.Step plays frames, so only the state changes. Returns the game's state; resuming a game that is not "
+			"paused changes nothing.",
 			{},
 			ECommandEffect::LeavesScene},
 		ResumePlay);

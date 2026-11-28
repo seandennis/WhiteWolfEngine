@@ -238,6 +238,14 @@ void FEditor::ResumePlay()
 	PlaySession->Resume();
 }
 
+void FEditor::AdvancePlay(double ElapsedSeconds)
+{
+	if (IsPlaying())
+	{
+		PlaySession->Advance(ElapsedSeconds);
+	}
+}
+
 void FEditor::StepPlay(int32 FrameCount)
 {
 	WW_CHECKF(IsPlaying(), "A game was played a frame at a time in the editor while none was playing");

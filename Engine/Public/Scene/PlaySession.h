@@ -11,8 +11,8 @@
  * exported plays in the scene it starts with.
  *
  * The scene is the game's: the session keeps it alive, in the root set, while the game goes on, and destroys it at
- * its end, after its components have ended play. Pausing keeps the game from going on by itself; Step plays frames
- * whether it is paused or not.
+ * its end, after its components have ended play. The game goes on by itself as real time passes (Advance), unless it
+ * is paused; Step plays frames whether it is paused or not.
  *
  * Create and destroy a session on the main thread, and never from inside a component's BeginPlay, Tick or EndPlay.
  */
@@ -48,10 +48,13 @@ public:
 		return bIsPaused;
 	}
 
-	/** Pauses the game. Does nothing if it is paused already. */
+	/** Pauses the game: real time no longer passes for it (Advance). Does nothing if it is paused already. */
 	ENGINE_API void Pause();
 
-	/** Lets a paused game go on. Does nothing if it is not paused. */
+	/**
+	 * Lets a paused game go on, without the part of a frame that was due when it was paused. Does nothing if it is
+	 * not paused.
+	 */
 	ENGINE_API void Resume();
 
 	/**
@@ -61,9 +64,29 @@ public:
 	 */
 	ENGINE_API void Step(int32 FrameCount);
 
+	/**
+	 * The most frames that Advance plays at once. What is due beyond them is forgotten, so that a machine that
+	 * cannot keep up plays the game slower instead of falling ever further behind.
+	 */
+	static constexpr int32 MaxFramesPerAdvance = 5;
+
+	/**
+	 * Lets real time pass for the game: plays the frames that the time makes due, with what earlier calls left that
+	 * was less than a frame, but at most MaxFramesPerAdvance, and forgets what is due beyond them. While the game is
+	 * paused nothing is played and no time is kept, and time that is not a number of seconds above zero passes for
+	 * nothing.
+	 *
+	 * @param ElapsedSeconds The real time since the last call.
+	 * @return How many frames were played.
+	 */
+	ENGINE_API int32 Advance(double ElapsedSeconds);
+
 private:
 	/** The scene of the game. Weak, because the root set is what keeps it alive; this is how to find it. */
 	TWeakObjectPtr<WScene> Scene;
 
 	bool bIsPaused = false;
+
+	/** The part of a frame that real time has made due and Advance has not played: less than one between calls. */
+	double PendingFrames = 0.0;
 };

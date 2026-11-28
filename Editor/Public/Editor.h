@@ -145,13 +145,23 @@ public:
 	EDITOR_API void StartPlay();
 
 	/**
-	 * Pauses the game: it does not go on by itself, only a frame at a time (StepPlay). A fatal error while no game
-	 * exists.
+	 * Pauses the game: real time no longer passes for it (AdvancePlay), and it goes on only a frame at a time
+	 * (StepPlay). A fatal error while no game exists.
 	 */
 	EDITOR_API void PausePlay();
 
-	/** Lets a paused game go on by itself. A fatal error while no game exists. */
+	/** Lets a paused game go on as real time passes. A fatal error while no game exists. */
 	EDITOR_API void ResumePlay();
+
+	/**
+	 * Lets real time pass for a game that plays: plays the frames that the time makes due, at most five at once
+	 * (FPlaySession::Advance). Does nothing without a game or while it is paused. The editor's window calls it in
+	 * every frame, and nothing else does, so that in an agent's session and in a test a game goes on only by
+	 * StepPlay.
+	 *
+	 * @param ElapsedSeconds The real time since the last call.
+	 */
+	EDITOR_API void AdvancePlay(double ElapsedSeconds);
 
 	/**
 	 * Plays frames of the game now, whether it is paused or not, and leaves it paused or not as it was.

@@ -10,6 +10,7 @@
 
 #include <doctest/doctest.h>
 
+#include <limits>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -133,6 +134,93 @@ TEST_SUITE("FPlaySession")
 		}
 
 		CHECK(FTestComponentStats::Get().Events.empty());
+	}
+
+	TEST_CASE("Real time of exactly a frame plays exactly a frame, for an hour of the game")
+	{
+		const FScopedSceneTest SceneTest;
+		FPlaySession Session(*NewObject<WScene>());
+
+		int32 PlayedFrames = 0;
+		for (int32 Call = 0; Call < 216000; ++Call)
+		{
+			PlayedFrames += Session.Advance(WScene::DefaultFrameSeconds);
+		}
+
+		CHECK(PlayedFrames == 216000);
+		CHECK(Session.GetScene().GetPlayedFrameCount() == 216000);
+	}
+
+	TEST_CASE("Real time that is not a whole number of frames is kept until it makes one")
+	{
+		const FScopedSceneTest SceneTest;
+		FPlaySession Session(*NewObject<WScene>(), 0.25);
+
+		CHECK(Session.Advance(0.125) == 0);
+		CHECK(Session.Advance(0.125) == 1);
+		CHECK(Session.Advance(0.125) == 0);
+		CHECK(Session.Advance(0.125) == 1);
+		CHECK(Session.Advance(0.625) == 2);
+		CHECK(Session.Advance(0.625) == 3);
+		CHECK(Session.Advance(0.625) == 2);
+		CHECK(Session.Advance(0.625) == 3);
+		CHECK(Session.GetScene().GetPlayedFrameCount() == 12);
+	}
+
+	TEST_CASE("Advance plays at most five frames at once, and forgets what is due beyond them")
+	{
+		const FScopedSceneTest SceneTest;
+		FPlaySession Session(*NewObject<WScene>(), 0.25);
+
+		// Five frames and a half: the five are played as they are due, and the half is kept.
+		CHECK(Session.Advance(1.375) == 5);
+		CHECK(Session.Advance(0.125) == 1);
+		// Six are one too many: five are played, and nothing of the time is owed afterwards.
+		CHECK(Session.Advance(1.5) == FPlaySession::MaxFramesPerAdvance);
+		CHECK(Session.Advance(0.125) == 0);
+		CHECK(Session.Advance(0.125) == 1);
+		CHECK(Session.GetScene().GetPlayedFrameCount() == 12);
+	}
+
+	TEST_CASE("Time that is not a number of seconds above zero passes for nothing")
+	{
+		const FScopedSceneTest SceneTest;
+		FPlaySession Session(*NewObject<WScene>(), 0.25);
+		CHECK(Session.Advance(0.125) == 0);
+
+		for (const double Time : {0.0,
+				 -0.25,
+				 std::numeric_limits<double>::quiet_NaN(),
+				 std::numeric_limits<double>::infinity(),
+				 -std::numeric_limits<double>::infinity()})
+		{
+			CAPTURE(Time);
+			CHECK(Session.Advance(Time) == 0);
+		}
+
+		// The half frame from before is still due, no more and no less.
+		CHECK(Session.Advance(0.125) == 1);
+		CHECK(Session.GetScene().GetPlayedFrameCount() == 1);
+	}
+
+	TEST_CASE("Nothing plays while the game is paused, and resuming forgets the part of a frame that was due")
+	{
+		const FScopedSceneTest SceneTest;
+		FPlaySession Session(*NewObject<WScene>(), 0.25);
+		CHECK(Session.Advance(0.125) == 0);
+
+		Session.Pause();
+		CHECK(Session.Advance(1.0) == 0);
+		CHECK(Session.GetScene().GetPlayedFrameCount() == 0);
+
+		Session.Resume();
+		CHECK(Session.Advance(0.125) == 0);
+		CHECK(Session.Advance(0.125) == 1);
+
+		// Resuming a game that is not paused keeps what is due.
+		CHECK(Session.Advance(0.125) == 0);
+		Session.Resume();
+		CHECK(Session.Advance(0.125) == 1);
 	}
 
 	TEST_CASE("Playing fewer than one frame is a fatal error")

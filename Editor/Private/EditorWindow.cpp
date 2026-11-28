@@ -90,6 +90,10 @@ FEditorWindow::~FEditorWindow() = default;
 
 bool FEditorWindow::RunFrame(double DeltaSeconds, std::string& OutError)
 {
+	// The game plays what is due before the user interface is laid out, so that what is shown and what the user acts
+	// on in this frame is the game as it is after it. A minimised window lets a game go on, as in Unreal.
+	Editor.AdvancePlay(DeltaSeconds);
+
 	if (!HasArea())
 	{
 		return true;

@@ -617,6 +617,31 @@ TEST_SUITE("FEditor play")
 		Editor.StopPlay();
 	}
 
+	TEST_CASE("AdvancePlay lets real time pass for a game that plays, and does nothing otherwise")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		const int64 MoverId = CreateMover(Editor, "Mover");
+
+		Editor.AdvancePlay(1.0);
+		CHECK(GetLocation(Editor, MoverId) == FVector(0.0));
+
+		Editor.StartPlay();
+		Editor.AdvancePlay(2.0 * WScene::DefaultFrameSeconds);
+		CHECK(Editor.GetScene().GetPlayedFrameCount() == 2);
+		CHECK(GetLocation(Editor, MoverId) == FVector(2.0, 0.0, 0.0));
+
+		Editor.PausePlay();
+		Editor.AdvancePlay(1.0);
+		CHECK(Editor.GetScene().GetPlayedFrameCount() == 2);
+
+		// A second of real time is more than the five frames that are played at once.
+		Editor.ResumePlay();
+		Editor.AdvancePlay(1.0);
+		CHECK(Editor.GetScene().GetPlayedFrameCount() == 7);
+		Editor.StopPlay();
+	}
+
 	TEST_CASE("A hundred frames give the same copy at once, as sixty and forty, and one at a time")
 	{
 		const FScopedEditorTest EditorTest;

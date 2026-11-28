@@ -57,10 +57,10 @@ public:
 	FEditorWindow& operator=(const FEditorWindow&) = delete;
 
 	/**
-	 * Draws one frame of the editor into the window: lays the user interface out for the window's size, with what
-	 * the window's keyboard and mouse did since the last frame, draws it and shows the picture. Call
-	 * FPlatform::PollEvents before it, once per frame. A window without an area, as when it is minimised, is
-	 * drawn nothing.
+	 * Runs one frame of the editor in the window: lets the frame's time pass for a game that plays
+	 * (FEditor::AdvancePlay), then lays the user interface out for the window's size, with what the window's keyboard
+	 * and mouse did since the last frame, draws it and shows the picture. Call FPlatform::PollEvents before it, once
+	 * per frame. A window without an area, as when it is minimised, is drawn nothing, and a game goes on all the same.
 	 *
 	 * @param DeltaSeconds The time since the last frame.
 	 * @param OutError Receives the reason on failure.

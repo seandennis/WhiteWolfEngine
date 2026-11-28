@@ -1,5 +1,7 @@
 #include "Scene/PlaySession.h"
 
+#include <cmath>
+
 FPlaySession::FPlaySession(WScene& InScene, double FrameSeconds)
 	: Scene(&InScene)
 {
@@ -32,7 +34,12 @@ void FPlaySession::Pause()
 
 void FPlaySession::Resume()
 {
-	bIsPaused = false;
+	if (bIsPaused)
+	{
+		// The part of a frame that was due when the game was paused is not owed to it afterwards.
+		bIsPaused = false;
+		PendingFrames = 0.0;
+	}
 }
 
 void FPlaySession::Step(int32 FrameCount)
@@ -44,4 +51,32 @@ void FPlaySession::Step(int32 FrameCount)
 	{
 		PlayedScene.StepFrame();
 	}
+}
+
+int32 FPlaySession::Advance(double ElapsedSeconds)
+{
+	const bool bIsTime = std::isfinite(ElapsedSeconds) && ElapsedSeconds > 0.0;
+	if (bIsPaused || !bIsTime)
+	{
+		return 0;
+	}
+
+	// Time is kept in frames, so that time that is exactly a frame long is exactly one frame, however long the game
+	// goes on: seconds that were added up would drift from the frames.
+	PendingFrames += ElapsedSeconds / GetScene().GetFrameSeconds();
+	const double DueFrames = std::floor(PendingFrames);
+	if (DueFrames > MaxFramesPerAdvance)
+	{
+		PendingFrames = 0.0;
+		Step(MaxFramesPerAdvance);
+		return MaxFramesPerAdvance;
+	}
+
+	PendingFrames -= DueFrames;
+	const int32 FrameCount = static_cast<int32>(DueFrames);
+	if (FrameCount > 0)
+	{
+		Step(FrameCount);
+	}
+	return FrameCount;
 }
