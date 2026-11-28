@@ -84,7 +84,9 @@ public:
 	 *
 	 * @param OutError Receives the reason on failure.
 	 * @return The asset, or null if the text is not an asset path, there is no content directory, the file does
-	 * not exist, is of a kind that cannot be loaded or cannot be read, or has no asset with the path's key.
+	 * not exist, is of a kind that cannot be loaded or cannot be read, or has no asset with the path's key; also for
+	 * a material file asked for under another spelling than its directory gives it (HasFileSystemSpelling), and for a
+	 * file asked for while it is itself being read, as by a material that names itself.
 	 */
 	ENGINE_API static WAsset* Load(std::string_view AssetPath, std::string& OutError);
 
@@ -163,12 +165,14 @@ public:
 	 * Windows "materials/red.wwmaterial" opens the file "Materials/Red.wwmaterial", which is not its spelling; on a
 	 * file system that tells capitals apart, a name that exists is always spelt as its directory spells it. A part
 	 * that does not exist ends the walk with true, so a file that is still to be made is asked about the folders that
-	 * it is to be in, and nothing is below a part that is a file.
+	 * it is to be in, and nothing is below a part that is a file. A part whose name ends in a period or a space is
+	 * never the spelling of anything: Windows keeps no such name, and makes and opens the name without them.
 	 *
 	 * @param File The file, relative to the content directory: an asset path without a key.
 	 * @param OutError Receives the reason if the answer is false: the first part that is there under another
-	 * spelling, or why that cannot be told (no content directory, text that is not the file of an asset path, a
-	 * folder that cannot be listed).
+	 * spelling, called a file or a folder as it is on disk, or whose name ends in a period or a space, or why that
+	 * cannot be told (no content directory, text that is not the file of an asset path, a folder that cannot be
+	 * listed).
 	 */
 	ENGINE_API static bool HasFileSystemSpelling(std::string_view File, std::string& OutError);
 

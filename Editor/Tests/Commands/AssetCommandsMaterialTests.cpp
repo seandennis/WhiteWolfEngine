@@ -223,6 +223,11 @@ TEST_SUITE("Asset commands for materials")
 			Expected = "The material was not created: the name of a material file ends in \".wwmaterial\", as in "
 					   "\"Materials/Brick.wwmaterial\", and \"Materials/Brick.png\" does not.";
 		}
+		SUBCASE("A folder whose name Windows does not keep")
+		{
+			Path = "New./Brick.wwmaterial";
+			Expected = "The material was not created: the name \"New.\" ends in a period, which Windows does not keep.";
+		}
 		SUBCASE("A file that is there")
 		{
 			Path = "Materials/Red.wwmaterial";

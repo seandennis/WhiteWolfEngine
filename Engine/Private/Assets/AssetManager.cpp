@@ -140,7 +140,7 @@ namespace
 	 * @param OutAssets Receives the assets that the file holds at once, each with its key. A picture holds none
 	 * until a texture is asked for.
 	 * @return False, with the reason in OutError, if the file is of no kind that holds assets, is not there or
-	 * cannot be read.
+	 * cannot be read, or is a material file asked for under another spelling than its directory gives it.
 	 */
 	bool ReadAssetFile(const std::string& File,
 		std::vector<std::pair<std::string, WAsset*>>& OutAssets,
@@ -411,7 +411,20 @@ bool FAssetManager::HasFileSystemSpelling(std::string_view File, std::string& Ou
 		const std::size_t Slash = FileText.find('/', PartStart);
 		const bool bIsLastPart = Slash == std::string_view::npos;
 		const std::size_t PartEnd = bIsLastPart ? FileText.size() : Slash;
-		const std::filesystem::path Part = FFileHelper::PathFromUtf8(FileText.substr(PartStart, PartEnd - PartStart));
+		const std::string_view PartText = FileText.substr(PartStart, PartEnd - PartStart);
+
+		// Windows keeps no name that ends in a period or a space: it makes and opens the name without them, which is
+		// another name, also where nothing of that name is there yet.
+		const bool bEndsInPeriod = PartText.ends_with('.');
+		if (bEndsInPeriod || PartText.ends_with(' '))
+		{
+			OutError = std::format("the name \"{}\" ends in a {}, which Windows does not keep",
+				PartText,
+				bEndsInPeriod ? "period" : "space");
+			return false;
+		}
+
+		const std::filesystem::path Part = FFileHelper::PathFromUtf8(PartText);
 		const std::filesystem::path PartPath = Folder / Part;
 
 		std::error_code ErrorCode;
@@ -442,9 +455,11 @@ bool FAssetManager::HasFileSystemSpelling(std::string_view File, std::string& Ou
 			// the file fails, with its own reason.
 			if (std::filesystem::exists(PartPath, ErrorCode))
 			{
+				// Called what it is on disk, which is not always what the path would have it be.
+				const bool bIsFolder = std::filesystem::is_directory(PartPath, ErrorCode);
 				OutError =
 					std::format("the content directory has no {} \"{}\", only one whose name is spelt differently",
-						bIsLastPart ? "file" : "folder",
+						bIsFolder ? "folder" : "file",
 						FileText.substr(0, PartEnd));
 				return false;
 			}

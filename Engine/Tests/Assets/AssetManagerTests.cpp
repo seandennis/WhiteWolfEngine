@@ -669,6 +669,57 @@ TEST_SUITE("FAssetManager")
 		}
 	}
 
+	TEST_CASE("A name that ends in a period or a space is the spelling of nothing, on every file system")
+	{
+		const FScopedContentDirectory Content;
+		Content.WriteMaterial("Materials/Red.wwmaterial");
+
+		struct FName
+		{
+			std::string File;
+			std::string Ending;
+			std::string Part;
+		};
+		const std::vector<FName> Names = {
+			{"Materials./Red.wwmaterial", "period", "Materials."},
+			{"Materials /Red.wwmaterial", "space", "Materials "},
+			{"Materials/Red.wwmaterial.", "period", "Red.wwmaterial."},
+			// A folder that is not there yet: Windows would make it under the name without the period.
+			{"New./Brick.wwmaterial", "period", "New."},
+		};
+		for (const FName& Name : Names)
+		{
+			CAPTURE(Name.File);
+			std::string Error;
+			CHECK_FALSE(FAssetManager::HasFileSystemSpelling(Name.File, Error));
+			CHECK(Error ==
+				std::format("the name \"{}\" ends in a {}, which Windows does not keep", Name.Part, Name.Ending));
+		}
+	}
+
+	TEST_CASE("A part that is there under other capitals is called a file or a folder as it is on disk")
+	{
+		const FScopedContentDirectory Content;
+		Content.WritePicture("Wood.png");
+		std::error_code ErrorCode;
+		const bool bIgnoresCapitals = std::filesystem::exists(Content.GetPath() / "WOOD.PNG", ErrorCode);
+		CAPTURE(bIgnoresCapitals);
+		std::string Error;
+
+		// Meant as a folder, and a file on disk.
+		const bool bHasSpelling = FAssetManager::HasFileSystemSpelling("wood.png/Brick.wwmaterial", Error);
+
+		if (bIgnoresCapitals)
+		{
+			CHECK_FALSE(bHasSpelling);
+			CHECK(Error == "the content directory has no file \"wood.png\", only one whose name is spelt differently");
+		}
+		else
+		{
+			CHECK(bHasSpelling);
+		}
+	}
+
 	TEST_CASE("The spelling of a file cannot be told without a content directory, nor of text that names no file")
 	{
 		std::string Error;
