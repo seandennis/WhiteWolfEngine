@@ -9,7 +9,8 @@
 /**
  * The states a document has been in, one after each change, so that changes can be undone and redone.
  *
- * A state is text that describes the whole document; for the editor, a scene written as JSON. The history does not
+ * A state is text that describes the whole document; for the editor, a scene written as JSON and the assets that it
+ * has changed. The history does not
  * know what the text means. It is told the state after every change (Record), and hands back the state to return to
  * (Undo, Redo); putting that state into effect is the caller's part. Because a state describes everything, whatever
  * changed between two states is undone, with no code for the particular change.

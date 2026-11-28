@@ -23,7 +23,9 @@
 #include "Scene/SceneSerializer.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -54,6 +56,9 @@ FEditor::FEditor()
 
 FEditor::~FEditor()
 {
+	// Changes that were not saved are given up, and what the editor kept is left to the collector.
+	EditedAssets.ReleaseAll();
+
 	// Destroy takes the scene out of the root set. A scene that something else destroyed already is no longer there.
 	if (WScene* const CurrentScene = Scene.Get())
 	{
@@ -120,7 +125,9 @@ void FEditor::SetScene(WScene& NewScene, std::filesystem::path NewScenePath)
 	}
 
 	ReplaceScene(NewScene);
-	History.Reset(WriteSceneState());
+	// What was done to the assets can no longer be undone either; what is not saved is still to be saved.
+	EditedAssets.BeginHistory();
+	History.Reset(WriteState());
 	// A step that was open was a step of the scene that is gone.
 	OpenStepName.reset();
 
@@ -135,6 +142,8 @@ void FEditor::SetScenePath(std::filesystem::path NewScenePath)
 
 void FEditor::SetProject(FProject NewProject)
 {
+	// The assets that the editor keeps are of the content directory that is given up, and are given up with it.
+	EditedAssets.ReleaseAll();
 	FAssetManager::SetContentDirectory(NewProject.GetContentDirectory());
 	Project = std::move(NewProject);
 
@@ -304,7 +313,7 @@ std::optional<std::string> FEditor::Undo()
 	}
 
 	std::string StepName = History.GetUndoStepNames().front();
-	RestoreSceneState(History.Undo());
+	RestoreState(History.Undo());
 	return StepName;
 }
 
@@ -319,31 +328,47 @@ std::optional<std::string> FEditor::Redo()
 	}
 
 	std::string StepName = History.GetRedoStepNames().front();
-	RestoreSceneState(History.Redo());
+	RestoreState(History.Redo());
 	return StepName;
 }
 
-std::string FEditor::WriteSceneState() const
+std::string FEditor::WriteState() const
 {
-	return FJsonWriter::Write(FSceneSerializer::SaveToJson(GetScene()), EJsonFormat::Compact);
+	std::string State = FJsonWriter::Write(FSceneSerializer::SaveToJson(GetScene()), EJsonFormat::Compact);
+	const std::string Assets = EditedAssets.WriteState();
+	if (!Assets.empty())
+	{
+		State += '\n';
+		State += Assets;
+	}
+	return State;
 }
 
 void FEditor::RecordChanges(std::string_view StepName)
 {
-	History.Record(std::string(StepName), WriteSceneState());
+	History.Record(std::string(StepName), WriteState());
 }
 
-void FEditor::RestoreSceneState(const std::string& State)
+void FEditor::RestoreState(const std::string& State)
 {
+	const std::size_t LineBreak = State.find('\n');
+	const std::string_view SceneText = std::string_view(State).substr(0, LineBreak);
+	const std::string_view AssetText =
+		LineBreak == std::string::npos ? std::string_view() : std::string_view(State).substr(LineBreak + 1);
+
+	// The assets first: the scene that is loaded next finds them by their paths, as the objects that the editor keeps.
+	EditedAssets.RestoreState(AssetText);
+
 	std::string Error;
-	WScene* const Restored = FSceneSerializer::LoadFromText(State, Error);
-	// The state was written by WriteSceneState, so only a mistake in the engine can make it unreadable.
+	WScene* const Restored = FSceneSerializer::LoadFromText(SceneText, Error);
+	// The state was written by WriteState, so only a mistake in the engine can make it unreadable.
 	WW_CHECKF(Restored != nullptr, "A state of the undo history could not be loaded: {}", Error);
 	ReplaceScene(*Restored);
 
-	// The history's current state has to be what the scene now writes down as, or the next command would seem to
-	// have changed the scene. It is the same text unless something does not survive being saved and loaded exactly.
-	History.ReplaceCurrentState(WriteSceneState());
+	// The history's current state has to be what the scene and the assets now write down as, or the next command
+	// would seem to have changed them. It is the same text unless something does not survive being saved and loaded
+	// exactly, or an asset's value could not be put back.
+	History.ReplaceCurrentState(WriteState());
 }
 
 void FEditor::ReplaceScene(WScene& NewScene)

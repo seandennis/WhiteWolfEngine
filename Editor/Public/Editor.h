@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Assets/EditedAssets.h"
 #include "Commands/CommandRegistry.h"
 #include "Commands/CommandResult.h"
 #include "History/UndoHistory.h"
@@ -47,6 +48,11 @@ extern EDITOR_API FLogCategory LogEditor;
  * replace the scene object with one that was loaded from what was written down, so its entities and components are new
  * objects with the identifiers they had: refer to them by identifier, not by pointer, from one command to the next.
  *
+ * The editor also changes assets that it can save, material files, and keeps them while their changes are not saved
+ * or can be undone (FEditedAssets). What is written down after a command is the scene and the assets that differ from
+ * what they were, so that a change to a material is a step of the same history; Undo and Redo put an asset's values
+ * back on the object that every component which refers to it shares, and never write its file.
+ *
  * Create and destroy an editor on the main thread.
  */
 class FEditor
@@ -55,7 +61,7 @@ public:
 	/** The name of a new scene that was not given one. */
 	static constexpr std::string_view DefaultSceneName = "Untitled";
 
-	/** The name of a step of the history that is a change made to the scene without a command. */
+	/** The name of a step of the history that is a change made without a command, to the scene or to a kept asset. */
 	static constexpr std::string_view DirectChangeStepName = "Direct change";
 
 	/** Creates an editor with an empty scene and the editor's own commands. */
@@ -146,6 +152,17 @@ public:
 	const FUndoHistory& GetHistory() const
 	{
 		return History;
+	}
+
+	/** Returns the assets that the editor changes; FEditedAssets::SetProperty is the one way to change one. */
+	FEditedAssets& GetEditedAssets()
+	{
+		return EditedAssets;
+	}
+
+	const FEditedAssets& GetEditedAssets() const
+	{
+		return EditedAssets;
 	}
 
 	/** Returns the file the scene was opened from or last saved to. Empty for a scene that has no file yet. */
@@ -290,14 +307,18 @@ public:
 	EDITOR_API std::string MakeProjectPath(const std::filesystem::path& File) const;
 
 private:
-	/** Returns the scene written down: everything that is saved with it, as the text of the history's states. */
-	std::string WriteSceneState() const;
+	/**
+	 * Returns what the history keeps of a state: the scene written down, everything that is saved with it, as one
+	 * line of compact JSON, and, if any kept asset differs from what it was when the history began, a line break
+	 * and those assets (FEditedAssets::WriteState). Compact JSON has no line break, so the first one divides the two.
+	 */
+	std::string WriteState() const;
 
-	/** Makes what has changed in the scene since the last step a step of the history. */
+	/** Makes what has changed in the scene and in the kept assets since the last step a step of the history. */
 	void RecordChanges(std::string_view StepName);
 
-	/** Replaces the scene with the one that a state of the history describes. */
-	void RestoreSceneState(const std::string& State);
+	/** Puts the kept assets back as a state of the history describes them, and replaces the scene with its scene. */
+	void RestoreState(const std::string& State);
 
 	/** Makes NewScene the scene being edited and destroys the one it replaces. */
 	void ReplaceScene(WScene& NewScene);
@@ -311,6 +332,9 @@ private:
 	FCommandRegistry Commands;
 
 	FUndoHistory History;
+
+	/** The assets that the editor has changed, and keeps while the history or their unsaved changes need them. */
+	FEditedAssets EditedAssets;
 
 	/** The name of the step that BeginStep began and nothing has ended yet. */
 	std::optional<std::string> OpenStepName;
