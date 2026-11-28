@@ -288,6 +288,40 @@ WAsset* FAssetManager::FindLoaded(std::string_view AssetPath)
 	return Package != nullptr ? Package->FindAsset(Path->Key) : nullptr;
 }
 
+WAsset* FAssetManager::FindLoadedIgnoringCase(std::string_view AssetPath)
+{
+	if (WAsset* const Asset = FindLoaded(AssetPath))
+	{
+		return Asset;
+	}
+	std::string Error;
+	const std::optional<FAssetPath> Path = FAssetPath::Parse(AssetPath, Error);
+	if (!Path.has_value())
+	{
+		return nullptr;
+	}
+
+	const auto IsSameIgnoringCase = [](std::string_view First, std::string_view Second)
+	{
+		return std::ranges::equal(First,
+			Second,
+			[](unsigned char FirstCharacter, unsigned char SecondCharacter)
+			{ return std::tolower(FirstCharacter) == std::tolower(SecondCharacter); });
+	};
+	for (const std::pair<const std::string, TWeakObjectPtr<WAssetPackage>>& Entry : GetState().Packages)
+	{
+		const WAssetPackage* const Package = Entry.second.Get();
+		if (Package != nullptr && IsSameIgnoringCase(Entry.first, Path->File))
+		{
+			if (WAsset* const Asset = Package->FindAsset(Path->Key))
+			{
+				return Asset;
+			}
+		}
+	}
+	return nullptr;
+}
+
 bool FAssetManager::IsAssetFile(const std::filesystem::path& Path)
 {
 	return GetFileKind(Path) != EAssetFileKind::Unknown;

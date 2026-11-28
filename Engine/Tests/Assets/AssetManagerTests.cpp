@@ -437,6 +437,27 @@ TEST_SUITE("FAssetManager")
 		CHECK(FAssetManager::FindLoaded("Textures/Wood.png") == Wood);
 	}
 
+	TEST_CASE("FindLoadedIgnoringCase finds a loaded asset under its own spelling or under other capitals")
+	{
+		const FScopedObjectTest ObjectTest;
+		const FScopedContentDirectory Content;
+		Content.WriteMaterial("Materials/Brick.wwmaterial");
+		Content.WriteMaterial("Materials/Wall.wwmaterial");
+		std::string Error;
+		WAsset* const Brick = FAssetManager::Load("Materials/Brick.wwmaterial", Error);
+		const FScopedRoot Root(Brick);
+
+		CHECK(FAssetManager::FindLoadedIgnoringCase("Materials/Brick.wwmaterial") == Brick);
+		CHECK(FAssetManager::FindLoadedIgnoringCase("materials/BRICK.wwmaterial") == Brick);
+		CHECK(FAssetManager::FindLoaded("materials/BRICK.wwmaterial") == nullptr);
+		// Another name, a key that the file does not have, text that is no asset path and a file that is not
+		// loaded are nothing.
+		CHECK(FAssetManager::FindLoadedIgnoringCase("Materials/Bricks.wwmaterial") == nullptr);
+		CHECK(FAssetManager::FindLoadedIgnoringCase("Materials/Brick.wwmaterial#Key") == nullptr);
+		CHECK(FAssetManager::FindLoadedIgnoringCase("../Brick.wwmaterial") == nullptr);
+		CHECK(FAssetManager::FindLoadedIgnoringCase("Materials/Wall.wwmaterial") == nullptr);
+	}
+
 	TEST_CASE("FindLoaded finds nothing of a file whose assets were collected")
 	{
 		const FScopedObjectTest ObjectTest;

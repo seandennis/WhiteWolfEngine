@@ -279,11 +279,54 @@ TEST_SUITE("Asset commands for materials")
 		CHECK(Result.GetError() ==
 			"The material was not created: \"Materials/Brick.wwmaterial\" is still in use although its file is gone.");
 		CHECK(ListContent(Test) == std::vector<std::string>{"Materials"});
+		// Another spelling of it is the same file where capitals are not told apart, and is refused everywhere.
+		const FCommandResult OtherSpelling = CreateMaterial(Test, "Materials/brick.wwmaterial");
+		CHECK(OtherSpelling.GetError() ==
+			"The material was not created: \"Materials/brick.wwmaterial\" differs only in capitals from "
+			"\"Materials/Brick.wwmaterial\", which is still in use although its file is gone.");
+		CHECK(ListContent(Test) == std::vector<std::string>{"Materials"});
 
 		// Once nothing uses it, the path is free.
 		Entity->Destroy();
 		CollectGarbage();
 		CHECK(CreateMaterial(Test, "Materials/Brick.wwmaterial").HasSucceeded());
+	}
+
+	TEST_CASE("Asset.Import of a material file is refused where a material of that path is in use and its file is gone")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(CreateMaterial(Test, "Materials/Brick.wwmaterial").HasSucceeded());
+		// Changed, the material is kept by the editor with nothing else using it, and its file goes.
+		REQUIRE(SetProperty(Test, "Materials/Brick.wwmaterial", "Metallic", "1.0").HasSucceeded());
+		std::filesystem::remove(Test.GetContentDirectory() / "Materials" / "Brick.wwmaterial");
+		std::string Name;
+		std::string Expected;
+
+		SUBCASE("The same name")
+		{
+			Name = "Brick.wwmaterial";
+			Expected = "The file was not imported: \"Materials/Brick.wwmaterial\" is still in use although its file is "
+					   "gone.";
+		}
+		SUBCASE("Another spelling of it")
+		{
+			Name = "BRICK.wwmaterial";
+			Expected = "The file was not imported: \"Materials/BRICK.wwmaterial\" differs only in capitals from "
+					   "\"Materials/Brick.wwmaterial\", which is still in use although its file is gone.";
+		}
+
+		const FCommandResult Result = Test.Import(Test.WriteMaterial(Name, R"({"Roughness": 0.0})"), "Materials");
+
+		CHECK_FALSE(Result.HasSucceeded());
+		CHECK(Result.GetError() == Expected);
+		CHECK(ListContent(Test) == std::vector<std::string>{"Materials"});
+		CHECK(GetPropertyValue(Test, "Materials/Brick.wwmaterial", "Metallic") == FJsonValue(1.0));
+
+		// Once nothing keeps or uses the old material, the file is imported.
+		REQUIRE(Test.Execute("Edit.Undo").HasSucceeded());
+		REQUIRE(Test.Execute("Scene.New").HasSucceeded());
+		CollectGarbage();
+		CHECK(Test.Import(Test.WriteMaterial(Name, R"({"Roughness": 0.0})"), "Materials").HasSucceeded());
 	}
 
 	TEST_CASE("Asset.CreateMaterial refuses a folder that the project spells otherwise, where the file system takes "

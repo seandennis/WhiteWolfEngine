@@ -96,6 +96,37 @@ namespace
 		return true;
 	}
 
+	/**
+	 * Returns why the file of a material cannot be put at a path, if a material of that path is still in use although
+	 * its file is gone: loading the path gives that material, not the new file. A path that differs from that one
+	 * only in its capitals is refused too, being the same file where the file system does not tell capitals apart.
+	 *
+	 * @return The reason, or nothing if no such material is in use.
+	 */
+	std::optional<std::string> FindMaterialInUseWithoutFile(const std::string& File)
+	{
+		const WAsset* const InUse = FAssetManager::FindLoadedIgnoringCase(File);
+		if (InUse == nullptr)
+		{
+			return std::nullopt;
+		}
+		// A material of another name whose file is there is another file, where capitals are told apart.
+		const std::string& InUsePath = InUse->GetAssetPath();
+		std::error_code ErrorCode;
+		if (std::filesystem::exists(FAssetManager::GetPathOfAssetFile(InUsePath), ErrorCode))
+		{
+			return std::nullopt;
+		}
+		if (InUsePath == File)
+		{
+			return std::format("\"{}\" is still in use although its file is gone", File);
+		}
+		return std::format(
+			"\"{}\" differs only in capitals from \"{}\", which is still in use although its file is gone",
+			File,
+			InUsePath);
+	}
+
 	/** Removes files that an import copied and then could not use. What cannot be removed is left. */
 	void RemoveFiles(const std::vector<std::filesystem::path>& Files)
 	{
@@ -178,6 +209,14 @@ namespace
 				return FCommandResult::Failure(
 					std::format("The file was not imported: the project already has a file '{}'.",
 						FFileHelper::PathToUtf8(Copy.To)));
+			}
+		}
+		// The editor keeps and writes material files: a new one where one is still in use would be written over.
+		if (FMaterialSerializer::IsMaterialFile(Source))
+		{
+			if (const std::optional<std::string> InUse = FindMaterialInUseWithoutFile(Destination->File))
+			{
+				return FCommandResult::Failure(std::format("The file was not imported: {}.", *InUse));
 			}
 		}
 
@@ -300,11 +339,9 @@ namespace
 		{
 			return Refuse(std::format("the project already has a file \"{}\"", Path->File));
 		}
-		// The material of a file that was removed while it was in use is what loading the path gives: a new file
-		// there would not be the material that is used.
-		if (FAssetManager::FindLoaded(Path->File) != nullptr)
+		if (const std::optional<std::string> InUse = FindMaterialInUseWithoutFile(Path->File))
 		{
-			return Refuse(std::format("\"{}\" is still in use although its file is gone", Path->File));
+			return Refuse(*InUse);
 		}
 
 		// The file of a new material says what its class gives a new one.
