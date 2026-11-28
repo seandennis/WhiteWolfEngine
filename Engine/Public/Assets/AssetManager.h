@@ -32,6 +32,11 @@ extern ENGINE_API FLogCategory LogAssets;
  *                         "Textures/<texture>/Srgb" or "Textures/<texture>/Linear", numbered as in the file
  *     .png, .jpg, .jpeg   a texture: without a key a colour texture, with the key "Linear" a data texture
  *     .hdr                an environment map
+ *     .wwmaterial         a material, as the editor writes it (FMaterialSerializer); what the file could not give
+ *                         the material is the warnings of its package, and is logged
+ *
+ * A file whose assets refer to other files, as a material file refers to its textures, has those loaded with it.
+ * One that refers to itself, directly or through other files, is read without that reference, which is a warning.
  *
  * Besides those, the engine has assets built in, which are no files and need no content directory. They are
  * named, loaded and kept like the assets of a file, the file being ShapesFile:
@@ -113,8 +118,8 @@ public:
 	/**
 	 * Returns true if a file with this name can hold an asset that something which asks for a class can be given:
 	 * an asset of that class or of one that derives from it. The file is not looked into. A picture is a texture,
-	 * an environment an environment map, a model has meshes, materials and textures, and the built-in shapes are
-	 * meshes; a file that is of no kind that can be loaded holds nothing.
+	 * an environment an environment map, a material file a material, a model has meshes, materials and textures,
+	 * and the built-in shapes are meshes; a file that is of no kind that can be loaded holds nothing.
 	 *
 	 * This is what to ask before a file is loaded only to see whether it has anything of use: a model may be
 	 * large, and may have no material at all.
@@ -123,7 +128,8 @@ public:
 
 	/**
 	 * Returns true if a file with this name is one asset by itself, whose asset path is the name of the file: a
-	 * picture or an environment. A model, and a file that the engine has built in, hold several, each under a key.
+	 * picture, an environment or a material file. A model, and a file that the engine has built in, hold several,
+	 * each under a key.
 	 */
 	ENGINE_API static bool IsOneAsset(std::string_view File);
 

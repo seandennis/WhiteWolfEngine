@@ -16,6 +16,7 @@
  *     Textures/Wood.png                        the picture as a colour texture
  *     Textures/WoodNormals.png#Linear          the same kind of file as a data texture
  *     Skies/Evening.hdr                        an environment map
+ *     Materials/Brick.wwmaterial               a material that is a file of its own
  *     Models/Crate.glb#Meshes/0/Primitives/0   the first part of the first mesh of a glTF file
  *     Models/Crate.glb#Materials/2             its third material
  *

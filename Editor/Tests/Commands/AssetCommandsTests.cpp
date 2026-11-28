@@ -81,6 +81,17 @@ namespace
 			return Path;
 		}
 
+		/**
+		 * Writes a material file into the directory of files to import, and returns where it is.
+		 *
+		 * @param Properties The JSON text of its "Properties".
+		 */
+		std::filesystem::path WriteMaterial(const std::string& Name, const std::string& Properties = "{}") const
+		{
+			return WriteText(
+				Name, R"({"Format": "WhiteWolfMaterial", "Version": 1, "Properties": )" + Properties + "}");
+		}
+
 		/** Writes the test square as a .gltf file that holds everything itself, and returns where it is. */
 		std::filesystem::path WriteSquare(const std::string& Name) const
 		{
@@ -264,8 +275,16 @@ TEST_SUITE("Asset commands")
 		SUBCASE("A kind of file that is no asset")
 		{
 			Source = Test.WriteText("Notes.txt", "Some notes");
-			ExpectedStart = "'" + FFileHelper::PathToUtf8(Source) + "' is not a kind of file that can be imported";
+			ExpectedStart = "'" + FFileHelper::PathToUtf8(Source) +
+				"' is not a kind of file that can be imported: a model is a .gltf or .glb file, a picture a .png, .jpg "
+				"or .jpeg file, an environment a .hdr file, and a material a .wwmaterial file.";
 			NotLeftBehind = Test.GetContentDirectory() / "Notes.txt";
+		}
+		SUBCASE("A material file that is not valid")
+		{
+			Source = Test.WriteText("Broken.wwmaterial", "[]");
+			ExpectedStart = "The file was not imported: ";
+			NotLeftBehind = Test.GetContentDirectory() / "Broken.wwmaterial";
 		}
 		SUBCASE("A folder that leads out of the content directory")
 		{
@@ -353,6 +372,7 @@ TEST_SUITE("Asset commands")
 		REQUIRE(Test.Import(Test.WritePicture("Wood.png"), "Textures").HasSucceeded());
 		REQUIRE(Test.Import(Test.WriteSquare("Square.gltf"), "Models").HasSucceeded());
 		REQUIRE(Test.Import(Test.WriteEnvironment("Evening.hdr")).HasSucceeded());
+		REQUIRE(Test.Import(Test.WriteMaterial("Red.wwmaterial"), "Materials").HasSucceeded());
 		// A scene is a file of the content directory, but not an asset.
 		REQUIRE(Test.Execute("Scene.Save", R"({"Path": "Scenes/Level.json"})").HasSucceeded());
 
@@ -360,7 +380,29 @@ TEST_SUITE("Asset commands")
 
 		REQUIRE(Result.HasSucceeded());
 		CHECK(WriteTestJson(Result.GetValue()) ==
-			R"(["Engine/Shapes","Evening.hdr","Models/Square.gltf","Textures/Wood.png"])");
+			R"(["Engine/Shapes","Evening.hdr","Materials/Red.wwmaterial","Models/Square.gltf","Textures/Wood.png"])");
+	}
+
+	TEST_CASE("Asset.Import of a material file says what it could not give the material, as a model does")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(Test.Import(Test.WritePicture("Wood.png"), "Textures").HasSucceeded());
+
+		// The picture is in the project; the other texture is not, and is not brought along.
+		const std::string Properties =
+			R"({"BaseColorTexture": "Textures/Wood.png", "NormalTexture": "Textures/Bumps.png#Linear"})";
+		const FCommandResult Result = Test.Import(Test.WriteMaterial("Crate.wwmaterial", Properties), "Materials");
+
+		REQUIRE(Result.HasSucceeded());
+		CHECK(WriteTestJson(Result.GetValue()) ==
+			R"({"File":"Materials/Crate.wwmaterial",)"
+			R"("Assets":[{"Path":"Materials/Crate.wwmaterial","Class":"WMaterial"}],)"
+			R"("Warnings":["property \"NormalTexture\": the content directory has no file \"Textures/Bumps.png\""]})");
+
+		// Asset.Describe says the same of it.
+		const FCommandResult Described = Test.Execute("Asset.Describe", R"({"File": "Materials/Crate.wwmaterial"})");
+		REQUIRE(Described.HasSucceeded());
+		CHECK(Described.GetValue() == Result.GetValue());
 	}
 
 	TEST_CASE("Asset.Describe returns the assets of a file of the project")
@@ -462,6 +504,13 @@ TEST_SUITE("Asset commands")
 			ArgumentText = R"({"File": "Wood.png"})";
 			ExpectedError = "\"Wood.png\" cannot be placed: only a whole model, a .gltf or .glb file, is placed in a "
 							"scene. Single assets are used through the properties of components.";
+		}
+		SUBCASE("A material file")
+		{
+			REQUIRE(Test.Import(Test.WriteMaterial("Red.wwmaterial")).HasSucceeded());
+			ArgumentText = R"({"File": "Red.wwmaterial"})";
+			ExpectedError = "\"Red.wwmaterial\" cannot be placed: only a whole model, a .gltf or .glb file, is placed "
+							"in a scene. Single assets are used through the properties of components.";
 		}
 		SUBCASE("One asset of a model")
 		{

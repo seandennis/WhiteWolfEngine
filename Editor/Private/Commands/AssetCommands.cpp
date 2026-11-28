@@ -57,10 +57,8 @@ namespace
 		{
 			return false;
 		}
-		// A file that is one asset, a picture or an environment, is read now, to see that it can be.
-		const bool bIsOneAsset =
-			!FGltfImporter::IsGltfFile(FFileHelper::PathFromUtf8(File)) && !FAssetManager::IsBuiltInFile(File);
-		if (bIsOneAsset && FAssetManager::Load(File, OutError) == nullptr)
+		// A file that is one asset, a picture, an environment or a material, is read now, to see that it can be.
+		if (FAssetManager::IsOneAsset(File) && FAssetManager::Load(File, OutError) == nullptr)
 		{
 			return false;
 		}
@@ -120,7 +118,7 @@ namespace
 		{
 			return FCommandResult::Failure(std::format(
 				"'{}' is not a kind of file that can be imported: a model is a .gltf or .glb file, a picture "
-				"a .png, .jpg or .jpeg file, and an environment a .hdr file.",
+				"a .png, .jpg or .jpeg file, an environment a .hdr file, and a material a .wwmaterial file.",
 				SourceText));
 		}
 
@@ -307,9 +305,10 @@ void FAssetCommands::Register(FCommandRegistry& Registry)
 {
 	Registry.Register(
 		{"Asset.Import",
-			"Copies a model (.gltf, .glb), a picture (.png, .jpg, .jpeg) or an environment (.hdr) into the content "
-			"directory of the project, with the files a .gltf file keeps its data in, and loads it. Returns the "
-			"file's name in the project, the path and class of every asset in it, and what was left out.",
+			"Copies a model (.gltf, .glb), a picture (.png, .jpg, .jpeg), an environment (.hdr) or a material "
+			"(.wwmaterial) into the content directory of the project, with the files a .gltf file keeps its data "
+			"in, and loads it. Returns the file's name in the project, the path and class of every asset in it, "
+			"and what was left out, such as a texture of a material that the project does not have.",
 			{FCommandParameter::Required(
 				 "Source", ECommandArgumentType::String, "The file to import, anywhere on this machine."),
 				FCommandParameter::Optional("Folder",
@@ -321,9 +320,10 @@ void FAssetCommands::Register(FCommandRegistry& Registry)
 
 	Registry.Register(
 		{"Asset.List",
-			"Returns the asset files of the project, every model, picture and environment in its content directory, "
-			"and the files of assets that the engine has built in, such as \"Engine/Shapes\" with a cube, a sphere "
-			"and a plane. By name, in the order of the names. Without a project, the built-in ones alone.",
+			"Returns the asset files of the project, every model, picture, environment and material in its content "
+			"directory, and the files of assets that the engine has built in, such as \"Engine/Shapes\" with a "
+			"cube, a sphere and a plane. By name, in the order of the names. Without a project, the built-in ones "
+			"alone.",
 			{},
 			ECommandEffect::LeavesScene},
 		ListAssets);

@@ -82,6 +82,16 @@ public:
 		WriteTestGltfFile(GetPath() / FFileHelper::PathFromUtf8(File), Text);
 	}
 
+	/**
+	 * Writes a material file into the directory.
+	 *
+	 * @param Properties The JSON text of its "Properties": what it says of the material.
+	 */
+	void WriteMaterial(const std::string& File, const std::string& Properties = "{}") const
+	{
+		WriteText(File, R"({"Format": "WhiteWolfMaterial", "Version": 1, "Properties": )" + Properties + "}");
+	}
+
 private:
 	/** Returns where a file of the directory is, and makes sure the directory it is in exists. */
 	std::filesystem::path MakeFilePath(const std::string& File) const

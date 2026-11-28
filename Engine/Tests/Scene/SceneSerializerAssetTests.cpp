@@ -239,4 +239,97 @@ TEST_SUITE("FSceneSerializer asset references")
 		REQUIRE(Capture.GetMessages().size() == 1);
 		CHECK(Capture.GetMessages()[0].Text.find("has no asset path") != std::string::npos);
 	}
+
+	TEST_CASE("A material file is saved as its name, and components that name it share it when the scene is loaded")
+	{
+		const FScopedSceneTest SceneTest;
+		const FScopedLogCapture Capture;
+		const FScopedContentDirectory Content;
+		Content.WriteMaterial("Materials/Red.wwmaterial", R"({"BaseColor": [1, 0, 0, 1]})");
+		const std::string Text = R"({
+			"Format": "WhiteWolfScene",
+			"Version": 1,
+			"NextId": 5,
+			"Properties": { "Name": "Level" },
+			"Entities": [
+				{ "Id": 1, "Properties": { "Name": "Left" },
+					"Components": [ { "Id": 2, "Class": "WStaticMeshComponent",
+						"Properties": { "Material": "Materials/Red.wwmaterial" } } ] },
+				{ "Id": 3, "Properties": { "Name": "Right" },
+					"Components": [ { "Id": 4, "Class": "WStaticMeshComponent",
+						"Properties": { "Material": "Materials/Red.wwmaterial" } } ] }
+			]
+		})";
+		std::string Error;
+		std::vector<std::string> Warnings;
+
+		WScene* const Scene = FSceneSerializer::LoadFromText(Text, Error, &Warnings);
+
+		INFO("Error: ", Error);
+		REQUIRE(Scene != nullptr);
+		Scene->AddToRoot();
+		CHECK(Warnings.empty());
+		const std::vector<WStaticMeshComponent*> Components = Scene->GetComponents<WStaticMeshComponent>();
+		REQUIRE(Components.size() == 2);
+		REQUIRE(Components[0]->Material != nullptr);
+		CHECK(Components[0]->Material.Get() == Components[1]->Material.Get());
+		CHECK(Components[0]->Material->BaseColor == FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));
+
+		// Saved, it is the file's name; and saved, loaded and saved again, the same text.
+		const std::string Saved = FSceneSerializer::SaveToText(*Scene);
+		CHECK(Saved.find(R"("Material": "Materials/Red.wwmaterial")") != std::string::npos);
+		WScene* const Reloaded = FSceneSerializer::LoadFromText(Saved, Error);
+		REQUIRE(Reloaded != nullptr);
+		CHECK(FSceneSerializer::SaveToText(*Reloaded) == Saved);
+		CHECK(CountLoggedProblems(Capture) == 0);
+
+		// Once nothing uses it, it is collected, and a scene that is loaded afterwards reads the file as it is then.
+		Scene->RemoveFromRoot();
+		Scene->Destroy();
+		CollectGarbage();
+		Content.WriteMaterial("Materials/Red.wwmaterial", R"({"BaseColor": [0, 0, 1, 1]})");
+		WScene* const Later = FSceneSerializer::LoadFromText(Text, Error);
+		REQUIRE(Later != nullptr);
+		const std::vector<WStaticMeshComponent*> LaterComponents = Later->GetComponents<WStaticMeshComponent>();
+		REQUIRE(LaterComponents.size() == 2);
+		REQUIRE(LaterComponents[0]->Material != nullptr);
+		CHECK(LaterComponents[0]->Material->BaseColor == FLinearColor(0.0f, 0.0f, 1.0f, 1.0f));
+	}
+
+	TEST_CASE("A material file that is missing or broken is a warning, and the rest of the scene loads")
+	{
+		const FScopedSceneTest SceneTest;
+		const FScopedLogCapture Capture;
+		const FScopedContentDirectory Content;
+		Content.WriteText("Materials/Broken.wwmaterial", "{ not a material");
+		std::string Material;
+		std::string ExpectedWarning;
+
+		SUBCASE("Missing")
+		{
+			Material = "Materials/Gone.wwmaterial";
+			ExpectedWarning = "the content directory has no file \"Materials/Gone.wwmaterial\"";
+		}
+		SUBCASE("Broken")
+		{
+			Material = "Materials/Broken.wwmaterial";
+			ExpectedWarning = "the material is not valid JSON";
+		}
+
+		std::string Error;
+		std::vector<std::string> Warnings;
+		const WScene* const Scene = FSceneSerializer::LoadFromText(
+			MakeSceneWithMeshComponent(R"({ "Material": ")" + Material + R"(", "bCastShadows": false })"),
+			Error,
+			&Warnings);
+
+		REQUIRE(Scene != nullptr);
+		REQUIRE(Warnings.size() == 1);
+		CHECK(HasWarning(Warnings, "\"Material\""));
+		CHECK(HasWarning(Warnings, ExpectedWarning));
+		const std::vector<WStaticMeshComponent*> Components = Scene->GetComponents<WStaticMeshComponent>();
+		REQUIRE(Components.size() == 1);
+		CHECK(Components[0]->Material == nullptr);
+		CHECK_FALSE(Components[0]->bCastShadows);
+	}
 }

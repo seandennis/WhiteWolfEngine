@@ -443,7 +443,10 @@ TEST_SUITE("FAssetManager")
 		CHECK(FAssetManager::IsAssetFile("Wood.Jpg"));
 		CHECK(FAssetManager::IsAssetFile("Wood.jpeg"));
 		CHECK(FAssetManager::IsAssetFile("Sky.hdr"));
+		CHECK(FAssetManager::IsAssetFile("Materials/Brick.wwmaterial"));
+		CHECK(FAssetManager::IsAssetFile("Brick.WWMATERIAL"));
 		CHECK_FALSE(FAssetManager::IsAssetFile("Notes.txt"));
+		CHECK_FALSE(FAssetManager::IsAssetFile("Level.wwscene"));
 		CHECK_FALSE(FAssetManager::IsAssetFile("Level.json"));
 		CHECK_FALSE(FAssetManager::IsAssetFile("png"));
 		CHECK_FALSE(FAssetManager::IsAssetFile(""));
@@ -470,6 +473,13 @@ TEST_SUITE("FAssetManager")
 		CHECK(FAssetManager::CanHoldAssetsOfClass("Skies/Noon.hdr", Environment));
 		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Skies/Noon.hdr", Texture));
 
+		// A material file is a material.
+		CHECK(FAssetManager::CanHoldAssetsOfClass("Materials/Brick.wwmaterial", Material));
+		CHECK(FAssetManager::CanHoldAssetsOfClass("Brick.WWMaterial", Material));
+		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Materials/Brick.wwmaterial", Mesh));
+		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Materials/Brick.wwmaterial", Texture));
+		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Materials/Brick.wwmaterial", Environment));
+
 		// The built-in shapes are meshes.
 		CHECK(FAssetManager::CanHoldAssetsOfClass(FAssetManager::ShapesFile, Mesh));
 		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass(FAssetManager::ShapesFile, Material));
@@ -486,6 +496,7 @@ TEST_SUITE("FAssetManager")
 			CHECK(FAssetManager::CanHoldAssetsOfClass("Models/Crate.glb", *Class));
 			CHECK(FAssetManager::CanHoldAssetsOfClass("Textures/Wood.png", *Class));
 			CHECK(FAssetManager::CanHoldAssetsOfClass("Skies/Noon.hdr", *Class));
+			CHECK(FAssetManager::CanHoldAssetsOfClass("Materials/Brick.wwmaterial", *Class));
 			CHECK(FAssetManager::CanHoldAssetsOfClass(FAssetManager::ShapesFile, *Class));
 			CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Notes.txt", *Class));
 		}
@@ -494,11 +505,13 @@ TEST_SUITE("FAssetManager")
 		CHECK_FALSE(FAssetManager::CanHoldAssetsOfClass("Models/Crate.glb", *WAssetPackage::StaticClass()));
 	}
 
-	TEST_CASE("A picture and an environment are one asset each, and a model and the shapes are several")
+	TEST_CASE(
+		"A picture, an environment and a material file are one asset each, and a model and the shapes are several")
 	{
 		CHECK(FAssetManager::IsOneAsset("Textures/Wood.png"));
 		CHECK(FAssetManager::IsOneAsset("Wood.JPEG"));
 		CHECK(FAssetManager::IsOneAsset("Skies/Noon.hdr"));
+		CHECK(FAssetManager::IsOneAsset("Materials/Brick.wwmaterial"));
 		CHECK_FALSE(FAssetManager::IsOneAsset("Models/Crate.glb"));
 		CHECK_FALSE(FAssetManager::IsOneAsset("Models/Crate.gltf"));
 		CHECK_FALSE(FAssetManager::IsOneAsset(FAssetManager::ShapesFile));

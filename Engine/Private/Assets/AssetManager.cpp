@@ -12,6 +12,7 @@
 #include "Rendering/Image.h"
 #include "Rendering/ImageFile.h"
 #include "Rendering/Material.h"
+#include "Rendering/MaterialSerializer.h"
 #include "Rendering/MeshShapes.h"
 #include "Rendering/StaticMesh.h"
 #include "Rendering/Texture.h"
@@ -35,6 +36,12 @@ namespace
 
 		/** The packages that have been loaded, by file. Weak: a package lives as long as its assets are used. */
 		std::unordered_map<std::string, TWeakObjectPtr<WAssetPackage>> Packages;
+
+		/**
+		 * The files that are being read, the one that was begun last at the end. Reading a material file loads its
+		 * textures, which are other files.
+		 */
+		std::vector<std::string> FilesBeingRead;
 	};
 
 	FAssetManagerState& GetState()
@@ -50,6 +57,29 @@ namespace
 		Gltf,
 		Picture,
 		Environment,
+		Material,
+	};
+
+	/** Marks a file as being read for as long as it lives, however the reading ends. */
+	class FFileBeingRead
+	{
+	public:
+		FFileBeingRead(std::vector<std::string>& InFilesBeingRead, const std::string& File)
+			: FilesBeingRead(InFilesBeingRead)
+		{
+			FilesBeingRead.push_back(File);
+		}
+
+		~FFileBeingRead()
+		{
+			FilesBeingRead.pop_back();
+		}
+
+		FFileBeingRead(const FFileBeingRead&) = delete;
+		FFileBeingRead& operator=(const FFileBeingRead&) = delete;
+
+	private:
+		std::vector<std::string>& FilesBeingRead;
 	};
 
 	/** Returns the kind of a file, going by the end of its name, whatever the case of its letters. */
@@ -71,6 +101,10 @@ namespace
 		if (Extension == ".hdr")
 		{
 			return EAssetFileKind::Environment;
+		}
+		if (FMaterialSerializer::IsMaterialFile(Path))
+		{
+			return EAssetFileKind::Material;
 		}
 		return EAssetFileKind::Unknown;
 	}
@@ -143,6 +177,25 @@ namespace
 				return false;
 			}
 			OutAssets.emplace_back(std::string(), Environment);
+		}
+		if (Kind == EAssetFileKind::Material)
+		{
+			// A material is made with what its class gives a new one, and then given what the file says.
+			WMaterial* const Material = NewObject<WMaterial>();
+			std::vector<std::string> Problems;
+			if (!FMaterialSerializer::LoadFromFile(Path, *Material, OutError, Problems))
+			{
+				return false;
+			}
+
+			// What a material file could not give its material is said where whoever uses the material looks: a
+			// scene whose material lost a texture says so in the log.
+			for (std::string& Problem : Problems)
+			{
+				WW_LOG(LogAssets, Warning, "Loading '{}': {}", File, Problem);
+				OutWarnings.push_back(std::move(Problem));
+			}
+			OutAssets.emplace_back(std::string(), Material);
 		}
 		return true;
 	}
@@ -244,6 +297,8 @@ bool FAssetManager::CanHoldAssetsOfClass(std::string_view File, const WClass& Cl
 			return CanBeGiven(WTexture::StaticClass());
 		case EAssetFileKind::Environment:
 			return CanBeGiven(WEnvironmentMap::StaticClass());
+		case EAssetFileKind::Material:
+			return CanBeGiven(WMaterial::StaticClass());
 		case EAssetFileKind::Unknown:
 		default:
 			return false;
@@ -257,7 +312,7 @@ bool FAssetManager::IsOneAsset(std::string_view File)
 		return false;
 	}
 	const EAssetFileKind Kind = GetFileKind(FFileHelper::PathFromUtf8(File));
-	return Kind == EAssetFileKind::Picture || Kind == EAssetFileKind::Environment;
+	return Kind == EAssetFileKind::Picture || Kind == EAssetFileKind::Environment || Kind == EAssetFileKind::Material;
 }
 
 std::optional<std::string> FAssetManager::GetAssetFileOfPath(const std::filesystem::path& Path)
@@ -320,15 +375,28 @@ WAssetPackage* FAssetManager::FindOrLoadPackage(const std::string& File, std::st
 		}
 	}
 
+	// A file that refers to itself, directly or through other files, would be read again and again without end.
+	// Asked for again while it is being read, it is a reference that cannot be followed, and the file that asked
+	// is read without it.
+	if (std::ranges::find(State.FilesBeingRead, File) != State.FilesBeingRead.end())
+	{
+		OutError = std::format("the asset file \"{}\" refers to itself, directly or through another file", File);
+		return nullptr;
+	}
+
 	std::vector<std::pair<std::string, WAsset*>> Assets;
 	std::vector<std::string> Warnings;
 	if (bIsBuiltIn)
 	{
 		MakeShapes(Assets);
 	}
-	else if (!ReadAssetFile(File, Assets, Warnings, OutError))
+	else
 	{
-		return nullptr;
+		const FFileBeingRead BeingRead(State.FilesBeingRead, File);
+		if (!ReadAssetFile(File, Assets, Warnings, OutError))
+		{
+			return nullptr;
+		}
 	}
 
 	WAssetPackage* const Package = NewObject<WAssetPackage>();

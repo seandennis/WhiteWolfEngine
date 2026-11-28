@@ -105,6 +105,8 @@ namespace
 			WritePicture("Textures/Wood.png");
 			WriteEnvironment("Skies/Noon.hdr");
 			WriteSquare("Models/Square.gltf");
+			WriteText("Materials/Red.wwmaterial",
+				R"({"Format": "WhiteWolfMaterial", "Version": 1, "Properties": {"BaseColor": [1, 0, 0, 1]}})");
 			WriteText("Notes.txt", "Not an asset");
 		}
 
@@ -284,6 +286,46 @@ TEST_SUITE("FAssetPicker")
 		CHECK(Test.HasItem(Picture + "/Assets/Models/Square.gltf/Nothing"));
 		CHECK_FALSE(Test.HasItem(Picture + "/Assets/Models/Square.gltf#Materials/0"));
 		CHECK(Test.Get<WEditorTestGadgetComponent>(Gadget).Picture == nullptr);
+	}
+
+	TEST_CASE("A material file is a line of the list of a material, and of no other list")
+	{
+		FAssetPickerTest Test;
+		Test.WriteOneOfEach();
+		const int64 Component = Test.AddSelected<WStaticMeshComponent>();
+		const std::string Material = Row(Component, "Material");
+		const std::string Mesh = Row(Component, "Mesh");
+
+		Test.Click(Material + "/Choose");
+		REQUIRE(Test.HasItem(Material + "/Assets/Materials/Red.wwmaterial"));
+		// It is one asset: a line by itself, beside a model whose line opens to its own.
+		CHECK_FALSE(Test.HasItem(Material + "/Assets/Materials/Red.wwmaterial#Linear"));
+		CHECK(Test.HasItem(Material + "/Assets/Models/Square.gltf"));
+		Test.Click(Material + "/Assets/Materials/Red.wwmaterial");
+
+		const WMaterial* const Chosen = Test.Get<WStaticMeshComponent>(Component).Material.Get();
+		CHECK(GetPath(Chosen) == "Materials/Red.wwmaterial");
+		REQUIRE(Chosen != nullptr);
+		CHECK(Chosen->BaseColor == FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames().front() == "Set Material");
+		Test.PressKey(EKey::Z, {EKey::LeftControl});
+		CHECK(Test.Get<WStaticMeshComponent>(Component).Material == nullptr);
+
+		// A mesh, a picture and an environment are not offered one.
+		Test.Click(Mesh + "/Choose");
+		CHECK(Test.HasItem(Mesh + "/Assets/None"));
+		CHECK_FALSE(Test.HasItem(Mesh + "/Assets/Materials/Red.wwmaterial"));
+		Test.PressKey(EKey::Escape);
+		const int64 Gadget = Test.AddSelected<WEditorTestGadgetComponent>();
+		Test.Click(Row(Gadget, "Picture") + "/Choose");
+		CHECK(Test.HasItem(Row(Gadget, "Picture") + "/Assets/None"));
+		CHECK_FALSE(Test.HasItem(Row(Gadget, "Picture") + "/Assets/Materials/Red.wwmaterial"));
+		Test.PressKey(EKey::Escape);
+		const int64 Light = Test.AddSelected<WSkyLightComponent>();
+		Test.Click(Row(Light, "Environment") + "/Choose");
+		CHECK(Test.HasItem(Row(Light, "Environment") + "/Assets/None"));
+		CHECK_FALSE(Test.HasItem(Row(Light, "Environment") + "/Assets/Materials/Red.wwmaterial"));
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
 	}
 
 	TEST_CASE("None takes the asset away that a property has")
