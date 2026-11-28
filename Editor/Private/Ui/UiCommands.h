@@ -49,6 +49,12 @@ public:
 	/** Scene.Save to a file, which becomes the scene's. A relative path is relative to the project's content. */
 	static FCommandResult SaveSceneAs(FEditor& Editor, const std::string& Path);
 
+	/**
+	 * Asset.CreateMaterial: makes a material file in the project's content, with the values of a new material. The
+	 * result says why if it was not made, which the user has to be told and not only the log.
+	 */
+	static FCommandResult CreateMaterial(FEditor& Editor, const std::string& Path);
+
 	/** Scene.Open: replaces the scene being edited with the one in a file. */
 	static FCommandResult OpenScene(FEditor& Editor, const std::string& Path);
 

@@ -152,6 +152,13 @@ FCommandResult FUiCommands::SaveSceneAs(FEditor& Editor, const std::string& Path
 	return Editor.ExecuteCommand("Scene.Save", Arguments);
 }
 
+FCommandResult FUiCommands::CreateMaterial(FEditor& Editor, const std::string& Path)
+{
+	FJsonValue Arguments = FJsonValue::MakeObject();
+	Arguments.SetMember("Path", Path);
+	return Editor.ExecuteCommand("Asset.CreateMaterial", Arguments);
+}
+
 FCommandResult FUiCommands::OpenScene(FEditor& Editor, const std::string& Path)
 {
 	FJsonValue Arguments = FJsonValue::MakeObject();

@@ -222,6 +222,7 @@ void FMainMenuBar::Draw(FUiFrame& Frame)
 	NewProjectDialog.Draw(Frame);
 	SaveSceneDialog.Draw(Frame);
 	OpenSceneDialog.Draw(Frame);
+	NewMaterialDialog.Draw(Frame);
 }
 
 void FMainMenuBar::SaveScene(FUiFrame& Frame)
@@ -272,6 +273,12 @@ void FMainMenuBar::DrawFileMenu(FUiFrame& Frame)
 	if (MenuEntry(Frame, "File", "Save Scene As...", "Ctrl+Shift+S"))
 	{
 		SaveSceneDialog.Open(Frame.Editor);
+	}
+	ImGui::Separator();
+	// Assets belong to a project.
+	if (MenuEntry(Frame, "File", "New Material...", nullptr, Frame.Editor.GetProject() != nullptr))
+	{
+		NewMaterialDialog.Open(Frame.Editor);
 	}
 	ImGui::EndMenu();
 }

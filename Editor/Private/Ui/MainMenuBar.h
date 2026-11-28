@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Ui/Dialogs/NewMaterialDialog.h"
 #include "Ui/Dialogs/NewProjectDialog.h"
 #include "Ui/Dialogs/OpenProjectDialog.h"
 #include "Ui/Dialogs/OpenSceneDialog.h"
@@ -39,4 +40,5 @@ private:
 	FOpenProjectDialog OpenProjectDialog;
 	FSaveSceneDialog SaveSceneDialog;
 	FOpenSceneDialog OpenSceneDialog;
+	FNewMaterialDialog NewMaterialDialog;
 };

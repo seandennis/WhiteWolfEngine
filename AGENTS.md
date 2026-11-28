@@ -217,7 +217,7 @@ Editor/                   The editor module (WhiteWolfEditorCore.dll): everythin
                           FUiPanel is what they share. FViewportGizmo is the gizmo on the picture of the
                           viewport, and FViewportToolbar the buttons over it
       Dialogs/            One class per window that has to be answered: FNewProjectDialog, FOpenProjectDialog,
-                          FSaveSceneDialog, FOpenSceneDialog; FUiDialog is what they share
+                          FSaveSceneDialog, FOpenSceneDialog, FNewMaterialDialog; FUiDialog is what they share
   Tests/                  Unit tests (EditorTests executable)
     TestEditorObjects.h   Component classes for the tests, FScopedEditorTest, JSON written as text
     Commands/TestAssetCommands.h  FAssetCommandTest: an editor with a project in a temporary directory, and files
