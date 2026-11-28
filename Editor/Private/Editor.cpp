@@ -9,6 +9,7 @@
 #include "Commands/EditorCommands.h"
 #include "Commands/EntityCommands.h"
 #include "Commands/LogCommands.h"
+#include "Commands/PlayCommands.h"
 #include "Commands/ProjectCommands.h"
 #include "Commands/PropertyCommands.h"
 #include "Commands/SceneCommands.h"
@@ -50,7 +51,8 @@ namespace
 	std::string DescribeRefusalWhilePlaying(std::string_view CommandName)
 	{
 		return std::format("{} cannot be given while a game plays, because it would act on what waits unchanged until "
-						   "the game stops: the scene being edited, its file, its history, the project or a material.",
+						   "the game stops: the scene being edited, its file, its history, the project or a material. "
+						   "Play.Stop stops the game.",
 			CommandName);
 	}
 
@@ -83,6 +85,7 @@ FEditor::FEditor()
 	FSelectionCommands::Register(Commands);
 	FViewportCommands::Register(Commands);
 	FLogCommands::Register(Commands);
+	FPlayCommands::Register(Commands);
 
 	WScene* const EmptyScene = NewObject<WScene>();
 	EmptyScene->SetName(std::string(DefaultSceneName));

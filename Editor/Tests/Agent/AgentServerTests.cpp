@@ -197,12 +197,63 @@ TEST_SUITE("FAgentServer")
 		{
 			const FJsonValue& Tool = Tools->GetElements()[Index];
 			CHECK(*Tool.FindMember("name") == FJsonValue(Commands[Index]->Name));
-			CHECK(*Tool.FindMember("description") == FJsonValue(Commands[Index]->Summary));
+			// The summary, with a sentence more for a tool that is refused while a game plays.
+			CHECK(Tool.FindMember("description")->GetString().starts_with(Commands[Index]->Summary));
 			REQUIRE(Tool.FindMember("inputSchema") != nullptr);
 			CHECK(*Tool.FindMember("inputSchema")->FindMember("type") == FJsonValue("object"));
 		}
 		CHECK(Result->FindMember("resultType") == nullptr);
 		CHECK(Result->FindMember("ttlMs") == nullptr);
+	}
+
+	TEST_CASE("tools/list says of the tools that are refused while a game plays that they are")
+	{
+		FAgentServerTest Test;
+
+		const FJsonValue Response = Test.Send(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})");
+
+		const FJsonValue* const Tools = Response.FindMember("result")->FindMember("tools");
+		REQUIRE(Tools != nullptr);
+		std::vector<std::string> Refused;
+		for (const FJsonValue& Tool : Tools->GetElements())
+		{
+			const std::string& Name = Tool.FindMember("name")->GetString();
+			const FCommandDescription* const Description = Test.Editor.GetCommands().Find(Name);
+			REQUIRE(Description != nullptr);
+			const std::string& Text = Tool.FindMember("description")->GetString();
+			if (Text != Description->Summary)
+			{
+				CHECK(Text == Description->Summary + " Refused while a game plays (Play.Stop stops it).");
+				Refused.push_back(Name);
+			}
+		}
+
+		const std::vector<std::string> ExpectedRefused = {
+			"Asset.SetProperty",
+			"Edit.Redo",
+			"Edit.Undo",
+			"Project.New",
+			"Project.Open",
+			"Scene.New",
+			"Scene.Open",
+			"Scene.Save",
+		};
+		CHECK(Refused == ExpectedRefused);
+	}
+
+	TEST_CASE("A tool that is refused while a game plays answers with a result that says why")
+	{
+		FAgentServerTest Test;
+		REQUIRE(ReadToolValue(Test.CallTool("Play.Start")).FindMember("State")->GetString() == "Playing");
+
+		const FJsonValue Result = ParseTestJson(Test.CallTool("Edit.Undo"));
+
+		CHECK(*Result.FindMember("isError") == FJsonValue(true));
+		CHECK(WriteTestJson(*Result.FindMember("content")) ==
+			R"([{"type":"text","text":"Edit.Undo cannot be given while a game plays, because it would act on what )"
+			R"(waits unchanged until the game stops: the scene being edited, its file, its history, the project or a )"
+			R"(material. Play.Stop stops the game."}])");
+		CHECK(Test.Editor.IsPlaying());
 	}
 
 	TEST_CASE("A tool's schema is made from the parameters of its command")

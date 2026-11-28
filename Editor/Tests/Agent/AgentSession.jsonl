@@ -5,4 +5,11 @@
 {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"Scene.GetHierarchy"}}
 {"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"Edit.Undo","arguments":{}}}
 {"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"Entity.Delete","arguments":{"Entity":99}}}
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"Entity.Create","arguments":{"Name":"Ball"}}}
+{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"Play.Start","arguments":{}}}
+{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"Entity.Rename","arguments":{"Entity":1,"Name":"Renamed in play"}}}
+{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"Play.Step","arguments":{"Frames":30}}}
+{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"Edit.Undo","arguments":{}}}
+{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"Play.Stop","arguments":{}}}
+{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"Scene.GetHierarchy"}}
 {"jsonrpc":"2.0","id":"discover-1","method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}

@@ -5,6 +5,7 @@
 #include "Commands/CommandParameter.h"
 #include "Commands/CommandRegistry.h"
 #include "Commands/CommandResult.h"
+#include "Commands/CommandWhilePlaying.h"
 #include "Core/EngineVersion.h"
 #include "Core/Version.h"
 #include "Editor.h"
@@ -20,6 +21,8 @@
 #include <format>
 #include <istream>
 #include <ostream>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace
@@ -47,7 +50,12 @@ namespace
 		"all. Entities and components are referred to by integer identifiers, which Scene.GetHierarchy lists, and "
 		"assets by their paths, which Asset.List and Asset.Describe give. A tool that fails says why and leaves the "
 		"scene and the assets as they were. Edit.Undo undoes the last change to the scene or to a material. "
-		"Scene.Save writes the scene to its file, and Asset.Save a changed material to its own.";
+		"Scene.Save writes the scene to its file, and Asset.Save a changed material to its own. Play.Start plays a "
+		"copy of the scene: until Play.Stop, every tool that reads or changes the scene acts on that copy, nothing is "
+		"a step of the history, and the game goes on only through Play.Step, in frames of a sixtieth of a second.";
+
+	/** What the description of a tool that cannot be given while a game plays ends with. */
+	constexpr std::string_view RefusedWhilePlayingNote = " Refused while a game plays (Play.Stop stops it).";
 
 	/** What a request is answered with: a result, or an error with a code, a message and perhaps data. */
 	struct FReply
@@ -225,7 +233,11 @@ namespace
 		{
 			FJsonValue Tool = FJsonValue::MakeObject();
 			Tool.SetMember("name", Description->Name);
-			Tool.SetMember("description", Description->Summary);
+			// What a tool cannot do during a game is better known before it is refused.
+			const bool bIsRefusedWhilePlaying = Description->WhilePlaying == ECommandWhilePlaying::Refused;
+			Tool.SetMember("description",
+				bIsRefusedWhilePlaying ? Description->Summary + std::string(RefusedWhilePlayingNote)
+									   : Description->Summary);
 			Tool.SetMember("inputSchema", MakeInputSchema(*Description));
 			Tools.AddElement(std::move(Tool));
 		}

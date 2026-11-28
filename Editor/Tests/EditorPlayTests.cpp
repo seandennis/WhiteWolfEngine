@@ -97,7 +97,8 @@ namespace
 	std::string RefusedDuringGame(std::string_view CommandName)
 	{
 		return std::format("{} cannot be given while a game plays, because it would act on what waits unchanged until "
-						   "the game stops: the scene being edited, its file, its history, the project or a material.",
+						   "the game stops: the scene being edited, its file, its history, the project or a material. "
+						   "Play.Stop stops the game.",
 			CommandName);
 	}
 

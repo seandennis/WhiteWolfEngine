@@ -170,6 +170,7 @@ namespace
 		FJsonValue Value = FJsonValue::MakeObject();
 		Value.SetMember("Name", Scene.GetName());
 		Value.SetMember("Path", FFileHelper::PathToUtf8(Editor.GetScenePath()));
+		Value.SetMember("Playing", Editor.IsPlaying());
 		Value.SetMember("Entities", std::move(EntityList));
 		return FCommandResult::Success(std::move(Value));
 	}
@@ -226,7 +227,8 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 	Registry.Register(
 		{"Scene.GetHierarchy",
 			"Returns the name and file of the scene being edited and the tree of its entities: each with its "
-			"identifier, name, components (identifier and class) and children.",
+			"identifier, name, components (identifier and class) and children. While a game plays (\"Playing\"), "
+			"the entities are those of the game's copy of the scene.",
 			{},
 			ECommandEffect::LeavesScene},
 		GetHierarchy);

@@ -338,6 +338,7 @@ TEST_SUITE("Scene commands")
 		const FJsonValue Expected = ParseTestJson(R"({
 			"Name": "Level 1",
 			"Path": "",
+			"Playing": false,
 			"Entities": [
 				{
 					"Id": 1,
@@ -367,7 +368,8 @@ TEST_SUITE("Scene commands")
 		const FCommandResult Result = Editor.ExecuteCommand("Scene.GetHierarchy", FJsonValue());
 
 		REQUIRE(Result.HasSucceeded());
-		CHECK(WriteTestJson(Result.GetValue()) == R"({"Name":"Untitled","Path":"Level.json","Entities":[]})");
+		CHECK(WriteTestJson(Result.GetValue()) ==
+			R"({"Name":"Untitled","Path":"Level.json","Playing":false,"Entities":[]})");
 	}
 
 	TEST_CASE("Scene.GetHierarchy shows a component whose class is missing as what it was saved as")

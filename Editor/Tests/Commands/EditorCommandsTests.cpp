@@ -5,6 +5,7 @@
 
 #include <ostream>
 #include <string>
+#include <vector>
 
 TEST_SUITE("Editor commands")
 {
@@ -36,6 +37,7 @@ TEST_SUITE("Editor commands")
 			"Name": "Entity.Create",
 			"Summary": "Creates an entity in the scene being edited. Returns its identifier.",
 			"ChangesScene": true,
+			"AllowedWhilePlaying": true,
 			"Parameters": [
 				{
 					"Name": "Name",
@@ -84,6 +86,40 @@ TEST_SUITE("Editor commands")
 		}
 	}
 
+	TEST_CASE("Editor.ListCommands says which commands are refused while a game plays")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+
+		const FCommandResult Result = Editor.ExecuteCommand("Editor.ListCommands", FJsonValue());
+
+		REQUIRE(Result.HasSucceeded());
+		std::vector<std::string> Refused;
+		for (const FJsonValue& Command : Result.GetValue().GetElements())
+		{
+			const FJsonValue* const Name = Command.FindMember("Name");
+			const FJsonValue* const AllowedWhilePlaying = Command.FindMember("AllowedWhilePlaying");
+			REQUIRE(Name != nullptr);
+			REQUIRE(AllowedWhilePlaying != nullptr);
+			if (!AllowedWhilePlaying->GetBoolean())
+			{
+				Refused.push_back(Name->GetString());
+			}
+		}
+
+		const std::vector<std::string> ExpectedRefused = {
+			"Asset.SetProperty",
+			"Edit.Redo",
+			"Edit.Undo",
+			"Project.New",
+			"Project.Open",
+			"Scene.New",
+			"Scene.Open",
+			"Scene.Save",
+		};
+		CHECK(Refused == ExpectedRefused);
+	}
+
 	TEST_CASE("Editor.ListCommands lists the commands in the order of their names, including ones added later")
 	{
 		const FScopedEditorTest EditorTest;
@@ -98,7 +134,8 @@ TEST_SUITE("Editor commands")
 		const FJsonValue::FArray& Commands = Result.GetValue().GetElements();
 		REQUIRE(Commands.size() >= 2);
 		CHECK(WriteTestJson(Commands[0]) ==
-			R"({"Name":"Aardvark.Feed","Summary":"Feeds the aardvark.","ChangesScene":true,"Parameters":[]})");
+			R"({"Name":"Aardvark.Feed","Summary":"Feeds the aardvark.","ChangesScene":true,"AllowedWhilePlaying":true,)"
+			R"("Parameters":[]})");
 		std::string PreviousName;
 		for (const FJsonValue& Command : Commands)
 		{
