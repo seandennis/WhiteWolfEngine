@@ -186,6 +186,15 @@ public:
 	static void SetProperty(FEditor& Editor, int64 ObjectId, const std::string& PropertyName, const FJsonValue& Value);
 
 	/**
+	 * Asset.SetProperty: gives a property of a material that is a file of its own a value, in memory until it is
+	 * saved. During a change (BeginChange) it is part of that change, and a step by itself otherwise.
+	 *
+	 * @param Value The value, in the form the command takes it.
+	 */
+	static void SetAssetProperty(
+		FEditor& Editor, const std::string& AssetPath, const std::string& PropertyName, const FJsonValue& Value);
+
+	/**
 	 * Object.SetProperty: puts an entity where a transform says, relative to its parent. During a change
 	 * (BeginChange) it is part of that change, and a step by itself otherwise.
 	 */

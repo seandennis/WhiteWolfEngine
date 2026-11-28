@@ -142,13 +142,28 @@ namespace
 		return TypeName == TPropertyValueTraits<ValueType>::TypeName;
 	}
 
-	/** Begins a row of the table: the name of the value in the first column, and then on to the second. */
-	void BeginRow(std::string_view Label)
+	/**
+	 * Begins a row of the table: the name of the value in the first column, and then on to the second. A name that
+	 * is wider than its column is cut off where the column ends, and is shown whole while the mouse is over it.
+	 *
+	 * @param ItemName The name of the row's value. The name in the first column is named "<ItemName>/Label", and
+	 * its whole text, while that is shown, "<ItemName>/Label/Whole".
+	 */
+	void BeginRow(FUiFrame& Frame, std::string_view Label, const std::string& ItemName)
 	{
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
 		ImGui::AlignTextToFramePadding();
-		ImGui::TextUnformatted(Label.data(), Label.data() + Label.size());
+		const char* const LabelEnd = Label.data() + Label.size();
+		const bool bIsCut = ImGui::CalcTextSize(Label.data(), LabelEnd).x > ImGui::GetContentRegionAvail().x;
+		ImGui::TextUnformatted(Label.data(), LabelEnd);
+		Frame.Items.NameLastItem(std::format("{}/Label", ItemName));
+		if (bIsCut && ImGui::BeginItemTooltip())
+		{
+			ImGui::TextUnformatted(Label.data(), LabelEnd);
+			Frame.Items.NameLastItem(std::format("{}/Label/Whole", ItemName));
+			ImGui::EndTooltip();
+		}
 		ImGui::TableNextColumn();
 	}
 
@@ -356,13 +371,13 @@ namespace
 	};
 
 	/** Begins the row of one part of a transform. What the row shows follows, and then ImGui::PopID. */
-	FPartRow BeginPartRow(const char* Label, const std::string& TransformItemName)
+	FPartRow BeginPartRow(FUiFrame& Frame, const char* Label, const std::string& TransformItemName)
 	{
-		BeginRow(Label);
-		ImGui::PushID(Label);
-
 		FPartRow Row;
 		Row.ItemName = std::format("{}/{}", TransformItemName, Label);
+		BeginRow(Frame, Label, Row.ItemName);
+		ImGui::PushID(Label);
+
 		Row.ValueWidth = GetValueWidth();
 		Row.EndX = ImGui::GetCursorScreenPos().x + Row.ValueWidth + ImGui::GetStyle().ItemInnerSpacing.x;
 		return Row;
@@ -657,7 +672,7 @@ FPropertyEditor::FRowsEdit FPropertyEditor::DrawRows(FUiFrame& Frame,
 	FRowsEdit Rows;
 	const bool bIsTransform = IsOfType<FTransform>(Property.GetTypeName());
 
-	BeginRow(Label);
+	BeginRow(Frame, Label, ItemName);
 	const float ValueWidth = GetValueWidth();
 	const float RowEndX = ImGui::GetCursorScreenPos().x + ValueWidth + ImGui::GetStyle().ItemInnerSpacing.x;
 	if (bIsTransform)
@@ -733,7 +748,7 @@ FPropertyEditor::FRowsEdit FPropertyEditor::DrawArray(FUiFrame& Frame,
 	const int32 Num = Property.GetNum(Value);
 	const FProperty& ElementProperty = Property.GetElementProperty();
 
-	BeginRow(Label);
+	BeginRow(Frame, Label, ItemName);
 	const float RowEndX = ImGui::GetCursorScreenPos().x + GetValueWidth() + ImGui::GetStyle().ItemInnerSpacing.x;
 	ImGui::AlignTextToFramePadding();
 	ImGui::TextDisabled("%d %s", Num, Num == 1 ? "element" : "elements");
@@ -806,7 +821,7 @@ FPropertyEditor::FValueEdit FPropertyEditor::DrawTransformParts(FUiFrame& Frame,
 
 	if (FUiText::ContainsIgnoringCase("Location", SearchText))
 	{
-		const FPartRow Row = BeginPartRow("Location", ItemName);
+		const FPartRow Row = BeginPartRow(Frame, "Location", ItemName);
 		if (EditVector(Frame, NewValue.Location, LocationDragSpeed, Row.ItemName, Row.ValueWidth, Edit.HeldItemId))
 		{
 			bChanged = true;
@@ -823,7 +838,7 @@ FPropertyEditor::FValueEdit FPropertyEditor::DrawTransformParts(FUiFrame& Frame,
 
 	if (FUiText::ContainsIgnoringCase("Rotation", SearchText))
 	{
-		const FPartRow Row = BeginPartRow("Rotation", ItemName);
+		const FPartRow Row = BeginPartRow(Frame, "Rotation", ItemName);
 		ImGuiID HeldItemId = 0;
 		if (const std::optional<FQuat> Turned =
 				EditRotation(Frame, Value.Rotation, Row.ItemName, Row.ValueWidth, HeldItemId))
@@ -847,7 +862,7 @@ FPropertyEditor::FValueEdit FPropertyEditor::DrawTransformParts(FUiFrame& Frame,
 
 	if (FUiText::ContainsIgnoringCase("Scale", SearchText))
 	{
-		const FPartRow Row = BeginPartRow("Scale", ItemName);
+		const FPartRow Row = BeginPartRow(Frame, "Scale", ItemName);
 		if (EditVector(Frame, NewValue.Scale, ScaleDragSpeed, Row.ItemName, Row.ValueWidth, Edit.HeldItemId))
 		{
 			bChanged = true;

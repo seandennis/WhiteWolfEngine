@@ -470,6 +470,16 @@ void FUiCommands::SetProperty(FEditor& Editor, int64 ObjectId, const std::string
 	Editor.ExecuteCommand("Object.SetProperty", MakePropertyArguments(ObjectId, PropertyName, Value));
 }
 
+void FUiCommands::SetAssetProperty(
+	FEditor& Editor, const std::string& AssetPath, const std::string& PropertyName, const FJsonValue& Value)
+{
+	FJsonValue Arguments = FJsonValue::MakeObject();
+	Arguments.SetMember("Asset", AssetPath);
+	Arguments.SetMember("Property", PropertyName);
+	Arguments.SetMember("Value", Value);
+	Editor.ExecuteCommand("Asset.SetProperty", Arguments);
+}
+
 void FUiCommands::SetEntityTransform(FEditor& Editor, int64 EntityId, const FTransform& Transform)
 {
 	Editor.ExecuteCommand("Object.SetProperty",

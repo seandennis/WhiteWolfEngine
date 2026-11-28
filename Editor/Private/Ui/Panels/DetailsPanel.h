@@ -12,6 +12,7 @@
 #include <string>
 
 class FProperty;
+class WAsset;
 class WComponent;
 class WEntity;
 class WObject;
@@ -21,7 +22,8 @@ struct FUiFrame;
  * The panel that shows the entity that was selected last: its name, its transform, and each of its components
  * with the properties that are saved with the scene, under the categories they were declared with. The user
  * changes a value where it is shown, puts one back to what it is in a new object with the arrow beside it, adds
- * components and removes them.
+ * components and removes them. A material that is a file of its own is shown below the property that refers to
+ * it, and changed there as its own values (FEditedAssets).
  *
  * What a property looks like is decided by its type alone (FPropertyEditor), so a new component class is shown
  * and can be changed without anything being written for it.
@@ -51,9 +53,13 @@ private:
 
 		std::optional<int64> RemovedComponentId;
 
-		/** What was done to a property: of which entity or component, to which property, called what. */
+		/**
+		 * What was done to a property: of which entity or component, or of which asset if the path is not empty, to
+		 * which property, called what.
+		 */
 		std::optional<FPropertyChange> Change;
 		int64 ChangedObjectId = 0;
+		std::string ChangedAssetPath;
 		std::string ChangedPropertyName;
 		std::string ChangedPropertyLabel;
 	};
@@ -81,8 +87,18 @@ private:
 	 */
 	bool DrawComponentHeading(FUiFrame& Frame, const WComponent& Component, const std::string& Label);
 
-	/** Lays out the rows of one property of an entity or component, and notes what the user did to it. */
+	/**
+	 * Lays out the rows of one property of an entity or component, and notes what the user did to it. A reference to
+	 * an asset that the editor can change, a material that is a file of its own, is followed by the asset's rows.
+	 */
 	void DrawProperty(FUiFrame& Frame, const WObject& Object, int64 ObjectId, const FProperty& Property);
+
+	/**
+	 * Lays out the rows of an asset that a property refers to, below the property's row, and a row that says so if
+	 * the asset has changes that are not saved. Their items are named below the property's:
+	 * "Details/<ObjectId>/<Property>/Properties/<AssetProperty>" and "Details/<ObjectId>/<Property>/Unsaved".
+	 */
+	void DrawAssetRows(FUiFrame& Frame, int64 ObjectId, const FProperty& Property, const WAsset& Asset);
 
 	/** Does what the user asked for while the panel was laid out. */
 	void CarryOut(FUiFrame& Frame, int64 EntityId);

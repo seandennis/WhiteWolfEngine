@@ -1,5 +1,7 @@
 #include "Ui/Panels/DetailsPanel.h"
 
+#include "Assets/Asset.h"
+#include "Assets/EditedAssets.h"
 #include "Commands/ComponentClasses.h"
 #include "Editor.h"
 #include "Math/Transform.h"
@@ -7,6 +9,7 @@
 #include "Object/ObjectGlobals.h"
 #include "Object/ObjectPtr.h"
 #include "Reflection/ObjectProperties.h"
+#include "Reflection/ObjectProperty.h"
 #include "Reflection/Property.h"
 #include "Scene/Component.h"
 #include "Scene/Entity.h"
@@ -51,6 +54,39 @@ namespace
 	/** What the button at the end of a component's heading shows: there is more to do with the component. */
 	constexpr const char* MenuButtonLabel = "...";
 
+	/**
+	 * Returns the asset that a property of an object refers to if the editor can change it, a material that is a file
+	 * of its own, whose rows are then shown below the property's; null for any other property or value.
+	 */
+	const WAsset* FindChangeableAsset(const WObject& Object, const FProperty& Property)
+	{
+		const FObjectProperty* const ObjectProperty = dynamic_cast<const FObjectProperty*>(&Property);
+		if (ObjectProperty == nullptr)
+		{
+			return nullptr;
+		}
+		const WAsset* const Asset = Cast<WAsset>(ObjectProperty->GetReferencedObject(Property.GetValuePtr(&Object)));
+		return Asset != nullptr && FEditedAssets::CanChange(*Asset) ? Asset : nullptr;
+	}
+
+	/** Returns true if the label of a property of an asset that is shown below a property is searched for. */
+	bool IsAssetSearchedFor(const WObject& Object, const FProperty& Property, std::string_view SearchText)
+	{
+		const WAsset* const Asset = FindChangeableAsset(Object, Property);
+		if (Asset == nullptr)
+		{
+			return false;
+		}
+		for (const FProperty* const AssetProperty : FObjectProperties::GetSaved(*Asset->GetClass()))
+		{
+			if (FUiText::ContainsIgnoringCase(FUiText::MakePropertyLabel(AssetProperty->GetName()), SearchText))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** What the panel shows of a component, given what the user searches for. */
 	struct FShownProperties
 	{
@@ -65,7 +101,7 @@ namespace
 
 	/**
 	 * Returns the properties of a component that are shown: all of them if the component itself is searched for,
-	 * and otherwise those whose names or categories are.
+	 * and otherwise those whose names or categories are, and those that show an asset with a property that is.
 	 *
 	 * @param Label What the component is called in its heading.
 	 */
@@ -79,7 +115,8 @@ namespace
 			const std::string_view Category = Property->GetCategory();
 			const bool bIsSearchedFor = bComponentIsSearchedFor ||
 				FUiText::ContainsIgnoringCase(FUiText::MakePropertyLabel(Property->GetName()), SearchText) ||
-				FUiText::ContainsIgnoringCase(Category, SearchText);
+				FUiText::ContainsIgnoringCase(Category, SearchText) ||
+				IsAssetSearchedFor(Component, *Property, SearchText);
 			if (!bIsSearchedFor)
 			{
 				continue;
@@ -257,6 +294,7 @@ void FDetailsPanel::DrawTransform(FUiFrame& Frame, const WEntity& Entity)
 	{
 		Pending.Change = std::move(Change);
 		Pending.ChangedObjectId = EntityId;
+		Pending.ChangedAssetPath.clear();
 		Pending.ChangedPropertyName = TransformPropertyName;
 		Pending.ChangedPropertyLabel = TransformLabel;
 	}
@@ -379,9 +417,57 @@ void FDetailsPanel::DrawProperty(FUiFrame& Frame, const WObject& Object, int64 O
 	{
 		Pending.Change = std::move(Change);
 		Pending.ChangedObjectId = ObjectId;
+		Pending.ChangedAssetPath.clear();
 		Pending.ChangedPropertyName = Property.GetName();
 		Pending.ChangedPropertyLabel = Label;
 	}
+
+	if (const WAsset* const Asset = FindChangeableAsset(Object, Property))
+	{
+		DrawAssetRows(Frame, ObjectId, Property, *Asset);
+	}
+}
+
+void FDetailsPanel::DrawAssetRows(FUiFrame& Frame, int64 ObjectId, const FProperty& Property, const WAsset& Asset)
+{
+	// The asset's own widgets: what is being typed for one asset can never reach another that takes its place.
+	const std::string& AssetPath = Asset.GetAssetPath();
+	ImGui::PushID(AssetPath.c_str());
+	ImGui::Indent();
+
+	const std::string ItemName = std::format("Details/{}/{}", ObjectId, Property.GetName());
+	for (const FProperty* const AssetProperty : FObjectProperties::GetSaved(*Asset.GetClass()))
+	{
+		const std::string Label = FUiText::MakePropertyLabel(AssetProperty->GetName());
+		const FJsonValue* const Default = Defaults.Find(*Asset.GetClass(), *AssetProperty, Frame.Editor.GetScene());
+		if (std::optional<FPropertyChange> Change = Properties.DrawProperty(Frame,
+				*AssetProperty,
+				AssetProperty->GetValuePtr(&Asset),
+				Label,
+				std::format("{}/Properties/{}", ItemName, AssetProperty->GetName()),
+				Default))
+		{
+			Pending.Change = std::move(Change);
+			Pending.ChangedObjectId = 0;
+			Pending.ChangedAssetPath = AssetPath;
+			Pending.ChangedPropertyName = AssetProperty->GetName();
+			Pending.ChangedPropertyLabel = Label;
+		}
+	}
+
+	// Worked out in every frame, so that undoing back to what the file says takes the row away.
+	if (Frame.Editor.GetEditedAssets().HasUnsavedChanges(AssetPath))
+	{
+		ImGui::TableNextRow();
+		ImGui::TableNextColumn();
+		ImGui::TextDisabled("Changes");
+		ImGui::TableNextColumn();
+		ImGui::TextWrapped("Not saved yet. Ctrl+S saves them.");
+		Frame.Items.NameLastItem(std::format("{}/Unsaved", ItemName));
+	}
+
+	ImGui::Unindent();
+	ImGui::PopID();
 }
 
 void FDetailsPanel::CarryOut(FUiFrame& Frame, int64 EntityId)
@@ -422,7 +508,14 @@ void FDetailsPanel::ApplyChange(FUiFrame& Frame)
 		bIsChanging = true;
 		ChangingItemId = Change.HeldItemId;
 	}
-	FUiCommands::SetProperty(Editor, Pending.ChangedObjectId, Pending.ChangedPropertyName, Change.Value);
+	if (Pending.ChangedAssetPath.empty())
+	{
+		FUiCommands::SetProperty(Editor, Pending.ChangedObjectId, Pending.ChangedPropertyName, Change.Value);
+	}
+	else
+	{
+		FUiCommands::SetAssetProperty(Editor, Pending.ChangedAssetPath, Pending.ChangedPropertyName, Change.Value);
+	}
 }
 
 void FDetailsPanel::EndFinishedChange(FUiFrame& Frame)
