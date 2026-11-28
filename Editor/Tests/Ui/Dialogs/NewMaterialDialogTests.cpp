@@ -80,6 +80,48 @@ TEST_SUITE("FNewMaterialDialog")
 		CHECK(std::filesystem::is_regular_file(Content / "Materials" / "NewMaterial3.wwmaterial"));
 	}
 
+	TEST_CASE("The window suggests the folder of materials as the project spells it")
+	{
+		FEditorUiTest Test;
+		const FScopedTempDirectory Directory;
+		CreateTestProject(Test.Editor, Directory.GetPath());
+		// Where the file system does not tell capitals apart, this folder is the one that the window suggests.
+		REQUIRE(
+			Test.Editor.ExecuteCommand("Asset.CreateMaterial", ParseTestJson(R"({"Path": "materials/Red.wwmaterial"})"))
+				.HasSucceeded());
+
+		OpenNewMaterialWindow(Test);
+		Test.PressKey(EKey::Enter);
+
+		CHECK_FALSE(Test.HasItem("NewMaterial/Path"));
+		CHECK(CountLoggedProblems(Test.Capture) == 0);
+	}
+
+	TEST_CASE("The window does not suggest the name of a material that is in use although its file is gone")
+	{
+		FEditorUiTest Test;
+		const FScopedTempDirectory Directory;
+		const std::filesystem::path Content = CreateTestProject(Test.Editor, Directory.GetPath());
+		REQUIRE(Test.Editor
+					.ExecuteCommand(
+						"Asset.CreateMaterial", ParseTestJson(R"({"Path": "Materials/NewMaterial.wwmaterial"})"))
+					.HasSucceeded());
+		// Changed, the editor keeps it, and then its file goes.
+		REQUIRE(Test.Editor
+					.ExecuteCommand("Asset.SetProperty",
+						ParseTestJson(
+							R"({"Asset": "Materials/NewMaterial.wwmaterial", "Property": "Metallic", "Value": 1})"))
+					.HasSucceeded());
+		std::filesystem::remove(Content / "Materials" / "NewMaterial.wwmaterial");
+
+		OpenNewMaterialWindow(Test);
+		Test.PressKey(EKey::Enter);
+
+		CHECK_FALSE(Test.HasItem("NewMaterial/Path"));
+		CHECK(std::filesystem::is_regular_file(Content / "Materials" / "NewMaterial2.wwmaterial"));
+		CHECK_FALSE(std::filesystem::exists(Content / "Materials" / "NewMaterial.wwmaterial"));
+	}
+
 	TEST_CASE("What is typed replaces the suggestion, and a name without the ending is given it")
 	{
 		FEditorUiTest Test;
