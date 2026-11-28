@@ -120,7 +120,9 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
                           EnumClassFlags.h (WW_ENUM_CLASS_FLAGS), FileHelper.h (FFileHelper: whole text files),
                           ProcessDiagnostics.h (error dialogs, memory leak report), Utf8.h (FUtf8: characters as UTF-8)
     Assets/               Assets and their names: Asset.h (WAsset), AssetPath.h (FAssetPath), AssetPackage.h (WAssetPackage),
-                          AssetManager.h (FAssetManager: loads the files of the content directory)
+                          AssetManager.h (FAssetManager: loads the files of the content directory),
+                          AssetReferenceContext.h (FAssetReferenceContext: references in a document that knows
+                          assets and nothing else)
     Input/                Keyboard and mouse: InputState.h (FInputState), Key.h (EKey), MouseButton.h (EMouseButton)
     Json/                 JSON text: JsonValue.h (FJsonValue), JsonReader.h (FJsonReader), JsonWriter.h (FJsonWriter)
     Logging/              The engine log: Log.h (FLog, WW_LOG), categories, messages and sinks
@@ -142,6 +144,7 @@ Engine/                   The core engine module (WhiteWolfEngine.dll)
                           EnvironmentMap.h (WEnvironmentMap), SphericalHarmonics.h (FSphericalHarmonics),
                           SkyLightComponent.h (WSkyLightComponent), ShadowCascades.h (FShadowCascades),
                           CameraView.h (FCameraView), StaticMesh.h (WStaticMesh), Material.h (WMaterial),
+                          MaterialSerializer.h (FMaterialSerializer: material files),
                           StaticMeshComponent.h (WStaticMeshComponent), DirectionalLightComponent.h,
                           PointLightComponent.h, SceneRenderer.h (FSceneRenderer), SceneViewMode.h,
                           GltfImporter.h (FGltfImporter: .gltf and .glb files),
