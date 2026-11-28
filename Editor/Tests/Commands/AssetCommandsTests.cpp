@@ -219,6 +219,20 @@ TEST_SUITE("Asset commands")
 		CHECK(std::filesystem::is_empty(Test.GetContentDirectory()));
 	}
 
+	TEST_CASE("Asset.Import of a model whose picture cannot be copied leaves no file or folder behind")
+	{
+		FAssetCommandTest Test;
+		const std::filesystem::path Source = Test.WriteSquareWithExternalFiles("Square.gltf");
+		// The model and its buffer are copied, into folders that the import makes, before the picture is missed.
+		std::filesystem::remove(Test.GetSourceDirectory() / "Textures" / "Paint.png");
+
+		const FCommandResult Result = Test.Import(Source, "Fresh/Deeper");
+
+		CHECK_FALSE(Result.HasSucceeded());
+		CHECK(Result.GetError().starts_with("The file was not imported: '"));
+		CHECK(std::filesystem::is_empty(Test.GetContentDirectory()));
+	}
+
 	TEST_CASE("Asset.Import refuses a model that keeps data outside its own directory")
 	{
 		FAssetCommandTest Test;

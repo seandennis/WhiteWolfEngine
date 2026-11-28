@@ -156,10 +156,11 @@ namespace
 				 IsBelow(Folder, ContentDirectory);
 				 Folder = Folder.parent_path())
 			{
-				// A folder that is there, or of which that cannot be told, is not the command's to remove.
+				// A folder that is there, or a link in its place, whatever the link leads to, is not the command's to
+				// remove, and neither is one of which that cannot be told.
 				std::error_code ErrorCode;
-				const bool bExists = std::filesystem::exists(Folder, ErrorCode);
-				if (bExists || ErrorCode)
+				const std::filesystem::file_status Status = std::filesystem::symlink_status(Folder, ErrorCode);
+				if (!std::filesystem::status_known(Status) || std::filesystem::exists(Status))
 				{
 					return;
 				}
@@ -424,7 +425,8 @@ namespace
 		FJsonValue Value;
 		if (!DescribeAssetFile(Path->File, Value, Error))
 		{
-			// A file that cannot be loaded is no material, and is not left in the project.
+			// After the checks above, only a file that something else changed between the writing and the reading
+			// fails here. It is no material, and is not left in the project.
 			RemoveFiles({FilePath});
 			NewFolders.Remove();
 			return Refuse(Error);

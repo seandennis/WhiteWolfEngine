@@ -282,6 +282,29 @@ TEST_SUITE("Asset commands for materials")
 		CHECK(ListContent(Test) == ContentBefore);
 	}
 
+	TEST_CASE("A link in the place of a folder that a command fails to write through is left as it was")
+	{
+		FAssetCommandTest Test;
+		// A link to a folder that is not there, as one to a drive that is not plugged in.
+		const std::filesystem::path Link = Test.GetContentDirectory() / "Shared";
+		std::error_code ErrorCode;
+		std::filesystem::create_directory_symlink(Test.Directory.GetPath() / "Unplugged", Link, ErrorCode);
+		if (ErrorCode)
+		{
+			// Windows lets only some users make links.
+			MESSAGE("No link could be made here, so there is nothing to test: ", ErrorCode.message());
+			return;
+		}
+
+		const FCommandResult Created = CreateMaterial(Test, "Shared/Brick.wwmaterial");
+		CHECK_FALSE(Created.HasSucceeded());
+		CHECK(std::filesystem::is_symlink(Link));
+
+		const FCommandResult Imported = Test.Import(Test.WritePicture("Wood.png"), "Shared/Textures");
+		CHECK_FALSE(Imported.HasSucceeded());
+		CHECK(std::filesystem::is_symlink(Link));
+	}
+
 	TEST_CASE("Asset.CreateMaterial refuses a path whose material is still in use although its file is gone")
 	{
 		FAssetCommandTest Test;
