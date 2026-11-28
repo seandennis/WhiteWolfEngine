@@ -36,6 +36,9 @@ TEST_SUITE("Asset commands")
 				 Editor.ExecuteCommand("Asset.Place", ParseTestJson(R"({"File": "Crate.glb"})")),
 				 Editor.ExecuteCommand("Asset.CreateMaterial", ParseTestJson(R"({"Path": "Brick.wwmaterial"})")),
 				 Editor.ExecuteCommand("Asset.GetProperties", ParseTestJson(R"({"Asset": "Brick.wwmaterial"})")),
+				 Editor.ExecuteCommand("Asset.SetProperty",
+					 ParseTestJson(R"({"Asset": "Brick.wwmaterial", "Property": "Metallic", "Value": 1})")),
+				 Editor.ExecuteCommand("Asset.Save", ParseTestJson(R"({"Asset": "Brick.wwmaterial"})")),
 			 })
 		{
 			CHECK_FALSE(Result.HasSucceeded());

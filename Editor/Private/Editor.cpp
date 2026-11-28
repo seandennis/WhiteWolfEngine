@@ -83,7 +83,7 @@ FCommandResult FEditor::ExecuteCommand(std::string_view Name, const FJsonValue& 
 {
 	// Looked up before the command runs: a description found afterwards might not be the one that ran.
 	const FCommandDescription* const Description = Commands.Find(Name);
-	const bool bCanChangeScene = Description != nullptr && Description->Effect == ECommandEffect::ChangesScene;
+	const bool bCanChange = Description != nullptr && Description->Effect != ECommandEffect::LeavesScene;
 
 	FCommandResult Result = Commands.Execute(*this, Name, Arguments);
 	if (Result.HasSucceeded())
@@ -98,9 +98,9 @@ FCommandResult FEditor::ExecuteCommand(std::string_view Name, const FJsonValue& 
 	}
 
 	// Whatever the command changed is a step, whether it succeeded or not: a command that fails should leave the
-	// scene as it was, and if one does not, what it left behind can at least be undone. Inside a step that takes
-	// several commands, it is that step's to record.
-	if (bCanChangeScene && !OpenStepName.has_value())
+	// scene and the assets as they were, and if one does not, what it left behind can at least be undone. Inside a step
+	// that takes several commands, it is that step's to record.
+	if (bCanChange && !OpenStepName.has_value())
 	{
 		RecordChanges(Name);
 	}

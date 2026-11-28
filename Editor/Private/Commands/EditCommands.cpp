@@ -65,15 +65,16 @@ void FEditCommands::Register(FCommandRegistry& Registry)
 {
 	Registry.Register(
 		{"Edit.Undo",
-			"Undoes the last change to the scene: puts the scene back as it was before the last command that "
-			"changed it. Returns the name of that command. Entities and components keep their identifiers.",
+			"Undoes the last change to the scene or to a material: puts both back as they were before the last "
+			"command that changed one of them. Returns the name of that command. Entities and components keep their "
+			"identifiers. No file is written: a material that is put back differs from its file until Asset.Save.",
 			{}},
 		Undo);
 
 	Registry.Register(
 		{"Edit.Redo",
 			"Redoes the change that was undone last. Returns the name of the command that made it. Nothing can be "
-			"redone once the scene has changed since the undo.",
+			"redone once the scene or a material has changed since the undo.",
 			{}},
 		Redo);
 

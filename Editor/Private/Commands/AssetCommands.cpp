@@ -9,6 +9,7 @@
 #include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
 #include "Commands/CommandTargets.h"
+#include "Commands/SavedProperties.h"
 #include "Core/FileHelper.h"
 #include "Editor.h"
 #include "Json/JsonValue.h"
@@ -369,6 +370,82 @@ namespace
 		return FCommandResult::Success(std::move(Value));
 	}
 
+	/**
+	 * Finds an asset that the editor can change and save for a command: a material that is a file of its own. Goes by
+	 * the name first, so that nothing is loaded only to be refused.
+	 *
+	 * @param OutError Receives the command's failure, a whole sentence, if there is no such asset.
+	 * @return The asset, or null.
+	 */
+	WAsset* FindChangeableAsset(const FEditor& Editor, const std::string& AssetPath, std::string& OutError)
+	{
+		std::string Error;
+		const std::optional<FAssetPath> Path = FAssetPath::Parse(AssetPath, Error);
+		if (!Path.has_value())
+		{
+			OutError = std::format("The asset could not be loaded: {}.", Error);
+			return nullptr;
+		}
+		if (!FEditedAssets::CanChange(*Path))
+		{
+			OutError =
+				std::format("\"{}\" cannot be changed: it is what its file says. Only a material that is a file of its "
+							"own, whose name ends in \"{}\", is changed and saved by the editor.",
+					AssetPath,
+					FMaterialSerializer::FileExtension);
+			return nullptr;
+		}
+		// A file whose name says that it is a material file holds a material and nothing else.
+		return FindAsset(Editor, AssetPath, OutError);
+	}
+
+	FCommandResult SetAssetProperty(FEditor& Editor, const FCommandArguments& Arguments)
+	{
+		std::string Error;
+		WAsset* const Asset = FindChangeableAsset(Editor, Arguments.GetString("Asset"), Error);
+		if (Asset == nullptr)
+		{
+			return FCommandResult::Failure(std::move(Error));
+		}
+		const std::string& PropertyName = Arguments.GetString("Property");
+		const FProperty* const Property = FSavedProperties::Find(*Asset, PropertyName, Error);
+		if (Property == nullptr)
+		{
+			return FCommandResult::Failure(std::move(Error));
+		}
+
+		// Kept by the editor and changed in memory: the file is written by Asset.Save.
+		if (!Editor.GetEditedAssets().SetProperty(*Asset, *Property, Arguments.GetJson("Value"), Error))
+		{
+			return FCommandResult::Failure(std::format("The property \"{}\" of the class {} was not changed: {}.",
+				PropertyName,
+				Asset->GetClass()->GetName(),
+				Error));
+		}
+		return FCommandResult::Success(FJsonValue());
+	}
+
+	FCommandResult SaveAsset(FEditor& Editor, const FCommandArguments& Arguments)
+	{
+		std::string Error;
+		WAsset* const Asset = FindChangeableAsset(Editor, Arguments.GetString("Asset"), Error);
+		if (Asset == nullptr)
+		{
+			return FCommandResult::Failure(std::move(Error));
+		}
+
+		bool bWritten = false;
+		if (!Editor.GetEditedAssets().Save(*Asset, bWritten, Error))
+		{
+			return FCommandResult::Failure(
+				std::format("The material \"{}\" was not saved: {}.", Asset->GetAssetPath(), Error));
+		}
+		FJsonValue Value = FJsonValue::MakeObject();
+		Value.SetMember("Path", Asset->GetAssetPath());
+		Value.SetMember("Written", bWritten);
+		return FCommandResult::Success(std::move(Value));
+	}
+
 	FCommandResult PlaceAsset(FEditor& Editor, const FCommandArguments& Arguments)
 	{
 		if (Editor.GetProject() == nullptr)
@@ -477,14 +554,44 @@ void FAssetCommands::Register(FCommandRegistry& Registry)
 			"Makes a material in the project: a file of its own in the content directory, with the values of a new "
 			"material (white, not a metal, roughness 0.5, no textures). Returns the file's name, which is the "
 			"material's asset path, as Asset.Import returns it. That path is what the Material of a "
-			"WStaticMeshComponent takes, with Object.SetProperty. Nothing of the project is replaced, and Edit.Undo "
-			"does not take the file away.",
+			"WStaticMeshComponent takes, with Object.SetProperty, and Asset.SetProperty changes its values. Nothing "
+			"of the project is replaced, and Edit.Undo does not take the file away.",
 			{FCommandParameter::Required("Path",
 				ECommandArgumentType::String,
 				"Where in the content directory the material's file is to be: a name that ends in \".wwmaterial\", "
 				"for example \"Materials/Brick.wwmaterial\". Folders that are not there are made.")},
 			ECommandEffect::LeavesScene},
 		CreateMaterial);
+
+	Registry.Register(
+		{"Asset.SetProperty",
+			"Changes the value of one property of a material that is a file of its own, as Asset.CreateMaterial "
+			"makes it. Everything that uses the material shows the change at once. The change is kept in the editor "
+			"until Asset.Save writes it to the material's file, and Edit.Undo takes it back.",
+			{FCommandParameter::Required("Asset",
+				 ECommandArgumentType::String,
+				 "The asset path of a material that is a file of its own, for example \"Materials/Brick.wwmaterial\"."),
+				FCommandParameter::Required("Property",
+					ECommandArgumentType::String,
+					"The name of the property, as Asset.GetProperties lists it."),
+				FCommandParameter::Required("Value",
+					ECommandArgumentType::Json,
+					"The new value, in the form Asset.GetProperties returns it: a colour is [R, G, B, A] in linear "
+					"light, "
+					"a texture is the asset path of a picture, with \"#Linear\" for a data texture such as a normal "
+					"map, and null is no texture.")},
+			ECommandEffect::ChangesAssets},
+		SetAssetProperty);
+
+	Registry.Register(
+		{"Asset.Save",
+			"Writes a material to its file, if the file does not say what the material is: it was changed with "
+			"Asset.SetProperty since it was last written, or its file is gone. Returns the material's path and "
+			"whether the file was written (\"Written\"). It is no step of the history.",
+			{FCommandParameter::Required(
+				"Asset", ECommandArgumentType::String, "The asset path of a material that is a file of its own.")},
+			ECommandEffect::LeavesScene},
+		SaveAsset);
 
 	Registry.Register(
 		{"Asset.Place",

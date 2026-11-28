@@ -44,8 +44,10 @@ namespace
 
 	constexpr std::string_view Instructions =
 		"The editor of White Wolf Engine. Every tool is a command of the editor; Editor.ListCommands describes them "
-		"all. Entities and components are referred to by integer identifiers, which Scene.GetHierarchy lists. A "
-		"tool that fails says why and leaves the scene as it was. Edit.Undo undoes the last change to the scene.";
+		"all. Entities and components are referred to by integer identifiers, which Scene.GetHierarchy lists, and "
+		"assets by their paths, which Asset.List and Asset.Describe give. A tool that fails says why and leaves the "
+		"scene and the assets as they were. Edit.Undo undoes the last change to the scene or to a material. "
+		"Scene.Save writes the scene to its file, and Asset.Save a changed material to its own.";
 
 	/** What a request is answered with: a result, or an error with a code, a message and perhaps data. */
 	struct FReply

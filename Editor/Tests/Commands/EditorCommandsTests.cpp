@@ -76,6 +76,11 @@ TEST_SUITE("Editor commands")
 			{
 				CHECK(*ChangesScene == FJsonValue(true));
 			}
+			// It changes a material, and leaves the scene as it is.
+			if (*Name == FJsonValue("Asset.SetProperty"))
+			{
+				CHECK(*ChangesScene == FJsonValue(false));
+			}
 		}
 	}
 

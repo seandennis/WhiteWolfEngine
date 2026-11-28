@@ -81,6 +81,8 @@ TEST_SUITE("FEditor")
 			"Asset.Import",
 			"Asset.List",
 			"Asset.Place",
+			"Asset.Save",
+			"Asset.SetProperty",
 			"Component.Add",
 			"Component.ListClasses",
 			"Component.Remove",
@@ -137,6 +139,7 @@ TEST_SUITE("FEditor")
 			"Asset.GetProperties",
 			"Asset.Import",
 			"Asset.List",
+			"Asset.Save",
 			"Component.ListClasses",
 			"Edit.GetHistory",
 			"Editor.ListCommands",
@@ -157,6 +160,23 @@ TEST_SUITE("FEditor")
 			"Viewport.SetViewMode",
 		};
 		CHECK(Names == ExpectedNames);
+	}
+
+	TEST_CASE("The commands that change assets and leave the scene as it is say so")
+	{
+		const FScopedEditorTest EditorTest;
+		const FEditor Editor;
+
+		std::vector<std::string> Names;
+		for (const FCommandDescription* const Description : Editor.GetCommands().GetCommands())
+		{
+			if (Description->Effect == ECommandEffect::ChangesAssets)
+			{
+				Names.push_back(Description->Name);
+			}
+		}
+
+		CHECK(Names == std::vector<std::string>{"Asset.SetProperty"});
 	}
 
 	TEST_CASE("SetScene replaces the scene and destroys the one it replaces")

@@ -6,7 +6,7 @@ class FCommandRegistry;
 
 /**
  * The commands that act on the assets of the project: Asset.Import, Asset.List, Asset.Describe,
- * Asset.GetProperties, Asset.CreateMaterial and Asset.Place.
+ * Asset.GetProperties, Asset.CreateMaterial, Asset.SetProperty, Asset.Save and Asset.Place.
  */
 class FAssetCommands
 {

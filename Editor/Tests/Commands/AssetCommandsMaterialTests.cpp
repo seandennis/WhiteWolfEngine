@@ -10,17 +10,20 @@
 #include "Reflection/Property.h"
 #include "Rendering/Material.h"
 #include "Rendering/MaterialSerializer.h"
+#include "Rendering/StaticMesh.h"
 #include "Rendering/StaticMeshComponent.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneSerializer.h"
 #include "TestEditorObjects.h"
+#include "TestSupport/ScopedTempDirectory.h"
 
 #include <doctest/doctest.h>
 
 #include <algorithm>
 #include <filesystem>
 #include <format>
+#include <initializer_list>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -72,6 +75,45 @@ namespace
 		FJsonValue Arguments = FJsonValue::MakeObject();
 		Arguments.SetMember("Asset", AssetPath);
 		return Test.Editor.ExecuteCommand("Asset.GetProperties", Arguments);
+	}
+
+	/** Gives the editor Asset.SetProperty for a property of an asset, with the value as JSON text. */
+	FCommandResult SetProperty(
+		FAssetCommandTest& Test, const std::string& AssetPath, const std::string& Property, std::string_view ValueText)
+	{
+		FJsonValue Arguments = FJsonValue::MakeObject();
+		Arguments.SetMember("Asset", AssetPath);
+		Arguments.SetMember("Property", Property);
+		Arguments.SetMember("Value", ParseTestJson(ValueText));
+		return Test.Editor.ExecuteCommand("Asset.SetProperty", Arguments);
+	}
+
+	/** Gives the editor Asset.Save for an asset path. */
+	FCommandResult Save(FAssetCommandTest& Test, const std::string& AssetPath)
+	{
+		FJsonValue Arguments = FJsonValue::MakeObject();
+		Arguments.SetMember("Asset", AssetPath);
+		return Test.Editor.ExecuteCommand("Asset.Save", Arguments);
+	}
+
+	/** Returns one saved property of an asset as Asset.GetProperties gives it, which a test expects to succeed. */
+	FJsonValue GetPropertyValue(FAssetCommandTest& Test, const std::string& AssetPath, std::string_view Property)
+	{
+		const FCommandResult Result = GetProperties(Test, AssetPath);
+		INFO("Error: ", Result.GetError());
+		REQUIRE(Result.HasSucceeded());
+		const FJsonValue* const Value = Result.GetValue().FindMember("Properties")->FindMember(Property);
+		REQUIRE(Value != nullptr);
+		return *Value;
+	}
+
+	/** Returns whether Asset.GetProperties says that an asset has changes that are not saved. */
+	bool IsUnsaved(FAssetCommandTest& Test, const std::string& AssetPath)
+	{
+		const FCommandResult Result = GetProperties(Test, AssetPath);
+		INFO("Error: ", Result.GetError());
+		REQUIRE(Result.HasSucceeded());
+		return Result.GetValue().FindMember("Unsaved")->GetBoolean();
 	}
 
 	/** The saved properties of a new material, as compact JSON. */
@@ -381,5 +423,297 @@ TEST_SUITE("Asset commands for materials")
 
 		CHECK_FALSE(Result.HasSucceeded());
 		CHECK(Result.GetError() == Expected);
+	}
+
+	TEST_CASE("Asset.SetProperty changes a material in memory, and Asset.Save writes it to its file")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(CreateMaterial(Test, "Materials/Brick.wwmaterial").HasSucceeded());
+		const std::string NewText = ReadContentFile(Test, "Materials/Brick.wwmaterial");
+
+		const FCommandResult Changed = SetProperty(Test, "Materials/Brick.wwmaterial", "Metallic", "1.0");
+
+		INFO("Error: ", Changed.GetError());
+		REQUIRE(Changed.HasSucceeded());
+		CHECK(Changed.GetValue().IsNull());
+		CHECK(GetPropertyValue(Test, "Materials/Brick.wwmaterial", "Metallic") == FJsonValue(1.0));
+		CHECK(IsUnsaved(Test, "Materials/Brick.wwmaterial"));
+		CHECK(ReadContentFile(Test, "Materials/Brick.wwmaterial") == NewText);
+
+		const FCommandResult Saved = Save(Test, "Materials/Brick.wwmaterial");
+
+		REQUIRE(Saved.HasSucceeded());
+		CHECK(WriteTestJson(Saved.GetValue()) == R"({"Path":"Materials/Brick.wwmaterial","Written":true})");
+		CHECK_FALSE(IsUnsaved(Test, "Materials/Brick.wwmaterial"));
+		std::string Error;
+		const WMaterial* const Material = FAssetManager::Load<WMaterial>("Materials/Brick.wwmaterial", Error);
+		REQUIRE(Material != nullptr);
+		CHECK(ReadContentFile(Test, "Materials/Brick.wwmaterial") == FMaterialSerializer::SaveToText(*Material));
+		CHECK(Material->Metallic == 1.0f);
+
+		// Nothing more to write.
+		const FCommandResult Again = Save(Test, "Materials/Brick.wwmaterial");
+		REQUIRE(Again.HasSucceeded());
+		CHECK(WriteTestJson(Again.GetValue()) == R"({"Path":"Materials/Brick.wwmaterial","Written":false})");
+	}
+
+	TEST_CASE("Asset.SetProperty is a step of the history, which Edit.Undo takes back in memory")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(CreateMaterial(Test, "Materials/Brick.wwmaterial").HasSucceeded());
+		REQUIRE(SetProperty(Test, "Materials/Brick.wwmaterial", "Roughness", "0.25").HasSucceeded());
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames() == std::vector<std::string>{"Asset.SetProperty"});
+
+		const FCommandResult Undone = Test.Execute("Edit.Undo");
+
+		REQUIRE(Undone.HasSucceeded());
+		CHECK(WriteTestJson(Undone.GetValue()) == R"({"Undone":"Asset.SetProperty"})");
+		CHECK(GetPropertyValue(Test, "Materials/Brick.wwmaterial", "Roughness") == FJsonValue(0.5));
+		CHECK_FALSE(IsUnsaved(Test, "Materials/Brick.wwmaterial"));
+		REQUIRE(Test.Execute("Edit.Redo").HasSucceeded());
+		CHECK(GetPropertyValue(Test, "Materials/Brick.wwmaterial", "Roughness") == FJsonValue(0.25));
+	}
+
+	TEST_CASE("Asset.SetProperty to the value that a material has is no step, and inside a step is part of it")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(CreateMaterial(Test, "Materials/Brick.wwmaterial").HasSucceeded());
+
+		REQUIRE(SetProperty(Test, "Materials/Brick.wwmaterial", "Roughness", "0.5").HasSucceeded());
+		CHECK_FALSE(Test.Editor.GetHistory().CanUndo());
+		CHECK_FALSE(IsUnsaved(Test, "Materials/Brick.wwmaterial"));
+
+		Test.Editor.BeginStep("Paint");
+		REQUIRE(SetProperty(Test, "Materials/Brick.wwmaterial", "Roughness", "0.25").HasSucceeded());
+		REQUIRE(SetProperty(Test, "Materials/Brick.wwmaterial", "Metallic", "1.0").HasSucceeded());
+		Test.Editor.EndStep();
+		CHECK(Test.Editor.GetHistory().GetUndoStepNames() == std::vector<std::string>{"Paint"});
+	}
+
+	TEST_CASE("Everything that uses a material shows what Asset.SetProperty gives it")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(CreateMaterial(Test, "Materials/Brick.wwmaterial").HasSucceeded());
+		std::vector<const WStaticMeshComponent*> Components;
+		for (const std::string_view Name : {"Left", "Right"})
+		{
+			WEntity* const Entity = Test.Editor.GetScene().CreateEntity(std::string(Name));
+			REQUIRE(Entity != nullptr);
+			const WStaticMeshComponent* const Component = Entity->AddComponent<WStaticMeshComponent>();
+			REQUIRE(Component != nullptr);
+			REQUIRE(Test.Execute("Object.SetProperty",
+							std::format(
+								R"({{"Object": {}, "Property": "Material", "Value": "Materials/Brick.wwmaterial"}})",
+								Component->GetId()))
+						.HasSucceeded());
+			Components.push_back(Component);
+		}
+
+		REQUIRE(SetProperty(Test, "Materials/Brick.wwmaterial", "BaseColor", "[1, 0, 0, 1]").HasSucceeded());
+
+		for (const WStaticMeshComponent* const Component : Components)
+		{
+			REQUIRE(Component->Material != nullptr);
+			CHECK(Component->Material->BaseColor == FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));
+		}
+		CHECK(Components[0]->Material.Get() == Components[1]->Material.Get());
+	}
+
+	TEST_CASE("Asset.SetProperty says why it cannot change a material, and changes nothing")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(Test.Import(Test.WriteSquare("Square.gltf"), "Models").HasSucceeded());
+		REQUIRE(Test.Import(Test.WritePicture("Wood.png"), "Textures").HasSucceeded());
+		REQUIRE(CreateMaterial(Test, "Materials/Brick.wwmaterial").HasSucceeded());
+		REQUIRE(CreateMaterial(Test, "Materials/Other.wwmaterial").HasSucceeded());
+		const std::string BrickText = ReadContentFile(Test, "Materials/Brick.wwmaterial");
+		const std::string CannotBeChanged =
+			"\"{}\" cannot be changed: it is what its file says. Only a material that is a file of its own, whose "
+			"name ends in \".wwmaterial\", is changed and saved by the editor.";
+		std::string AssetPath = "Materials/Brick.wwmaterial";
+		std::string Property = "Metallic";
+		std::string ValueText = "1.0";
+		std::string Expected;
+
+		SUBCASE("A material of a model")
+		{
+			AssetPath = "Models/Square.gltf#Materials/0";
+			Expected = std::vformat(CannotBeChanged, std::make_format_args(AssetPath));
+		}
+		SUBCASE("A picture")
+		{
+			AssetPath = "Textures/Wood.png";
+			Expected = std::vformat(CannotBeChanged, std::make_format_args(AssetPath));
+		}
+		SUBCASE("A material of a model that is not there: the name is enough")
+		{
+			AssetPath = "Models/Gone.gltf#Materials/0";
+			Expected = std::vformat(CannotBeChanged, std::make_format_args(AssetPath));
+		}
+		SUBCASE("A shape that the engine has built in")
+		{
+			AssetPath = "Engine/Shapes#Cube";
+			Expected = std::vformat(CannotBeChanged, std::make_format_args(AssetPath));
+		}
+		SUBCASE("Text that is no asset path")
+		{
+			AssetPath = "../Brick.wwmaterial";
+			Expected =
+				"The asset could not be loaded: \"../Brick.wwmaterial\" is not the path of an asset: it must not "
+				"have the part \"..\".";
+		}
+		SUBCASE("A material file that is not there")
+		{
+			AssetPath = "Materials/Gone.wwmaterial";
+			Expected =
+				"The asset could not be loaded: the content directory has no file \"Materials/Gone.wwmaterial\".";
+		}
+		SUBCASE("A property that a material does not have")
+		{
+			Property = "Colour";
+			Expected = "The class WMaterial has no property \"Colour\".";
+		}
+		SUBCASE("A property that is not saved")
+		{
+			Property = "Package";
+			ValueText = "null";
+			Expected =
+				"The property \"Package\" of the class WMaterial is not saved, and commands neither read nor change "
+				"such properties.";
+		}
+		SUBCASE("Text for a number")
+		{
+			ValueText = R"("shiny")";
+			Expected =
+				"The property \"Metallic\" of the class WMaterial was not changed: expected a number but found a "
+				"string.";
+		}
+		SUBCASE("A texture that the project does not have")
+		{
+			Property = "BaseColorTexture";
+			ValueText = R"("Textures/Gone.png")";
+			Expected =
+				"The property \"BaseColorTexture\" of the class WMaterial was not changed: the content directory "
+				"has no file \"Textures/Gone.png\".";
+		}
+		SUBCASE("A material for a texture")
+		{
+			Property = "BaseColorTexture";
+			ValueText = R"("Materials/Other.wwmaterial")";
+			Expected =
+				"The property \"BaseColorTexture\" of the class WMaterial was not changed: the reference is to a "
+				"WMaterial, which is not a WTexture.";
+		}
+
+		const FCommandResult Result = SetProperty(Test, AssetPath, Property, ValueText);
+
+		CHECK_FALSE(Result.HasSucceeded());
+		CHECK(Result.GetError() == Expected);
+		CHECK_FALSE(Test.Editor.GetHistory().CanUndo());
+		CHECK(Test.Editor.GetEditedAssets().GetUnsaved().empty());
+		CHECK(GetPropertyValue(Test, "Materials/Brick.wwmaterial", "Metallic") == FJsonValue(0.0));
+		CHECK(ReadContentFile(Test, "Materials/Brick.wwmaterial") == BrickText);
+	}
+
+	TEST_CASE("Asset.Save refuses what the editor does not save, and writes a file that is gone")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(Test.Import(Test.WriteSquare("Square.gltf"), "Models").HasSucceeded());
+		REQUIRE(CreateMaterial(Test, "Materials/Brick.wwmaterial").HasSucceeded());
+
+		const FCommandResult Refused = Save(Test, "Models/Square.gltf#Materials/0");
+		CHECK_FALSE(Refused.HasSucceeded());
+		CHECK(Refused.GetError() ==
+			"\"Models/Square.gltf#Materials/0\" cannot be changed: it is what its file says. Only a material that is a "
+			"file of its own, whose name ends in \".wwmaterial\", is changed and saved by the editor.");
+
+		// A material whose file was removed while it was in use is written again, with what it is.
+		REQUIRE(SetProperty(Test, "Materials/Brick.wwmaterial", "Metallic", "1.0").HasSucceeded());
+		std::filesystem::remove(Test.GetContentDirectory() / "Materials" / "Brick.wwmaterial");
+		const FCommandResult Saved = Save(Test, "Materials/Brick.wwmaterial");
+		REQUIRE(Saved.HasSucceeded());
+		CHECK(WriteTestJson(Saved.GetValue()) == R"({"Path":"Materials/Brick.wwmaterial","Written":true})");
+		CHECK(ReadContentFile(Test, "Materials/Brick.wwmaterial").find("\"Metallic\": 1.0") != std::string::npos);
+	}
+
+	TEST_CASE("Asset.Save says why it cannot write a material's file, which keeps its changes")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(CreateMaterial(Test, "Materials/Brick.wwmaterial").HasSucceeded());
+		REQUIRE(SetProperty(Test, "Materials/Brick.wwmaterial", "Metallic", "1.0").HasSucceeded());
+		// A folder with something in it has taken the place of the file.
+		std::filesystem::remove(Test.GetContentDirectory() / "Materials" / "Brick.wwmaterial");
+		std::filesystem::create_directories(Test.GetContentDirectory() / "Materials" / "Brick.wwmaterial" / "Inside");
+
+		const FCommandResult Result = Save(Test, "Materials/Brick.wwmaterial");
+
+		CHECK_FALSE(Result.HasSucceeded());
+		CHECK(Result.GetError().starts_with(
+			"The material \"Materials/Brick.wwmaterial\" was not saved: cannot replace '"));
+		CHECK(IsUnsaved(Test, "Materials/Brick.wwmaterial"));
+		CHECK(GetPropertyValue(Test, "Materials/Brick.wwmaterial", "Metallic") == FJsonValue(1.0));
+	}
+
+	TEST_CASE("An agent makes a red metal, gives it to a cube, saves both, and another editor finds them so")
+	{
+		const FScopedEditorTest EditorTest;
+		const FScopedTempDirectory Directory;
+		const std::filesystem::path ProjectDirectory = Directory.GetPath() / "Game";
+		{
+			FEditor Editor;
+			const auto Run = [&Editor](std::string_view CommandName, const std::string& ArgumentText)
+			{
+				const FCommandResult Result = Editor.ExecuteCommand(CommandName, ParseTestJson(ArgumentText));
+				INFO(CommandName, ": ", Result.GetError());
+				REQUIRE(Result.HasSucceeded());
+				// The worst the collector can do between two messages of an agent.
+				CollectGarbage();
+				return Result.GetValue();
+			};
+			FJsonValue NewProject = FJsonValue::MakeObject();
+			NewProject.SetMember("Directory", FFileHelper::PathToUtf8(ProjectDirectory));
+			NewProject.SetMember("Name", "Game");
+			REQUIRE(Editor.ExecuteCommand("Project.New", NewProject).HasSucceeded());
+
+			Run("Asset.CreateMaterial", R"({"Path": "Materials/RedMetal.wwmaterial"})");
+			Run("Asset.SetProperty",
+				R"({"Asset": "Materials/RedMetal.wwmaterial", "Property": "BaseColor", "Value": [1, 0, 0, 1]})");
+			Run("Asset.SetProperty",
+				R"({"Asset": "Materials/RedMetal.wwmaterial", "Property": "Metallic", "Value": 1})");
+			Run("Asset.SetProperty",
+				R"({"Asset": "Materials/RedMetal.wwmaterial", "Property": "Roughness", "Value": 0.25})");
+			Run("Asset.Save", R"({"Asset": "Materials/RedMetal.wwmaterial"})");
+			const int64 Cube = Run("Entity.Create", R"({"Name": "Cube"})").FindMember("Id")->GetInteger();
+			const int64 Component =
+				Run("Component.Add", std::format(R"({{"Entity": {}, "Class": "WStaticMeshComponent"}})", Cube))
+					.FindMember("Id")
+					->GetInteger();
+			Run("Object.SetProperty",
+				std::format(R"({{"Object": {}, "Property": "Mesh", "Value": "Engine/Shapes#Cube"}})", Component));
+			Run("Object.SetProperty",
+				std::format(R"({{"Object": {}, "Property": "Material", "Value": "Materials/RedMetal.wwmaterial"}})",
+					Component));
+			const FJsonValue Properties =
+				*Run("Asset.GetProperties", R"({"Asset": "Materials/RedMetal.wwmaterial"})").FindMember("Properties");
+			CHECK(*Properties.FindMember("Metallic") == FJsonValue(1.0));
+			Run("Scene.Save", R"({"Path": "Scenes/Level.wwscene"})");
+		}
+
+		FEditor Reader;
+		FJsonValue OpenProject = FJsonValue::MakeObject();
+		OpenProject.SetMember("Path", FFileHelper::PathToUtf8(ProjectDirectory));
+		REQUIRE(Reader.ExecuteCommand("Project.Open", OpenProject).HasSucceeded());
+		REQUIRE(
+			Reader.ExecuteCommand("Scene.Open", ParseTestJson(R"({"Path": "Scenes/Level.wwscene"})")).HasSucceeded());
+
+		const std::vector<WStaticMeshComponent*> Components = Reader.GetScene().GetComponents<WStaticMeshComponent>();
+		REQUIRE(Components.size() == 1);
+		REQUIRE(Components[0]->Material != nullptr);
+		CHECK(Components[0]->Material->GetAssetPath() == "Materials/RedMetal.wwmaterial");
+		CHECK(Components[0]->Material->BaseColor == FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));
+		CHECK(Components[0]->Material->Metallic == 1.0f);
+		CHECK(Components[0]->Material->Roughness == 0.25f);
+		REQUIRE(Components[0]->Mesh != nullptr);
+		CHECK(Components[0]->Mesh->GetAssetPath() == "Engine/Shapes#Cube");
 	}
 }

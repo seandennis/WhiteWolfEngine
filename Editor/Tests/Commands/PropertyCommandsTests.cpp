@@ -340,13 +340,13 @@ TEST_SUITE("Property commands")
 		CHECK(Test.Component->Scores == std::vector<int32>{7, 8});
 	}
 
-	TEST_CASE("Properties that are not saved with the scene are neither read nor changed")
+	TEST_CASE("Properties that are not saved are neither read nor changed")
 	{
 		FPropertyCommandTest Test;
 		Test.Component->CachedDistance = 12.5f;
-		const std::string ExpectedError =
-			"The property \"CachedDistance\" of the class WEditorTestDerivedComponent is not saved with the scene, and "
-			"commands neither read nor change such properties.";
+		const std::string ExpectedError = "The property \"CachedDistance\" of the class WEditorTestDerivedComponent is "
+										  "not saved, and commands neither "
+										  "read nor change such properties.";
 
 		CHECK(Test.GetComponentProperty("CachedDistance") == ExpectedError);
 

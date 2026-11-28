@@ -10,7 +10,7 @@ class WObject;
 /**
  * Finds a property that the editor reads and changes by its name, with the sentence that says why there is none. The
  * properties are those that are saved (FObjectProperties::GetSaved), which are the ones the commands
- * Object.GetProperty and Object.SetProperty work on and the ones the Details panel shows.
+ * Object.GetProperty, Object.SetProperty and Asset.SetProperty work on and the ones the Details panel shows.
  *
  * A Transient property holds what an object works out for itself, such as an entity's place in the hierarchy, and
  * changing one behind the object's back would break it; the hierarchy has commands of its own.

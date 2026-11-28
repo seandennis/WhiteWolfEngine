@@ -85,9 +85,9 @@ public:
 	}
 
 	/**
-	 * Carries out a command on this editor; see FCommandRegistry::Execute. If the command can change the scene and
-	 * the scene is different afterwards, the difference becomes a step of the history, named after the command, that
-	 * Undo can undo.
+	 * Carries out a command on this editor; see FCommandRegistry::Execute. If the command can change the scene or the
+	 * assets that the editor changes (ECommandEffect), and either is different afterwards, the difference becomes a
+	 * step of the history, named after the command, that Undo can undo.
 	 *
 	 * @param Arguments A JSON object with one member per argument, or JSON null for no arguments.
 	 */
