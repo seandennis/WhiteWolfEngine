@@ -72,7 +72,8 @@ void FProjectCommands::Register(FCommandRegistry& Registry)
 		{"Project.New",
 			"Creates a game project, a directory with a project file and a Content directory for the game's assets "
 			"and scenes, and makes it the project being worked on. The scene being edited is replaced by an empty "
-			"one. Returns the project's name, file, directory and content directory.",
+			"one; what was not saved, of the scene and of materials, is lost. Returns the project's name, file, "
+			"directory and content directory.",
 			{FCommandParameter::Required("Directory",
 				 ECommandArgumentType::String,
 				 "Where the project is to be. The directory is created if it does not exist; it must not hold a "
@@ -85,8 +86,8 @@ void FProjectCommands::Register(FCommandRegistry& Registry)
 	Registry.Register(
 		{"Project.Open",
 			"Makes an existing game project the one being worked on: asset paths are from now on relative to its "
-			"Content directory. The scene being edited is replaced by an empty one. Returns the project's name, file, "
-			"directory and content directory.",
+			"Content directory. The scene being edited is replaced by an empty one; what was not saved, of the scene "
+			"and of materials, is lost. Returns the project's name, file, directory and content directory.",
 			{FCommandParameter::Required("Path",
 				ECommandArgumentType::String,
 				"The project file (.wwproject), or the project's directory if it holds one project file.")}},

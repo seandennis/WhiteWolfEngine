@@ -1,11 +1,14 @@
 #include "Agent/AgentServer.h"
 
 #include "Core/EngineVersion.h"
+#include "Core/FileHelper.h"
 #include "Core/Version.h"
 #include "Editor.h"
+#include "Json/JsonValue.h"
 #include "Scene/Entity.h"
 #include "Scene/Scene.h"
 #include "TestEditorObjects.h"
+#include "TestSupport/ScopedTempDirectory.h"
 
 #include <doctest/doctest.h>
 
@@ -76,6 +79,18 @@ namespace
 		FEditor Editor;
 		FAgentServer Server{Editor};
 	};
+
+	/** Returns the value that the command of a tool returned, from the text of the tool's result. */
+	FJsonValue ReadToolValue(const std::string& Result)
+	{
+		const FJsonValue Parsed = ParseTestJson(Result);
+		const FJsonValue* const Content = Parsed.FindMember("content");
+		REQUIRE(Content != nullptr);
+		REQUIRE(Content->GetElements().size() == 1);
+		const FJsonValue* const Text = Content->GetElements()[0].FindMember("text");
+		REQUIRE(Text != nullptr);
+		return ParseTestJson(Text->GetString());
+	}
 }
 
 TEST_SUITE("FAgentServer")
@@ -290,6 +305,27 @@ TEST_SUITE("FAgentServer")
 
 		CHECK(Result.find("Entity.Create") != std::string::npos);
 		CHECK(Test.Editor.GetScene().GetAllEntities().empty());
+	}
+
+	TEST_CASE("An agent that saves the scene and not the material it changed is told that the material is not saved")
+	{
+		const FScopedTempDirectory Directory;
+		FAgentServerTest Test;
+		const std::string ProjectDirectory =
+			WriteTestJson(FJsonValue(FFileHelper::PathToUtf8(Directory.GetPath() / "Game")));
+		Test.CallTool("Project.New", std::format(R"({{"Directory": {}, "Name": "Game"}})", ProjectDirectory));
+		Test.CallTool("Asset.CreateMaterial", R"({"Path": "Materials/Red.wwmaterial"})");
+		Test.CallTool(
+			"Asset.SetProperty", R"({"Asset": "Materials/Red.wwmaterial", "Property": "Metallic", "Value": 1})");
+
+		const FJsonValue Saved = ReadToolValue(Test.CallTool("Scene.Save", R"({"Path": "Scenes/Level.wwscene"})"));
+
+		REQUIRE(Saved.FindMember("UnsavedAssets") != nullptr);
+		CHECK(WriteTestJson(*Saved.FindMember("UnsavedAssets")) == R"(["Materials/Red.wwmaterial"])");
+		// Saved, it is named no longer.
+		Test.CallTool("Asset.Save", R"({"Asset": "Materials/Red.wwmaterial"})");
+		const FJsonValue Again = ReadToolValue(Test.CallTool("Scene.Save"));
+		CHECK(WriteTestJson(*Again.FindMember("UnsavedAssets")) == "[]");
 	}
 
 	TEST_CASE("tools/call that does not say which tool, or names one that does not exist, is an error")

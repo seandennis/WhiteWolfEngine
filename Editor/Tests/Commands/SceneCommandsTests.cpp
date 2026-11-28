@@ -1,3 +1,5 @@
+#include "Assets/TestAssets.h"
+#include "Assets/TestEditedAssets.h"
 #include "Core/FileHelper.h"
 #include "Editor.h"
 #include "Object/ObjectGlobals.h"
@@ -21,6 +23,14 @@ namespace
 		FJsonValue Arguments = FJsonValue::MakeObject();
 		Arguments.SetMember("Path", FFileHelper::PathToUtf8(Path));
 		return Arguments;
+	}
+
+	/** Returns what Scene.Save returns when it saved to Path and no material has unsaved changes. */
+	std::string MakeSaveResult(const std::filesystem::path& Path)
+	{
+		FJsonValue Result = MakePathArguments(Path);
+		Result.SetMember("UnsavedAssets", FJsonValue::MakeArray());
+		return WriteTestJson(Result);
 	}
 
 	/** Writes a scene file, which a test expects to work. */
@@ -88,7 +98,7 @@ TEST_SUITE("Scene commands")
 		const FCommandResult Result = Editor.ExecuteCommand("Scene.Save", MakePathArguments(Path));
 
 		REQUIRE(Result.HasSucceeded());
-		CHECK(WriteTestJson(Result.GetValue()) == WriteTestJson(MakePathArguments(Path)));
+		CHECK(WriteTestJson(Result.GetValue()) == MakeSaveResult(Path));
 		CHECK(Editor.GetScenePath() == Path);
 
 		std::string Error;
@@ -110,11 +120,38 @@ TEST_SUITE("Scene commands")
 		const FCommandResult Result = Editor.ExecuteCommand("Scene.Save", FJsonValue());
 
 		REQUIRE(Result.HasSucceeded());
-		CHECK(WriteTestJson(Result.GetValue()) == WriteTestJson(MakePathArguments(Path)));
+		CHECK(WriteTestJson(Result.GetValue()) == MakeSaveResult(Path));
 		std::string Error;
 		const WScene* const Loaded = FSceneSerializer::LoadFromFile(Path, Error);
 		REQUIRE(Loaded != nullptr);
 		CHECK(Loaded->FindEntityByName("Added later") != nullptr);
+	}
+
+	TEST_CASE("Scene.Save names the materials whose changes are not saved, and saves none of them")
+	{
+		const FScopedContentDirectory Content;
+		Content.WriteMaterial("Materials/Red.wwmaterial");
+		Content.WriteMaterial("Materials/Blue.wwmaterial");
+		const std::string RedText = ReadContentFile(Content, "Materials/Red.wwmaterial");
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		ChangeMaterial(Editor, LoadTestMaterial("Materials/Red.wwmaterial"), "Metallic", "1.0");
+		ChangeMaterial(Editor, LoadTestMaterial("Materials/Blue.wwmaterial"), "Roughness", "0.0");
+		const std::filesystem::path Path = Content.GetPath() / "Level.wwscene";
+
+		const FCommandResult Result = Editor.ExecuteCommand("Scene.Save", MakePathArguments(Path));
+
+		REQUIRE(Result.HasSucceeded());
+		CHECK(WriteTestJson(*Result.GetValue().FindMember("UnsavedAssets")) ==
+			R"(["Materials/Blue.wwmaterial","Materials/Red.wwmaterial"])");
+		CHECK(ReadContentFile(Content, "Materials/Red.wwmaterial") == RedText);
+
+		// Another scene leaves them changed and unsaved.
+		REQUIRE(Editor.ExecuteCommand("Scene.New", FJsonValue()).HasSucceeded());
+		const FCommandResult Again = Editor.ExecuteCommand("Scene.Save", MakePathArguments(Path));
+		REQUIRE(Again.HasSucceeded());
+		CHECK(WriteTestJson(*Again.GetValue().FindMember("UnsavedAssets")) ==
+			R"(["Materials/Blue.wwmaterial","Materials/Red.wwmaterial"])");
 	}
 
 	TEST_CASE("Scene.Save fails for a scene that has no file when no path is given")

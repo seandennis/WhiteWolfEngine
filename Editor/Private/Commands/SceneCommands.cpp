@@ -107,8 +107,15 @@ namespace
 			return FCommandResult::Failure(std::format("The scene was not saved: {}.", Error));
 		}
 
+		// The scene is saved, and its materials may not be: whoever saves should not take the one for the other.
+		FJsonValue UnsavedAssets = FJsonValue::MakeArray();
+		for (std::string& AssetPath : Editor.GetEditedAssets().GetUnsaved())
+		{
+			UnsavedAssets.AddElement(std::move(AssetPath));
+		}
 		FJsonValue Value = FJsonValue::MakeObject();
 		Value.SetMember("Path", FFileHelper::PathToUtf8(Path));
+		Value.SetMember("UnsavedAssets", std::move(UnsavedAssets));
 		Editor.SetScenePath(std::move(Path));
 		return FCommandResult::Success(std::move(Value));
 	}
@@ -172,7 +179,8 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 	Registry.Register(
 		{"Scene.New",
 			"Replaces the scene being edited with an empty one. What was not saved of the old scene is lost, and "
-			"Edit.Undo does not bring it back.",
+			"Edit.Undo does not bring it back. Changes to materials stay, saved or not, though Edit.Undo no longer "
+			"takes them back.",
 			{FCommandParameter::Optional(
 				"Name", ECommandArgumentType::String, "The name of the new scene. \"Untitled\" if left out.")}},
 		NewScene);
@@ -180,8 +188,8 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 	Registry.Register(
 		{"Scene.Open",
 			"Replaces the scene being edited with one loaded from a scene file. What was not saved of the old scene "
-			"is lost, and Edit.Undo does not bring it back. Returns the warnings about values in the file that could "
-			"not be loaded.",
+			"is lost, and Edit.Undo does not bring it back. Changes to materials stay, saved or not, though Edit.Undo "
+			"no longer takes them back. Returns the warnings about values in the file that could not be loaded.",
 			{FCommandParameter::Required("Path",
 				ECommandArgumentType::String,
 				"The scene file to load. A relative path is relative to the content directory of the project, if one "
@@ -190,7 +198,9 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 
 	Registry.Register(
 		{"Scene.Save",
-			"Saves the scene being edited to a scene file, which becomes the scene's file. Returns its path.",
+			"Saves the scene being edited to a scene file, which becomes the scene's file. Returns its path, and the "
+			"asset paths of the materials whose changes are not written to their files yet (\"UnsavedAssets\"): this "
+			"command saves the scene, and Asset.Save saves each of those.",
 			{FCommandParameter::Optional("Path",
 				ECommandArgumentType::String,
 				"The file to save to, for example \"Scenes/Level1.wwscene\": Scene.List finds the files whose names "
