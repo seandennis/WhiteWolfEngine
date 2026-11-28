@@ -40,6 +40,16 @@ public:
 	ENGINE_API static std::filesystem::path PathFromUtf8(std::string_view Text);
 
 	/**
+	 * Returns true if two names of files, or two paths written alike, are the same where capitals are not told
+	 * apart: equal but for the case of their letters, as Windows compares the names of files. On Windows this is the
+	 * system's own comparison, for every letter that has a capital; elsewhere it is the letters A to Z.
+	 *
+	 * @param First UTF-8 text.
+	 * @param Second UTF-8 text.
+	 */
+	ENGINE_API static bool IsSameNameIgnoringCase(std::string_view First, std::string_view Second);
+
+	/**
 	 * Returns what the operating system says about an error of the file system, as words to put into a sentence:
 	 * without the full stop, the spaces and the line break that some systems end theirs with.
 	 */

@@ -288,40 +288,35 @@ WAsset* FAssetManager::FindLoaded(std::string_view AssetPath)
 	return Package != nullptr ? Package->FindAsset(Path->Key) : nullptr;
 }
 
-WAsset* FAssetManager::FindLoadedIgnoringCase(std::string_view AssetPath)
+std::vector<WAsset*> FAssetManager::FindLoadedIgnoringCase(std::string_view AssetPath)
 {
-	if (WAsset* const Asset = FindLoaded(AssetPath))
-	{
-		return Asset;
-	}
+	std::vector<WAsset*> Found;
 	std::string Error;
 	const std::optional<FAssetPath> Path = FAssetPath::Parse(AssetPath, Error);
 	if (!Path.has_value())
 	{
-		return nullptr;
+		return Found;
 	}
 
-	const auto IsSameIgnoringCase = [](std::string_view First, std::string_view Second)
-	{
-		return std::ranges::equal(First,
-			Second,
-			[](unsigned char FirstCharacter, unsigned char SecondCharacter)
-			{ return std::tolower(FirstCharacter) == std::tolower(SecondCharacter); });
-	};
 	for (const std::pair<const std::string, TWeakObjectPtr<WAssetPackage>>& Entry : GetState().Packages)
 	{
+		// What the engine has built in is no file, and is not one under another name.
+		const bool bIsSpelling = Entry.first == Path->File ||
+			(!IsBuiltInFile(Entry.first) && FFileHelper::IsSameNameIgnoringCase(Entry.first, Path->File));
 		const WAssetPackage* const Package = Entry.second.Get();
-		if (Package != nullptr && IsSameIgnoringCase(Entry.first, Path->File))
+		if (bIsSpelling && Package != nullptr)
 		{
 			if (WAsset* const Asset = Package->FindAsset(Path->Key))
 			{
-				return Asset;
+				Found.push_back(Asset);
 			}
 		}
 	}
-	return nullptr;
+	// In an order that does not depend on the map's.
+	std::ranges::sort(Found,
+		[](const WAsset* First, const WAsset* Second) { return First->GetAssetPath() < Second->GetAssetPath(); });
+	return Found;
 }
-
 bool FAssetManager::IsAssetFile(const std::filesystem::path& Path)
 {
 	return GetFileKind(Path) != EAssetFileKind::Unknown;

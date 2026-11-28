@@ -138,6 +138,26 @@ TEST_SUITE("FFileHelper")
 		CHECK(Error.find("File") != std::string::npos);
 	}
 
+	TEST_CASE("IsSameNameIgnoringCase tells names apart by everything but the case of their letters")
+	{
+		CHECK(FFileHelper::IsSameNameIgnoringCase("Materials/Red.wwmaterial", "materials/RED.WWMATERIAL"));
+		CHECK(FFileHelper::IsSameNameIgnoringCase("Red", "Red"));
+		CHECK(FFileHelper::IsSameNameIgnoringCase("", ""));
+		CHECK_FALSE(FFileHelper::IsSameNameIgnoringCase("Materials/Red.wwmaterial", "Materials/Rod.wwmaterial"));
+		CHECK_FALSE(FFileHelper::IsSameNameIgnoringCase("Red", "Red "));
+		CHECK_FALSE(FFileHelper::IsSameNameIgnoringCase("Red", "Reds"));
+		CHECK_FALSE(FFileHelper::IsSameNameIgnoringCase("Red", ""));
+
+		// Letters beyond A to Z have capitals too, as O with two dots: Windows does not tell those apart in the names
+		// of files either, and elsewhere only A to Z are compared without their case.
+		constexpr const char* CapitalOil = "\xC3\x96l";
+		constexpr const char* SmallOil = "\xC3\xB6l";
+#if defined(_WIN32)
+		CHECK(FFileHelper::IsSameNameIgnoringCase(CapitalOil, SmallOil));
+#else
+		CHECK_FALSE(FFileHelper::IsSameNameIgnoringCase(CapitalOil, SmallOil));
+#endif
+	}
 	TEST_CASE("PathToUtf8 returns the path as UTF-8 text")
 	{
 		const std::filesystem::path Path = std::filesystem::path(u8"Scènes") / "Level.json";

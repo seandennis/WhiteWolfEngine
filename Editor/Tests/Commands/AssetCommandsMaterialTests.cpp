@@ -309,6 +309,54 @@ TEST_SUITE("Asset commands for materials")
 		CHECK(CreateMaterial(Test, "Materials/Brick.wwmaterial").HasSucceeded());
 	}
 
+	TEST_CASE("A material in use with its file gone is found under capitals beyond A to Z, as Windows takes them")
+	{
+		FAssetCommandTest Test;
+		// O with two dots, as a capital and as a small letter.
+		const std::string CapitalPath = "Materials/\xC3\x96l.wwmaterial";
+		const std::string SmallPath = "Materials/\xC3\xB6l.wwmaterial";
+		REQUIRE(CreateMaterial(Test, CapitalPath).HasSucceeded());
+		REQUIRE(SetProperty(Test, CapitalPath, "Metallic", "1.0").HasSucceeded());
+		std::filesystem::remove(Test.GetContentDirectory() / FFileHelper::PathFromUtf8(CapitalPath));
+
+		const FCommandResult Result = CreateMaterial(Test, SmallPath);
+
+#if defined(_WIN32)
+		CHECK_FALSE(Result.HasSucceeded());
+		CHECK(Result.GetError() ==
+			std::format("The material was not created: \"{}\" differs only in capitals from \"{}\", which is still in "
+						"use although its file is gone.",
+				SmallPath,
+				CapitalPath));
+#else
+		// Elsewhere only A to Z are compared without their case, and this is another file.
+		CHECK(Result.HasSucceeded());
+#endif
+	}
+
+	TEST_CASE("Every loaded spelling of a path is looked at, where the file system tells capitals apart")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(CreateMaterial(Test, "Materials/brick.wwmaterial").HasSucceeded());
+		std::error_code ErrorCode;
+		const bool bIgnoresCapitals =
+			std::filesystem::exists(Test.GetContentDirectory() / "MATERIALS" / "BRICK.WWMATERIAL", ErrorCode);
+		CAPTURE(bIgnoresCapitals);
+		if (!bIgnoresCapitals)
+		{
+			// Two files whose names differ only in capitals, both kept by the editor, and the file of one of them gone.
+			REQUIRE(CreateMaterial(Test, "Materials/BRICK.wwmaterial").HasSucceeded());
+			REQUIRE(SetProperty(Test, "Materials/brick.wwmaterial", "Metallic", "1.0").HasSucceeded());
+			REQUIRE(SetProperty(Test, "Materials/BRICK.wwmaterial", "Metallic", "1.0").HasSucceeded());
+			std::filesystem::remove(Test.GetContentDirectory() / "Materials" / "BRICK.wwmaterial");
+
+			const FCommandResult Result = CreateMaterial(Test, "Materials/Brick.wwmaterial");
+
+			CHECK(Result.GetError() ==
+				"The material was not created: \"Materials/Brick.wwmaterial\" differs only in capitals from "
+				"\"Materials/BRICK.wwmaterial\", which is still in use although its file is gone.");
+		}
+	}
 	TEST_CASE("Asset.Import of a material file is refused where a material of that path is in use and its file is gone")
 	{
 		FAssetCommandTest Test;

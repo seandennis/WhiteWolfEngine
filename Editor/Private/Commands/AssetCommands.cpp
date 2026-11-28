@@ -100,34 +100,36 @@ namespace
 	/**
 	 * Returns why the file of a material cannot be put at a path, if a material of that path is still in use although
 	 * its file is gone: loading the path gives that material, not the new file. A path that differs from that one
-	 * only in its capitals is refused too, being the same file where the file system does not tell capitals apart.
+	 * only in the case of its letters is refused too, being the same file where the file system does not tell
+	 * capitals apart.
 	 *
 	 * @return The reason, or nothing if no such material is in use.
 	 */
 	std::optional<std::string> FindMaterialInUseWithoutFile(const std::string& File)
 	{
-		const WAsset* const InUse = FAssetManager::FindLoadedIgnoringCase(File);
-		if (InUse == nullptr)
+		// The path itself first, and the other spellings in the order of their paths.
+		std::vector<WAsset*> InUse = FAssetManager::FindLoadedIgnoringCase(File);
+		std::ranges::stable_partition(InUse, [&File](const WAsset* Asset) { return Asset->GetAssetPath() == File; });
+		for (const WAsset* const Asset : InUse)
 		{
-			return std::nullopt;
+			// One whose file is there is another file, where capitals are told apart.
+			const std::string& InUsePath = Asset->GetAssetPath();
+			std::error_code ErrorCode;
+			if (std::filesystem::exists(FAssetManager::GetPathOfAssetFile(InUsePath), ErrorCode))
+			{
+				continue;
+			}
+			if (InUsePath == File)
+			{
+				return std::format("\"{}\" is still in use although its file is gone", File);
+			}
+			return std::format(
+				"\"{}\" differs only in capitals from \"{}\", which is still in use although its file is gone",
+				File,
+				InUsePath);
 		}
-		// A material of another name whose file is there is another file, where capitals are told apart.
-		const std::string& InUsePath = InUse->GetAssetPath();
-		std::error_code ErrorCode;
-		if (std::filesystem::exists(FAssetManager::GetPathOfAssetFile(InUsePath), ErrorCode))
-		{
-			return std::nullopt;
-		}
-		if (InUsePath == File)
-		{
-			return std::format("\"{}\" is still in use although its file is gone", File);
-		}
-		return std::format(
-			"\"{}\" differs only in capitals from \"{}\", which is still in use although its file is gone",
-			File,
-			InUsePath);
+		return std::nullopt;
 	}
-
 	/** Removes files that a command wrote and then could not use. What cannot be removed is left. */
 	void RemoveFiles(const std::vector<std::filesystem::path>& Files)
 	{

@@ -74,7 +74,7 @@ namespace
 		std::error_code ErrorCode;
 		const bool bHasFile =
 			std::filesystem::exists(Editor.ResolveFilePath(FFileHelper::PathFromUtf8(File)), ErrorCode);
-		return !bHasFile && FAssetManager::FindLoadedIgnoringCase(File) == nullptr;
+		return !bHasFile && FAssetManager::FindLoadedIgnoringCase(File).empty();
 	}
 }
 

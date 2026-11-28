@@ -443,21 +443,67 @@ TEST_SUITE("FAssetManager")
 		const FScopedContentDirectory Content;
 		Content.WriteMaterial("Materials/Brick.wwmaterial");
 		Content.WriteMaterial("Materials/Wall.wwmaterial");
+		Content.WriteSquare("Models/Square.gltf");
 		std::string Error;
 		WAsset* const Brick = FAssetManager::Load("Materials/Brick.wwmaterial", Error);
-		const FScopedRoot Root(Brick);
+		const FScopedRoot BrickRoot(Brick);
+		WAsset* const Square = FAssetManager::Load("Models/Square.gltf#Materials/0", Error);
+		const FScopedRoot SquareRoot(Square);
+		const std::vector<WAsset*> JustBrick = {Brick};
 
-		CHECK(FAssetManager::FindLoadedIgnoringCase("Materials/Brick.wwmaterial") == Brick);
-		CHECK(FAssetManager::FindLoadedIgnoringCase("materials/BRICK.wwmaterial") == Brick);
+		CHECK(FAssetManager::FindLoadedIgnoringCase("Materials/Brick.wwmaterial") == JustBrick);
+		CHECK(FAssetManager::FindLoadedIgnoringCase("materials/BRICK.wwmaterial") == JustBrick);
 		CHECK(FAssetManager::FindLoaded("materials/BRICK.wwmaterial") == nullptr);
+		// Only the name of the file is compared without its capitals; a key is compared letter for letter.
+		CHECK(FAssetManager::FindLoadedIgnoringCase("models/square.GLTF#Materials/0") == std::vector<WAsset*>{Square});
+		CHECK(FAssetManager::FindLoadedIgnoringCase("Models/Square.gltf#materials/0").empty());
 		// Another name, a key that the file does not have, text that is no asset path and a file that is not
 		// loaded are nothing.
-		CHECK(FAssetManager::FindLoadedIgnoringCase("Materials/Bricks.wwmaterial") == nullptr);
-		CHECK(FAssetManager::FindLoadedIgnoringCase("Materials/Brick.wwmaterial#Key") == nullptr);
-		CHECK(FAssetManager::FindLoadedIgnoringCase("../Brick.wwmaterial") == nullptr);
-		CHECK(FAssetManager::FindLoadedIgnoringCase("Materials/Wall.wwmaterial") == nullptr);
+		CHECK(FAssetManager::FindLoadedIgnoringCase("Materials/Bricks.wwmaterial").empty());
+		CHECK(FAssetManager::FindLoadedIgnoringCase("Materials/Brick.wwmaterial#Key").empty());
+		CHECK(FAssetManager::FindLoadedIgnoringCase("../Brick.wwmaterial").empty());
+		CHECK(FAssetManager::FindLoadedIgnoringCase("Materials/Wall.wwmaterial").empty());
 	}
 
+	TEST_CASE("FindLoadedIgnoringCase finds every spelling that is loaded, in the order of their paths")
+	{
+		const FScopedObjectTest ObjectTest;
+		const FScopedContentDirectory Content;
+		Content.WritePicture("Textures/Wood.png");
+		std::error_code ErrorCode;
+		const bool bIgnoresCapitals = std::filesystem::exists(Content.GetPath() / "TEXTURES" / "WOOD.PNG", ErrorCode);
+		CAPTURE(bIgnoresCapitals);
+		std::string Error;
+		WAsset* const Wood = FAssetManager::Load("Textures/Wood.png", Error);
+		const FScopedRoot WoodRoot(Wood);
+		// A picture is loaded under any name that the file system takes for its own (D-043): where capitals are not
+		// told apart, this is a second package of the same file.
+		WAsset* const OtherWood = FAssetManager::Load("textures/wood.png", Error);
+		REQUIRE((OtherWood != nullptr) == bIgnoresCapitals);
+
+		const std::vector<WAsset*> Found = FAssetManager::FindLoadedIgnoringCase("TEXTURES/WOOD.PNG");
+
+		if (bIgnoresCapitals)
+		{
+			const FScopedRoot OtherRoot(OtherWood);
+			CHECK(Found == std::vector<WAsset*>{Wood, OtherWood});
+		}
+		else
+		{
+			CHECK(Found == std::vector<WAsset*>{Wood});
+		}
+	}
+
+	TEST_CASE("FindLoadedIgnoringCase finds what the engine has built in under its own name only")
+	{
+		const FScopedObjectTest ObjectTest;
+		std::string Error;
+		WAsset* const Cube = FAssetManager::Load(FAssetManager::CubeShape, Error);
+		const FScopedRoot Root(Cube);
+
+		CHECK(FAssetManager::FindLoadedIgnoringCase(FAssetManager::CubeShape) == std::vector<WAsset*>{Cube});
+		CHECK(FAssetManager::FindLoadedIgnoringCase("engine/shapes#Cube").empty());
+	}
 	TEST_CASE("FindLoaded finds nothing of a file whose assets were collected")
 	{
 		const FScopedObjectTest ObjectTest;

@@ -7,6 +7,15 @@
 #include <system_error>
 #include <utility>
 
+#if defined(_WIN32)
+#include <windows.h>
+
+#include <limits>
+#else
+#include <algorithm>
+#include <cctype>
+#endif
+
 bool FFileHelper::LoadFileToString(const std::filesystem::path& Path, std::string& OutText, std::string& OutError)
 {
 	// Binary mode: the bytes of the file are returned as they are, whatever its line endings.
@@ -84,6 +93,30 @@ std::string FFileHelper::PathToUtf8(const std::filesystem::path& Path)
 std::filesystem::path FFileHelper::PathFromUtf8(std::string_view Text)
 {
 	return std::filesystem::path(std::u8string(Text.begin(), Text.end()));
+}
+
+bool FFileHelper::IsSameNameIgnoringCase(std::string_view First, std::string_view Second)
+{
+#if defined(_WIN32)
+	// The comparison that the system makes of the names of files, on the names as it keeps them: UTF-16.
+	const std::wstring FirstWide = PathFromUtf8(First).native();
+	const std::wstring SecondWide = PathFromUtf8(Second).native();
+	constexpr std::size_t MaxLength = static_cast<std::size_t>(std::numeric_limits<int>::max());
+	if (FirstWide.size() > MaxLength || SecondWide.size() > MaxLength)
+	{
+		return FirstWide == SecondWide;
+	}
+	return CompareStringOrdinal(FirstWide.c_str(),
+			   static_cast<int>(FirstWide.size()),
+			   SecondWide.c_str(),
+			   static_cast<int>(SecondWide.size()),
+			   TRUE) == CSTR_EQUAL;
+#else
+	return std::ranges::equal(First,
+		Second,
+		[](unsigned char FirstCharacter, unsigned char SecondCharacter)
+		{ return std::tolower(FirstCharacter) == std::tolower(SecondCharacter); });
+#endif
 }
 
 std::string FFileHelper::DescribeError(const std::error_code& Error)

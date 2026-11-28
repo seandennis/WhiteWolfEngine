@@ -124,12 +124,14 @@ public:
 	ENGINE_API static WAsset* FindLoaded(std::string_view AssetPath);
 
 	/**
-	 * Returns the asset with the given path if its file is loaded, or else one whose path differs from it only in the
-	 * capitals of its letters (A to Z), and loads nothing. Where the file system does not tell capitals apart, as on
-	 * Windows, the two names are one file; elsewhere they are two, of a project that cannot be moved to Windows. Null
-	 * where FindLoaded is null for every such spelling.
+	 * Returns the loaded assets of a path under every spelling of its file: the asset with the path's key, compared
+	 * letter for letter, of each loaded file whose name is the path's file or the same but for the case of its
+	 * letters (FFileHelper::IsSameNameIgnoringCase), in the order of their paths. Where the file system does not tell
+	 * capitals apart, as on Windows, all those names are one file; elsewhere they are files of a project that cannot
+	 * be moved to Windows. A file that the engine has built in is found under its own name only. Loads nothing, and
+	 * needs no content directory; empty for text that is not an asset path.
 	 */
-	ENGINE_API static WAsset* FindLoadedIgnoringCase(std::string_view AssetPath);
+	ENGINE_API static std::vector<WAsset*> FindLoadedIgnoringCase(std::string_view AssetPath);
 
 	/** Returns true if a file with this name is of a kind that can be loaded, going by the end of the name. */
 	ENGINE_API static bool IsAssetFile(const std::filesystem::path& Path);
