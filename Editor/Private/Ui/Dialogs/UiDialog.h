@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 
+#include "Ui/ImGuiLibrary.h"
+
 #include <string>
 
 /**
@@ -19,6 +21,16 @@ public:
 	 * @param Title What the window is called. Dear ImGui also knows the window by this.
 	 */
 	static bool Begin(const char* Title);
+
+	/**
+	 * Returns true if a key that answers the window being laid out, as Escape cancels it, was pressed while the window
+	 * was there to be seen. Never in the frame in which the window appears: a key pressed then was meant for what was
+	 * there before, as the Escape that closes one window, which may open another in that same frame, or the Enter
+	 * that chooses the entry of a menu that opens one.
+	 *
+	 * @param Key A key, which may be pressed while it is being typed into a field of the window.
+	 */
+	static bool IsAnswerKeyPressed(ImGuiKey Key);
 
 	/** Lays out a line that says what went wrong, in the colour for that. Nothing if there is nothing to say. */
 	static void ShowError(const std::string& Error);

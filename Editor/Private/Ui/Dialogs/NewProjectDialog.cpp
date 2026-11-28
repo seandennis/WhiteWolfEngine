@@ -108,7 +108,7 @@ void FNewProjectDialog::Draw(FUiFrame& Frame)
 			Error = Result.GetError();
 		}
 	}
-	else if (bWasCancelClicked || ImGui::IsKeyPressed(ImGuiKey_Escape))
+	else if (bWasCancelClicked || FUiDialog::IsAnswerKeyPressed(ImGuiKey_Escape))
 	{
 		ImGui::CloseCurrentPopup();
 	}

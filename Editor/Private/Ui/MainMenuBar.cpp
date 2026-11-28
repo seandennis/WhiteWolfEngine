@@ -4,6 +4,7 @@
 #include "Commands/CommandResult.h"
 #include "Core/EngineVersion.h"
 #include "Editor.h"
+#include "Ui/Dialogs/UiDialog.h"
 #include "Ui/ImGuiLibrary.h"
 #include "Ui/UiCommands.h"
 #include "Ui/UiFrame.h"
@@ -432,7 +433,7 @@ void FMainMenuBar::DrawAboutWindow(FUiFrame& Frame)
 		ImGui::Spacing();
 		const bool bWasCloseClicked = ImGui::Button("Close");
 		Frame.Items.NameLastItem("About/Close");
-		if (bWasCloseClicked || ImGui::IsKeyPressed(ImGuiKey_Escape))
+		if (bWasCloseClicked || FUiDialog::IsAnswerKeyPressed(ImGuiKey_Escape))
 		{
 			ImGui::CloseCurrentPopup();
 		}

@@ -22,6 +22,11 @@ bool FUiDialog::Begin(const char* Title)
 	return ImGui::BeginPopupModal(Title, nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 }
 
+bool FUiDialog::IsAnswerKeyPressed(ImGuiKey Key)
+{
+	return !ImGui::IsWindowAppearing() && ImGui::IsKeyPressed(Key);
+}
+
 void FUiDialog::ShowError(const std::string& Error)
 {
 	if (Error.empty())

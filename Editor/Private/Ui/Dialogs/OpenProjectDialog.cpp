@@ -130,7 +130,7 @@ void FOpenProjectDialog::Draw(FUiFrame& Frame)
 		Frame.Requests.bNewProject = true;
 		ImGui::CloseCurrentPopup();
 	}
-	else if (bWasCancelClicked || ImGui::IsKeyPressed(ImGuiKey_Escape))
+	else if (bWasCancelClicked || FUiDialog::IsAnswerKeyPressed(ImGuiKey_Escape))
 	{
 		ImGui::CloseCurrentPopup();
 	}

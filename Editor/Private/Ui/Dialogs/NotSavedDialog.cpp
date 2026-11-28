@@ -38,8 +38,8 @@ bool FNotSavedDialog::Draw(FUiFrame& Frame)
 
 	const bool bWasCloseClicked = ImGui::Button("Close");
 	Frame.Items.NameLastItem("NotSaved/Close");
-	const bool bWasClosed =
-		bWasCloseClicked || ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape);
+	const bool bWasClosed = bWasCloseClicked || FUiDialog::IsAnswerKeyPressed(ImGuiKey_Enter) ||
+		FUiDialog::IsAnswerKeyPressed(ImGuiKey_Escape);
 	if (bWasClosed)
 	{
 		ImGui::CloseCurrentPopup();

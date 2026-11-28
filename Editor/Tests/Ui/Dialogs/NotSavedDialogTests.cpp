@@ -75,7 +75,18 @@ namespace
 		/** Puts a folder with something in it where the material's file is, so that the file cannot be written. */
 		void BlockMaterialFile() const
 		{
-			const std::filesystem::path File = Content / "Materials" / "Red.wwmaterial";
+			Block(Content / "Materials" / "Red.wwmaterial");
+		}
+
+		/** Puts a folder with something in it where the scene's file is, so that the file cannot be written. */
+		void BlockSceneFile() const
+		{
+			Block(Content / "Town.wwscene");
+		}
+
+		/** Puts a folder with something in it where a file is. */
+		static void Block(const std::filesystem::path& File)
+		{
 			std::filesystem::remove(File);
 			std::filesystem::create_directories(File / "Inside");
 		}
@@ -173,10 +184,62 @@ TEST_SUITE("FNotSavedDialog")
 		REQUIRE(Test.HasItem("NotSaved/Close"));
 		CHECK_FALSE(Test.HasItem("SaveScene/Path"));
 
-		Test.Click("NotSaved/Close");
+		// The key that closes the one window does not also answer the other, which opens in the same frame.
+		SUBCASE("Close")
+		{
+			Test.Click("NotSaved/Close");
+		}
+		SUBCASE("Enter")
+		{
+			Test.PressKey(EKey::Enter);
+		}
+		SUBCASE("Escape")
+		{
+			Test.PressKey(EKey::Escape);
+		}
 		Test.DrawFrame();
 
 		CHECK_FALSE(Test.HasItem("NotSaved/Close"));
 		CHECK(Test.HasItem("SaveScene/Path"));
+	}
+
+	TEST_CASE(
+		"After the window about a material, a scene that cannot be saved to its file has the user asked for another")
+	{
+		FEditorUiTest Test;
+		const FScopedTempDirectory Directory;
+		const FChangedProject Project(Test, Directory.GetPath(), bWithSceneFile);
+		Project.BlockMaterialFile();
+		Project.BlockSceneFile();
+		Test.PressKey(EKey::S, {EKey::LeftControl});
+		REQUIRE(Test.HasItem("NotSaved/Close"));
+
+		Test.PressKey(EKey::Escape);
+
+		CHECK_FALSE(Test.HasItem("NotSaved/Close"));
+		CHECK(Test.HasItem("SaveScene/Path"));
+	}
+
+	TEST_CASE("A key that goes down in the frame in which the window opens does not close it")
+	{
+		FEditorUiTest Test;
+		const FScopedTempDirectory Directory;
+		const FChangedProject Project(Test, Directory.GetPath(), bWithSceneFile);
+		Project.BlockMaterialFile();
+
+		// The toolbar's Save is carried out in the frame after the one in which it was clicked, which is the frame in
+		// which Enter goes down here: as when a menu's entry is chosen with Enter and opens the window at once.
+		Test.MoveMouse(Test.RequireItem("Toolbar/Save").GetCenter());
+		Test.Input.HandleMouseButtonEvent(EMouseButton::Left, EInputEvent::Pressed);
+		Test.DrawFrame();
+		Test.Input.HandleMouseButtonEvent(EMouseButton::Left, EInputEvent::Released);
+		Test.DrawFrame();
+		Test.Input.HandleKeyEvent(EKey::Enter, EInputEvent::Pressed);
+		Test.DrawFrame();
+		Test.Input.HandleKeyEvent(EKey::Enter, EInputEvent::Released);
+		Test.DrawFrames(3);
+
+		CHECK(Test.HasItem("NotSaved/Close"));
+		CHECK_FALSE(Project.IsSceneWritten());
 	}
 }
