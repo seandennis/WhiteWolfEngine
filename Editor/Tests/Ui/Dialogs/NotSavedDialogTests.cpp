@@ -94,6 +94,19 @@ namespace
 		std::filesystem::path Content;
 	};
 
+	/**
+	 * Holds a key down for a third of a second and longer, past the time after which a held key repeats, and then
+	 * lets it go.
+	 */
+	void HoldKey(FEditorUiTest& Test, EKey Key)
+	{
+		constexpr int32 HeldFrameCount = 30;
+		Test.Input.HandleKeyEvent(Key, EInputEvent::Pressed);
+		Test.DrawFrames(HeldFrameCount);
+		Test.Input.HandleKeyEvent(Key, EInputEvent::Released);
+		Test.DrawFrames(3);
+	}
+
 	/** Whether the scene has a file to be saved to when the test begins. */
 	constexpr bool bWithSceneFile = true;
 	constexpr bool bWithoutSceneFile = false;
@@ -220,6 +233,31 @@ TEST_SUITE("FNotSavedDialog")
 		CHECK(Test.HasItem("SaveScene/Path"));
 	}
 
+	TEST_CASE("A key that closes the window and is held answers nothing in the window that it opens")
+	{
+		FEditorUiTest Test;
+		const FScopedTempDirectory Directory;
+		const FChangedProject Project(Test, Directory.GetPath(), bWithoutSceneFile);
+		Project.BlockMaterialFile();
+		Test.PressKey(EKey::S, {EKey::LeftControl});
+		REQUIRE(Test.HasItem("NotSaved/Close"));
+
+		// Held while it repeats: neither a cancel of the window that asks for a file, nor its Save.
+		SUBCASE("Escape")
+		{
+			HoldKey(Test, EKey::Escape);
+		}
+		SUBCASE("Enter")
+		{
+			HoldKey(Test, EKey::Enter);
+		}
+
+		CHECK_FALSE(Test.HasItem("NotSaved/Close"));
+		CHECK(Test.HasItem("SaveScene/Path"));
+		CHECK(Test.Editor.GetScenePath().empty());
+		CHECK_FALSE(Project.IsSceneWritten());
+	}
+
 	TEST_CASE("A key that goes down in the frame in which the window opens does not close it")
 	{
 		FEditorUiTest Test;
@@ -234,12 +272,24 @@ TEST_SUITE("FNotSavedDialog")
 		Test.DrawFrame();
 		Test.Input.HandleMouseButtonEvent(EMouseButton::Left, EInputEvent::Released);
 		Test.DrawFrame();
-		Test.Input.HandleKeyEvent(EKey::Enter, EInputEvent::Pressed);
-		Test.DrawFrame();
-		Test.Input.HandleKeyEvent(EKey::Enter, EInputEvent::Released);
-		Test.DrawFrames(3);
+		SUBCASE("Pressed")
+		{
+			Test.Input.HandleKeyEvent(EKey::Enter, EInputEvent::Pressed);
+			Test.DrawFrame();
+			Test.Input.HandleKeyEvent(EKey::Enter, EInputEvent::Released);
+			Test.DrawFrames(3);
+		}
+		SUBCASE("Held while it repeats")
+		{
+			HoldKey(Test, EKey::Enter);
+		}
 
 		CHECK(Test.HasItem("NotSaved/Close"));
 		CHECK_FALSE(Project.IsSceneWritten());
+
+		// Pressed anew, it answers.
+		Test.PressKey(EKey::Enter);
+		CHECK_FALSE(Test.HasItem("NotSaved/Close"));
+		CHECK(Project.IsSceneWritten());
 	}
 }

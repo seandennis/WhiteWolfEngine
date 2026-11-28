@@ -5,6 +5,7 @@
 #include "Ui/UiText.h"
 #include "Ui/UiTheme.h"
 
+#include <initializer_list>
 #include <string_view>
 
 namespace
@@ -19,12 +20,32 @@ bool FUiDialog::Begin(const char* Title)
 {
 	const ImGuiViewport* const MainViewport = ImGui::GetMainViewport();
 	ImGui::SetNextWindowPos(MainViewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	return ImGui::BeginPopupModal(Title, nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+	if (!ImGui::BeginPopupModal(Title, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		return false;
+	}
+
+	// A key that is down when the window appears was pressed for what was there before, as the Escape that closed
+	// another window or the Enter that chose the entry of a menu. Until it is let go, nothing reads it: neither an
+	// answer to the window nor a field that is told Enter, also when the key repeats while it is held.
+	if (ImGui::IsWindowAppearing())
+	{
+		const ImGuiID HeldFromBefore = ImGui::GetID("##KeyHeldFromBefore");
+		for (const ImGuiKey Key : {ImGuiKey_Enter, ImGuiKey_KeypadEnter, ImGuiKey_Escape})
+		{
+			if (ImGui::IsKeyDown(Key))
+			{
+				ImGui::SetKeyOwner(Key, HeldFromBefore, ImGuiInputFlags_LockUntilRelease);
+			}
+		}
+	}
+	return true;
 }
 
 bool FUiDialog::IsAnswerKeyPressed(ImGuiKey Key)
 {
-	return !ImGui::IsWindowAppearing() && ImGui::IsKeyPressed(Key);
+	// Pressed, not repeated: a key that is held is one answer. One held from before the window is not read (Begin).
+	return ImGui::IsKeyPressed(Key, false);
 }
 
 void FUiDialog::ShowError(const std::string& Error)

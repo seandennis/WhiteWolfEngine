@@ -183,6 +183,33 @@ TEST_SUITE("FNewMaterialDialog")
 		CHECK_FALSE(std::filesystem::exists(Content / "Materials"));
 	}
 
+	TEST_CASE("Enter that is down when the window opens makes no material, however long it is held")
+	{
+		FEditorUiTest Test;
+		const FScopedTempDirectory Directory;
+		const std::filesystem::path Content = CreateTestProject(Test.Editor, Directory.GetPath());
+		Test.Click("Menu/File");
+
+		// The entry is chosen as the mouse comes up, in the frame in which Enter goes down, and Enter is then held
+		// past the time after which it repeats, which the field of the window would take as typed.
+		Test.MoveMouse(Test.RequireItem("Menu/File/New Material...").GetCenter());
+		Test.Input.HandleMouseButtonEvent(EMouseButton::Left, EInputEvent::Pressed);
+		Test.DrawFrame();
+		Test.Input.HandleMouseButtonEvent(EMouseButton::Left, EInputEvent::Released);
+		Test.Input.HandleKeyEvent(EKey::Enter, EInputEvent::Pressed);
+		Test.DrawFrames(30);
+		Test.Input.HandleKeyEvent(EKey::Enter, EInputEvent::Released);
+		Test.DrawFrames(3);
+
+		CHECK(Test.HasItem("NewMaterial/Path"));
+		CHECK_FALSE(std::filesystem::exists(Content / "Materials"));
+
+		// Pressed anew, it makes the material.
+		Test.PressKey(EKey::Enter);
+		CHECK_FALSE(Test.HasItem("NewMaterial/Path"));
+		CHECK(std::filesystem::is_regular_file(Content / "Materials" / "NewMaterial.wwmaterial"));
+	}
+
 	TEST_CASE("New Material can be chosen only while a project is open")
 	{
 		FEditorUiTest Test;

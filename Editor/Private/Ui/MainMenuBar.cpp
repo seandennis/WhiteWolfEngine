@@ -422,9 +422,7 @@ void FMainMenuBar::DrawAboutWindow(FUiFrame& Frame)
 		bWantsAboutWindow = false;
 	}
 
-	const ImGuiViewport* const MainViewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(MainViewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	if (ImGui::BeginPopupModal(AboutWindowTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	if (FUiDialog::Begin(AboutWindowTitle))
 	{
 		ImGui::TextUnformatted("White Wolf Engine");
 		ImGui::TextUnformatted(std::format("Version {}", FEngineVersion::Current().ToString()).c_str());

@@ -18,15 +18,19 @@ public:
 	 * been called with the same title. What the window shows follows if this returns true, and then
 	 * ImGui::EndPopup.
 	 *
+	 * Enter or Escape that is down when the window appears was pressed for what was there before: nothing in the
+	 * window reads it until it is let go, neither as an answer nor in a field, however long it is held.
+	 *
 	 * @param Title What the window is called. Dear ImGui also knows the window by this.
 	 */
 	static bool Begin(const char* Title);
 
 	/**
-	 * Returns true if a key that answers the window being laid out, as Escape cancels it, was pressed while the window
-	 * was there to be seen. Never in the frame in which the window appears: a key pressed then was meant for what was
-	 * there before, as the Escape that closes one window, which may open another in that same frame, or the Enter
-	 * that chooses the entry of a menu that opens one.
+	 * Returns true if a key that answers the window being laid out, as Escape cancels it, went down while the window
+	 * was there to be seen, in a window begun with Begin. Never for a key that was down when the window appeared,
+	 * which was pressed for what was there before, as the Escape that closes one window, which may open another in
+	 * that same frame, or the Enter that chooses the entry of a menu that opens one; and once for a key that is
+	 * held, however long it repeats.
 	 *
 	 * @param Key A key, which may be pressed while it is being typed into a field of the window.
 	 */
