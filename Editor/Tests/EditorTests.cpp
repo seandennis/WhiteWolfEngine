@@ -1,5 +1,7 @@
 #include "Editor.h"
 
+#include "Commands/CommandEffect.h"
+#include "Commands/CommandWhilePlaying.h"
 #include "Logging/LogMessage.h"
 #include "Logging/LogVerbosity.h"
 #include "Object/ObjectGlobals.h"
@@ -177,6 +179,33 @@ TEST_SUITE("FEditor")
 		}
 
 		CHECK(Names == std::vector<std::string>{"Asset.SetProperty"});
+	}
+
+	TEST_CASE("The commands that act on what waits unchanged while a game plays are refused then")
+	{
+		const FScopedEditorTest EditorTest;
+		const FEditor Editor;
+
+		std::vector<std::string> Names;
+		for (const FCommandDescription* const Description : Editor.GetCommands().GetCommands())
+		{
+			if (Description->WhilePlaying == ECommandWhilePlaying::Refused)
+			{
+				Names.push_back(Description->Name);
+			}
+		}
+
+		const std::vector<std::string> ExpectedNames = {
+			"Asset.SetProperty",
+			"Edit.Redo",
+			"Edit.Undo",
+			"Project.New",
+			"Project.Open",
+			"Scene.New",
+			"Scene.Open",
+			"Scene.Save",
+		};
+		CHECK(Names == ExpectedNames);
 	}
 
 	TEST_CASE("SetScene replaces the scene and destroys the one it replaces")

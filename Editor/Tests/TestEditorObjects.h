@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 
+#include "Assets/AssetManager.h"
 #include "Json/JsonReader.h"
 #include "Json/JsonValue.h"
 #include "Json/JsonWriter.h"
@@ -15,10 +16,12 @@
 #include "Object/WeakObjectPtr.h"
 #include "Rendering/Texture.h"
 #include "Scene/Component.h"
+#include "Scene/EndPlayReason.h"
 #include "Scene/Entity.h"
 
 #include <doctest/doctest.h>
 
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -112,13 +115,84 @@ public:
 	virtual void DoSomething() = 0;
 };
 
-/** Isolates a test that creates an editor: collects garbage before and after it. Declare it before the editor. */
+/** How often movers (WEditorTestMoverComponent) began and ended play: what a test reads after their copy is gone. */
+struct FEditorTestMoverEvents
+{
+	int32 BeginPlayCount = 0;
+	int32 EndPlayCount = 0;
+
+	/** The content directory that assets came from when a mover last ended play. */
+	std::filesystem::path EndPlayContentDirectory;
+
+	/** Returns the counts that every mover adds to. FScopedEditorTest sets them to zero. */
+	static FEditorTestMoverEvents& Get()
+	{
+		static FEditorTestMoverEvents Events;
+		return Events;
+	}
+};
+
+/**
+ * A component that moves its entity in every frame of a game, by Velocity times the length of a frame: one metre
+ * along X in a frame of a sixtieth of a second, exactly, because sixty times the sixtieth that a double holds rounds
+ * to exactly one. So the place of a mover after a number of frames can be compared exactly.
+ */
+WCLASS()
+class WEditorTestMoverComponent : public WComponent
+{
+	WW_DECLARE_CLASS(WEditorTestMoverComponent, WComponent)
+
+public:
+	WEditorTestMoverComponent()
+	{
+		bCanEverTick = true;
+	}
+
+	/** How far the entity moves in a second of the game, in metres. */
+	WPROPERTY()
+	FVector Velocity = FVector(60.0, 0.0, 0.0);
+
+	/** The frames that the mover ticked in. Saved, so that a command reads it. */
+	WPROPERTY()
+	int32 FrameCount = 0;
+
+protected:
+	void BeginPlay() override
+	{
+		Super::BeginPlay();
+		++FEditorTestMoverEvents::Get().BeginPlayCount;
+	}
+
+	void Tick(double DeltaSeconds) override
+	{
+		Super::Tick(DeltaSeconds);
+		++FrameCount;
+		WEntity* const Entity = GetOwner();
+		FTransform Transform = Entity->GetRelativeTransform();
+		Transform.Location += Velocity * DeltaSeconds;
+		Entity->SetRelativeTransform(Transform);
+	}
+
+	void EndPlay(EEndPlayReason Reason) override
+	{
+		FEditorTestMoverEvents& Events = FEditorTestMoverEvents::Get();
+		++Events.EndPlayCount;
+		Events.EndPlayContentDirectory = FAssetManager::GetContentDirectory();
+		Super::EndPlay(Reason);
+	}
+};
+
+/**
+ * Isolates a test that creates an editor: collects garbage before and after it, and sets the counts of the movers
+ * to zero. Declare it before the editor.
+ */
 class FScopedEditorTest
 {
 public:
 	FScopedEditorTest()
 	{
 		CollectGarbage();
+		FEditorTestMoverEvents::Get() = FEditorTestMoverEvents();
 	}
 
 	~FScopedEditorTest()

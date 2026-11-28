@@ -2,6 +2,7 @@
 
 #include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
+#include "Commands/CommandWhilePlaying.h"
 #include "Editor.h"
 #include "History/UndoHistory.h"
 #include "Json/JsonValue.h"
@@ -67,17 +68,20 @@ void FEditCommands::Register(FCommandRegistry& Registry)
 		{"Edit.Undo",
 			"Undoes the last change to the scene or to a material: puts both back as they were before the last "
 			"command that changed one of them. Returns the name of that command. Entities and components keep their "
-			"identifiers. No file is written: a material is put back in memory, and is unsaved while it then differs "
-			"from "
-			"its file, as Asset.GetProperties says (\"Unsaved\"); Asset.Save writes it.",
-			{}},
+			"identifiers. No file is written: a material is put back in memory, and is unsaved while it then "
+			"differs from its file, as Asset.GetProperties says (\"Unsaved\"); Asset.Save writes it.",
+			{},
+			ECommandEffect::ChangesScene,
+			ECommandWhilePlaying::Refused},
 		Undo);
 
 	Registry.Register(
 		{"Edit.Redo",
 			"Redoes the change that was undone last. Returns the name of the command that made it. Nothing can be "
 			"redone once the scene or a material has changed since the undo.",
-			{}},
+			{},
+			ECommandEffect::ChangesScene,
+			ECommandWhilePlaying::Refused},
 		Redo);
 
 	Registry.Register(

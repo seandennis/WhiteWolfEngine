@@ -8,6 +8,7 @@
 #include "History/UndoHistory.h"
 #include "Logging/MemoryLogSink.h"
 #include "Object/WeakObjectPtr.h"
+#include "Play/PlayState.h"
 #include "Project/Project.h"
 #include "Rendering/SceneViewMode.h"
 #include "Settings/EditorSettings.h"
@@ -22,6 +23,7 @@
 #include <vector>
 
 class FJsonValue;
+class FPlaySession;
 class WScene;
 
 /** Log category of the editor. */
@@ -53,6 +55,11 @@ extern EDITOR_API FLogCategory LogEditor;
  * what they were, so that a change to a material is a step of the same history; Undo and Redo put an asset's values
  * back on the object that every component which refers to it shares, and never write its file.
  *
+ * The editor plays the game in a copy of the scene being edited (StartPlay). While a game exists, the copy is the
+ * scene that is shown and that commands act on; the scene being edited waits, untouched, and is the editor's scene
+ * again, the same object, when the game stops. What a game changes is no step of the history, and goes with the
+ * copy.
+ *
  * Create and destroy an editor on the main thread.
  */
 class FEditor
@@ -68,8 +75,8 @@ public:
 	EDITOR_API FEditor();
 
 	/**
-	 * Gives up the assets that the editor keeps, as SetProject does, destroys the editor's scene, and gives up the
-	 * content directory of its project.
+	 * Stops a game that plays, gives up the assets that the editor keeps, as SetProject does, destroys the editor's
+	 * scene, and gives up the content directory of its project.
 	 */
 	EDITOR_API ~FEditor();
 
@@ -90,32 +97,82 @@ public:
 	/**
 	 * Carries out a command on this editor; see FCommandRegistry::Execute. If the command can change the scene or the
 	 * assets that the editor changes (ECommandEffect), and either is different afterwards, the difference becomes a
-	 * step of the history, named after the command, that Undo can undo.
+	 * step of the history, named after the command, that Undo can undo. While a game plays, a command that says it
+	 * cannot be given then (ECommandWhilePlaying::Refused) fails with a sentence that says why, and does nothing.
 	 *
 	 * @param Arguments A JSON object with one member per argument, or JSON null for no arguments.
 	 */
 	EDITOR_API FCommandResult ExecuteCommand(std::string_view Name, const FJsonValue& Arguments);
 
 	/**
-	 * Returns the scene being edited. Do not keep the reference from one command to the next: Undo, Redo and
-	 * SetScene replace the scene object.
+	 * Returns the scene that the editor shows and that commands act on: the scene being edited, or while a game
+	 * exists, the game's copy of it. Do not keep the reference from one command to the next: Undo, Redo, SetScene,
+	 * StartPlay and StopPlay replace the scene object.
 	 */
 	EDITOR_API WScene& GetScene() const;
 
 	/**
 	 * Makes another scene the one being edited, and destroys the scene it replaces with everything in it. The
-	 * history starts anew: what was done to the old scene can no longer be undone.
+	 * history starts anew: what was done to the old scene can no longer be undone. A game that plays is stopped
+	 * first.
 	 *
-	 * @param NewScene A valid scene. The editor keeps it alive from now on. Only the editor may destroy it.
+	 * @param NewScene A valid scene, which is not the copy of a game that this call stops. The editor keeps it alive
+	 * from now on. Only the editor may destroy it.
 	 * @param NewScenePath The file NewScene was loaded from; empty for a scene that has no file yet.
 	 */
 	EDITOR_API void SetScene(WScene& NewScene, std::filesystem::path NewScenePath);
+
+	/** Returns whether a game plays in the editor, and whether it is paused. */
+	EDITOR_API EPlayState GetPlayState() const;
+
+	/** Returns true while a game exists, playing or paused. */
+	bool IsPlaying() const
+	{
+		return PlaySession != nullptr;
+	}
+
+	/**
+	 * Begins a game in a copy of the scene being edited, made from what the history keeps of it: what a saved file
+	 * of the scene would hold, with the same identifiers. Every component of the copy begins play. From now until
+	 * the game stops, GetScene is the copy, a change to it is no step of the history, and Undo and Redo do nothing.
+	 * A change made without a command before the game is a step first, and an open step is ended. Identifiers of
+	 * entities that are gone are dropped from what is selected, which carries into the game.
+	 *
+	 * A fatal error while a game exists.
+	 */
+	EDITOR_API void StartPlay();
+
+	/**
+	 * Pauses the game: it does not go on by itself, only a frame at a time (StepPlay). A fatal error while no game
+	 * exists.
+	 */
+	EDITOR_API void PausePlay();
+
+	/** Lets a paused game go on by itself. A fatal error while no game exists. */
+	EDITOR_API void ResumePlay();
+
+	/**
+	 * Plays frames of the game now, whether it is paused or not, and leaves it paused or not as it was.
+	 *
+	 * @param FrameCount How many frames to play: at least one. Anything else, or no game, is a fatal error.
+	 */
+	EDITOR_API void StepPlay(int32 FrameCount);
+
+	/**
+	 * Stops the game: every component of the copy that began play ends it, the copy is destroyed with whatever the
+	 * game changed, and the scene being edited is the editor's scene again, the very object it was, untouched. An
+	 * open step, begun during the game, is dropped. What is selected carries back, without what only the game had.
+	 * The camera of the viewport, the view mode and the gizmo stay as the game left them.
+	 *
+	 * A fatal error while no game exists.
+	 */
+	EDITOR_API void StopPlay();
 
 	/**
 	 * Undoes the last step of the history: puts the scene back as it was before it. A change made to the scene
 	 * without a command since the last step is a step of its own, called DirectChangeStepName, and is what is undone.
 	 *
-	 * @return The name of the step that was undone, or nothing if there was no step to undo.
+	 * @return The name of the step that was undone, or nothing if there was no step to undo or a game exists.
 	 */
 	EDITOR_API std::optional<std::string> Undo();
 
@@ -123,7 +180,7 @@ public:
 	 * Redoes the step that was undone last: puts the scene back as it was after it. Nothing can be redone once the
 	 * scene has changed since the undo.
 	 *
-	 * @return The name of the step that was redone, or nothing if there was no step to redo.
+	 * @return The name of the step that was redone, or nothing if there was no step to redo or a game exists.
 	 */
 	EDITOR_API std::optional<std::string> Redo();
 
@@ -134,8 +191,8 @@ public:
 	 * one across the viewport, is undone as one thing. A change made since the last step is a step of its own
 	 * first, as it is before an undo.
 	 *
-	 * Steps do not nest: beginning one while another is open is a fatal error. Undo, Redo and a scene that
-	 * replaces the one being edited end an open step.
+	 * Steps do not nest: beginning one while another is open is a fatal error. Undo, Redo, a scene that replaces the
+	 * one being edited, and the beginning and end of a game end an open step. A step during a game records nothing.
 	 */
 	EDITOR_API void BeginStep(std::string StepName);
 
@@ -180,7 +237,8 @@ public:
 	/**
 	 * Returns the identifiers of the selected entities, in the order they were selected. What is shown for one
 	 * entity, as its properties are, is shown for the last of them. An entity that no longer exists is not among
-	 * them, and is selected again if an undo brings it back.
+	 * them, and is selected again if an undo brings it back, unless a game began or stopped in the meantime: what is
+	 * selected carries into a game and back by identifier, and the identifiers that no entity has then are dropped.
 	 */
 	EDITOR_API std::vector<int64> GetSelection() const;
 
@@ -243,7 +301,8 @@ public:
 	}
 
 	/**
-	 * Makes a project the one being worked on. It first gives up the assets that the editor keeps (FEditedAssets):
+	 * Makes a project the one being worked on. It first stops a game that plays, and gives up the assets that the
+	 * editor keeps (FEditedAssets):
 	 * changes to them that were not saved are lost, each asset put back to what its file says, with one warning in
 	 * the log that names them. Its content directory then becomes the directory that asset paths are relative to
 	 * (FAssetManager), and the scene is replaced by an empty one, with a history that starts anew. The editor gives
@@ -344,8 +403,17 @@ private:
 	/** The name of the step that BeginStep began and nothing has ended yet. */
 	std::optional<std::string> OpenStepName;
 
-	/** The scene being edited. It is in the root set, which is what keeps it alive; this is how to find it. */
+	/**
+	 * The scene that is shown: the scene being edited, or the game's copy of it while a game exists. It is in the
+	 * root set, which is what keeps it alive; this is how to find it.
+	 */
 	TWeakObjectPtr<WScene> Scene;
+
+	/** The game that plays in a copy of the scene being edited; null while there is none. */
+	std::unique_ptr<FPlaySession> PlaySession;
+
+	/** The scene being edited while a game exists, set aside in the root set until the game stops; null otherwise. */
+	TWeakObjectPtr<WScene> EditedScene;
 
 	std::filesystem::path ScenePath;
 

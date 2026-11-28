@@ -3,6 +3,7 @@
 #include "Assets/AssetManager.h"
 #include "Commands/AssetCommands.h"
 #include "Commands/CommandEffect.h"
+#include "Commands/CommandWhilePlaying.h"
 #include "Commands/ComponentCommands.h"
 #include "Commands/EditCommands.h"
 #include "Commands/EditorCommands.h"
@@ -19,17 +20,51 @@
 #include "Json/JsonWriter.h"
 #include "Logging/Log.h"
 #include "Object/ObjectGlobals.h"
+#include "Scene/PlaySession.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneSerializer.h"
 
 #include <algorithm>
 #include <cstddef>
+#include <format>
 #include <memory>
 #include <string_view>
 #include <system_error>
 #include <utility>
 
 constinit FLogCategory LogEditor("LogEditor", ELogVerbosity::Log);
+
+namespace
+{
+	/** A state of the history in its two parts (FEditor::WriteState). */
+	struct FStateParts
+	{
+		/** The scene, as one line of compact JSON. */
+		std::string_view SceneText;
+
+		/** The kept assets that differ from what they were when the history began; empty if none does. */
+		std::string_view AssetText;
+	};
+
+	/** Says why a command that cannot be given while a game plays (ECommandWhilePlaying::Refused) is refused. */
+	std::string DescribeRefusalWhilePlaying(std::string_view CommandName)
+	{
+		return std::format("{} cannot be given while a game plays, because it would act on what waits unchanged until "
+						   "the game stops: the scene being edited, its file, its history, the project or a material.",
+			CommandName);
+	}
+
+	/** Divides a state of the history at its first line break, which only the scene's compact JSON comes before. */
+	FStateParts SplitState(std::string_view State)
+	{
+		const std::size_t LineBreak = State.find('\n');
+		if (LineBreak == std::string_view::npos)
+		{
+			return {State, std::string_view()};
+		}
+		return {State.substr(0, LineBreak), State.substr(LineBreak + 1)};
+	}
+}
 
 FEditor::FEditor()
 	: LogSink(std::make_shared<FMemoryLogSink>())
@@ -56,6 +91,12 @@ FEditor::FEditor()
 
 FEditor::~FEditor()
 {
+	// A game ends before anything else goes, its components told, and the scene being edited is back to be destroyed.
+	if (IsPlaying())
+	{
+		StopPlay();
+	}
+
 	// Changes that were not saved are given up, and what the editor kept is left to the collector.
 	EditedAssets.ReleaseAll();
 
@@ -84,8 +125,11 @@ FCommandResult FEditor::ExecuteCommand(std::string_view Name, const FJsonValue& 
 	// Looked up before the command runs: a description found afterwards might not be the one that ran.
 	const FCommandDescription* const Description = Commands.Find(Name);
 	const bool bCanChange = Description != nullptr && Description->Effect != ECommandEffect::LeavesScene;
+	const bool bIsRefused =
+		IsPlaying() && Description != nullptr && Description->WhilePlaying == ECommandWhilePlaying::Refused;
 
-	FCommandResult Result = Commands.Execute(*this, Name, Arguments);
+	FCommandResult Result = bIsRefused ? FCommandResult::Failure(DescribeRefusalWhilePlaying(Name))
+									   : Commands.Execute(*this, Name, Arguments);
 	if (Result.HasSucceeded())
 	{
 		WW_LOG(LogEditor, Verbose, "Command {} succeeded", Name);
@@ -116,6 +160,11 @@ WScene& FEditor::GetScene() const
 
 void FEditor::SetScene(WScene& NewScene, std::filesystem::path NewScenePath)
 {
+	// The game was one of the scene that goes. Stopping it destroys its copy, which is then no scene to edit.
+	if (IsPlaying())
+	{
+		StopPlay();
+	}
 	WW_CHECKF(IsValid(&NewScene), "The editor cannot edit a scene that has been destroyed");
 
 	ScenePath = std::move(NewScenePath);
@@ -140,8 +189,91 @@ void FEditor::SetScenePath(std::filesystem::path NewScenePath)
 	ScenePath = std::move(NewScenePath);
 }
 
+EPlayState FEditor::GetPlayState() const
+{
+	if (!IsPlaying())
+	{
+		return EPlayState::Stopped;
+	}
+	return PlaySession->IsPaused() ? EPlayState::Paused : EPlayState::Playing;
+}
+
+void FEditor::StartPlay()
+{
+	WW_CHECKF(!IsPlaying(), "A game was started in the editor while one was playing already");
+
+	// The game plays the scene as the history has it: what changed without a command is a step first, and a step
+	// that is open ends, so that the history's current state is what the scene and the kept assets write down as.
+	EndStep();
+	RecordChanges(DirectChangeStepName);
+
+	// An undo can leave the identifier of an entity that is gone among the selected, and the copy would give that
+	// identifier to the next entity that the game makes, selected from the start.
+	SetSelection(GetSelection());
+
+	std::string Error;
+	WScene* const Copy = FSceneSerializer::LoadFromText(SplitState(History.GetCurrentState()).SceneText, Error);
+	// The state was written by WriteState, so only a mistake in the engine can make it unreadable.
+	WW_CHECKF(Copy != nullptr, "The scene being edited could not be copied to play a game in: {}", Error);
+
+	// The scene being edited stays in the root set, set aside; the session keeps the copy alive.
+	EditedScene = Scene;
+	Scene = Copy;
+	PlaySession = std::make_unique<FPlaySession>(*Copy);
+	WW_LOG(LogEditor, Log, "The game began, in a copy of the scene \"{}\".", Copy->GetName());
+}
+
+void FEditor::PausePlay()
+{
+	WW_CHECKF(IsPlaying(), "A game was paused in the editor while none was playing");
+	PlaySession->Pause();
+}
+
+void FEditor::ResumePlay()
+{
+	WW_CHECKF(IsPlaying(), "A game was resumed in the editor while none was playing");
+	PlaySession->Resume();
+}
+
+void FEditor::StepPlay(int32 FrameCount)
+{
+	WW_CHECKF(IsPlaying(), "A game was played a frame at a time in the editor while none was playing");
+	PlaySession->Step(FrameCount);
+}
+
+void FEditor::StopPlay()
+{
+	WW_CHECKF(IsPlaying(), "A game was stopped in the editor while none was playing");
+
+	// A step that was begun during the game is one of the copy, which goes: it is no step of the history.
+	OpenStepName.reset();
+
+	const WScene& Played = PlaySession->GetScene();
+	const int64 PlayedFrameCount = Played.GetPlayedFrameCount();
+	const double PlayedSeconds = Played.GetPlayedSeconds();
+	// Ends the game, every component of the copy that began play told, and destroys the copy.
+	PlaySession.reset();
+
+	WScene* const Edited = EditedScene.Get();
+	WW_CHECKF(
+		Edited != nullptr, "The scene being edited was destroyed by something other than the editor during a game");
+	Scene = Edited;
+	EditedScene.Reset();
+
+	// What only the game had is selected no more: the scene being edited gives its identifiers out again.
+	SetSelection(GetSelection());
+	WW_LOG(
+		LogEditor, Log, "The game ended at frame {}, after {} seconds of game time.", PlayedFrameCount, PlayedSeconds);
+}
+
 void FEditor::SetProject(FProject NewProject)
 {
+	// A game ends in the project it was played in: its components end play before anything of the project is given up.
+	if (IsPlaying())
+	{
+		StopPlay();
+	}
+
 	// The assets that the editor keeps are of the content directory that is given up, and are given up with it.
 	EditedAssets.ReleaseAll();
 	FAssetManager::SetContentDirectory(NewProject.GetContentDirectory());
@@ -304,6 +436,12 @@ void FEditor::EndStep()
 
 std::optional<std::string> FEditor::Undo()
 {
+	// The history waits until the game stops, as the scene being edited does.
+	if (IsPlaying())
+	{
+		return std::nullopt;
+	}
+
 	// What an open step has changed so far is what there is to undo.
 	EndStep();
 	RecordChanges(DirectChangeStepName);
@@ -319,6 +457,11 @@ std::optional<std::string> FEditor::Undo()
 
 std::optional<std::string> FEditor::Redo()
 {
+	if (IsPlaying())
+	{
+		return std::nullopt;
+	}
+
 	// A change made since the undo is a step that takes the place of the ones that could have been redone.
 	EndStep();
 	RecordChanges(DirectChangeStepName);
@@ -346,21 +489,24 @@ std::string FEditor::WriteState() const
 
 void FEditor::RecordChanges(std::string_view StepName)
 {
+	// What a game changes is the copy's, which goes when the game stops: the history waits, as the scene being edited
+	// does.
+	if (IsPlaying())
+	{
+		return;
+	}
 	History.Record(std::string(StepName), WriteState());
 }
 
 void FEditor::RestoreState(const std::string& State)
 {
-	const std::size_t LineBreak = State.find('\n');
-	const std::string_view SceneText = std::string_view(State).substr(0, LineBreak);
-	const std::string_view AssetText =
-		LineBreak == std::string::npos ? std::string_view() : std::string_view(State).substr(LineBreak + 1);
+	const FStateParts Parts = SplitState(State);
 
 	// The assets first: the scene that is loaded next finds them by their paths, as the objects that the editor keeps.
-	EditedAssets.RestoreState(AssetText);
+	EditedAssets.RestoreState(Parts.AssetText);
 
 	std::string Error;
-	WScene* const Restored = FSceneSerializer::LoadFromText(SceneText, Error);
+	WScene* const Restored = FSceneSerializer::LoadFromText(Parts.SceneText, Error);
 	// The state was written by WriteState, so only a mistake in the engine can make it unreadable.
 	WW_CHECKF(Restored != nullptr, "A state of the undo history could not be loaded: {}", Error);
 	ReplaceScene(*Restored);

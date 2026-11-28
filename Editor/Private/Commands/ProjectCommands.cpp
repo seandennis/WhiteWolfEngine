@@ -2,6 +2,7 @@
 
 #include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
+#include "Commands/CommandWhilePlaying.h"
 #include "Core/FileHelper.h"
 #include "Editor.h"
 #include "Json/JsonValue.h"
@@ -80,7 +81,9 @@ void FProjectCommands::Register(FCommandRegistry& Registry)
 				 "project."),
 				FCommandParameter::Required("Name",
 					ECommandArgumentType::String,
-					"The project's name, which also names its file: letters, digits, spaces, \"-\" and \"_\".")}},
+					"The project's name, which also names its file: letters, digits, spaces, \"-\" and \"_\".")},
+			ECommandEffect::ChangesScene,
+			ECommandWhilePlaying::Refused},
 		NewProject);
 
 	Registry.Register(
@@ -90,7 +93,9 @@ void FProjectCommands::Register(FCommandRegistry& Registry)
 			"and of materials, is lost. Returns the project's name, file, directory and content directory.",
 			{FCommandParameter::Required("Path",
 				ECommandArgumentType::String,
-				"The project file (.wwproject), or the project's directory if it holds one project file.")}},
+				"The project file (.wwproject), or the project's directory if it holds one project file.")},
+			ECommandEffect::ChangesScene,
+			ECommandWhilePlaying::Refused},
 		OpenProject);
 
 	Registry.Register(

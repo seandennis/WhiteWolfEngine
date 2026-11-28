@@ -9,6 +9,7 @@
 #include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
 #include "Commands/CommandTargets.h"
+#include "Commands/CommandWhilePlaying.h"
 #include "Commands/SavedProperties.h"
 #include "Core/FileHelper.h"
 #include "Editor.h"
@@ -687,10 +688,10 @@ void FAssetCommands::Register(FCommandRegistry& Registry)
 				FCommandParameter::Required("Value",
 					ECommandArgumentType::Json,
 					"The new value, in the form Asset.GetProperties returns it: a colour is [R, G, B, A] in linear "
-					"light, "
-					"a texture is the asset path of a picture, with \"#Linear\" for a data texture such as a normal "
-					"map, and null is no texture.")},
-			ECommandEffect::ChangesAssets},
+					"light, a texture is the asset path of a picture, with \"#Linear\" for a data texture such as a "
+					"normal map, and null is no texture.")},
+			ECommandEffect::ChangesAssets,
+			ECommandWhilePlaying::Refused},
 		SetAssetProperty);
 
 	Registry.Register(

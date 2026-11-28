@@ -2,6 +2,7 @@
 
 #include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
+#include "Commands/CommandWhilePlaying.h"
 #include "Core/FileHelper.h"
 #include "Editor.h"
 #include "Json/JsonValue.h"
@@ -182,7 +183,9 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 			"Edit.Undo does not bring it back. Changes to materials stay, saved or not, though Edit.Undo no longer "
 			"takes them back.",
 			{FCommandParameter::Optional(
-				"Name", ECommandArgumentType::String, "The name of the new scene. \"Untitled\" if left out.")}},
+				"Name", ECommandArgumentType::String, "The name of the new scene. \"Untitled\" if left out.")},
+			ECommandEffect::ChangesScene,
+			ECommandWhilePlaying::Refused},
 		NewScene);
 
 	Registry.Register(
@@ -193,7 +196,9 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 			{FCommandParameter::Required("Path",
 				ECommandArgumentType::String,
 				"The scene file to load. A relative path is relative to the content directory of the project, if one "
-				"is open.")}},
+				"is open.")},
+			ECommandEffect::ChangesScene,
+			ECommandWhilePlaying::Refused},
 		OpenScene);
 
 	Registry.Register(
@@ -206,7 +211,8 @@ void FSceneCommands::Register(FCommandRegistry& Registry)
 				"The file to save to, for example \"Scenes/Level1.wwscene\": Scene.List finds the files whose names "
 				"end in \".wwscene\". A relative path is relative to the content directory of the project, if one is "
 				"open. The file the scene was opened from or last saved to if left out.")},
-			ECommandEffect::LeavesScene},
+			ECommandEffect::LeavesScene,
+			ECommandWhilePlaying::Refused},
 		SaveScene);
 
 	Registry.Register(

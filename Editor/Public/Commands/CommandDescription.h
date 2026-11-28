@@ -4,6 +4,7 @@
 
 #include "Commands/CommandEffect.h"
 #include "Commands/CommandParameter.h"
+#include "Commands/CommandWhilePlaying.h"
 
 #include <string>
 #include <vector>
@@ -22,4 +23,7 @@ struct FCommandDescription
 
 	/** Whether the command can change the scene; see ECommandEffect. */
 	ECommandEffect Effect = ECommandEffect::ChangesScene;
+
+	/** Whether the command can be given while a game plays in the editor; see ECommandWhilePlaying. */
+	ECommandWhilePlaying WhilePlaying = ECommandWhilePlaying::Allowed;
 };
