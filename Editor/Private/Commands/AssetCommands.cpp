@@ -4,6 +4,8 @@
 #include "Assets/AssetManager.h"
 #include "Assets/AssetPackage.h"
 #include "Assets/AssetPath.h"
+#include "Assets/AssetReferenceContext.h"
+#include "Assets/EditedAssets.h"
 #include "Commands/CommandEffect.h"
 #include "Commands/CommandRegistry.h"
 #include "Commands/CommandTargets.h"
@@ -12,6 +14,7 @@
 #include "Json/JsonValue.h"
 #include "Object/Class.h"
 #include "Object/ObjectGlobals.h"
+#include "Reflection/ObjectProperties.h"
 #include "Rendering/GltfImporter.h"
 #include "Rendering/Material.h"
 #include "Rendering/MaterialSerializer.h"
@@ -320,6 +323,52 @@ namespace
 		return FCommandResult::Success(std::move(Value));
 	}
 
+	/**
+	 * Finds the asset of an asset path for a command, loading its file if it is not loaded.
+	 *
+	 * @param OutError Receives the command's failure, a whole sentence, if there is no such asset.
+	 * @return The asset, or null.
+	 */
+	WAsset* FindAsset(const FEditor& Editor, const std::string& AssetPath, std::string& OutError)
+	{
+		std::string Error;
+		const std::optional<FAssetPath> Path = FAssetPath::Parse(AssetPath, Error);
+		if (Path.has_value() && Editor.GetProject() == nullptr && !FAssetManager::IsBuiltInFile(Path->File))
+		{
+			OutError = NoProjectError;
+			return nullptr;
+		}
+		WAsset* const Asset = FAssetManager::Load(AssetPath, Error);
+		if (Asset == nullptr)
+		{
+			OutError = std::format("The asset could not be loaded: {}.", Error);
+		}
+		return Asset;
+	}
+
+	FCommandResult GetAssetProperties(FEditor& Editor, const FCommandArguments& Arguments)
+	{
+		std::string Error;
+		const WAsset* const Asset = FindAsset(Editor, Arguments.GetString("Asset"), Error);
+		if (Asset == nullptr)
+		{
+			return FCommandResult::Failure(std::move(Error));
+		}
+
+		// Every asset that the asset manager gives out is an asset of a package.
+		const WAssetPackage* const Package = Asset->GetPackage();
+		WW_CHECKF(Package != nullptr, "The asset '{}' has no package", Asset->GetAssetPath());
+
+		FAssetReferenceContext Context;
+		FJsonValue Value = FJsonValue::MakeObject();
+		Value.SetMember("Path", Asset->GetAssetPath());
+		Value.SetMember("Class", Asset->GetClass()->GetName());
+		Value.SetMember("Unsaved", Editor.GetEditedAssets().HasUnsavedChanges(Asset->GetAssetPath()));
+		Value.SetMember("Properties", FObjectProperties::Export(*Asset, Context));
+		Value.SetMember("Warnings", MakeStringList(Package->GetWarnings()));
+		return FCommandResult::Success(std::move(Value));
+	}
+
 	FCommandResult PlaceAsset(FEditor& Editor, const FCommandArguments& Arguments)
 	{
 		if (Editor.GetProject() == nullptr)
@@ -408,6 +457,20 @@ void FAssetCommands::Register(FCommandRegistry& Registry)
 				"The file's name as Asset.List returns it, for example \"Models/Crate.glb\" or \"Engine/Shapes\".")},
 			ECommandEffect::LeavesScene},
 		DescribeAsset);
+
+	Registry.Register(
+		{"Asset.GetProperties",
+			"Returns what an asset is: its path, its class, whether the editor has changes of it that are not saved "
+			"yet (\"Unsaved\"), the values of its saved properties, and what was left out when its file was loaded. "
+			"A texture is given as its asset path, and no texture as null. Any asset can be read: a material that is "
+			"a file of its own, a material of a model, and without a project the shapes that the engine has built "
+			"in.",
+			{FCommandParameter::Required("Asset",
+				ECommandArgumentType::String,
+				"The asset's path, as Asset.Describe returns it, for example \"Materials/Brick.wwmaterial\" or "
+				"\"Models/Crate.glb#Materials/0\".")},
+			ECommandEffect::LeavesScene},
+		GetAssetProperties);
 
 	Registry.Register(
 		{"Asset.CreateMaterial",

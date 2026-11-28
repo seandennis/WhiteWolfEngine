@@ -1,10 +1,13 @@
 #include "Assets/AssetManager.h"
+#include "Assets/EditedAssets.h"
 #include "Commands/TestAssetCommands.h"
 #include "Core/FileHelper.h"
 #include "Editor.h"
 #include "History/UndoHistory.h"
 #include "Math/LinearColor.h"
+#include "Object/Class.h"
 #include "Object/ObjectGlobals.h"
+#include "Reflection/Property.h"
 #include "Rendering/Material.h"
 #include "Rendering/MaterialSerializer.h"
 #include "Rendering/StaticMeshComponent.h"
@@ -20,6 +23,7 @@
 #include <format>
 #include <ostream>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -61,6 +65,20 @@ namespace
 		Arguments.SetMember("Path", Path);
 		return Test.Editor.ExecuteCommand("Asset.CreateMaterial", Arguments);
 	}
+
+	/** Gives the editor Asset.GetProperties for an asset path. */
+	FCommandResult GetProperties(FAssetCommandTest& Test, const std::string& AssetPath)
+	{
+		FJsonValue Arguments = FJsonValue::MakeObject();
+		Arguments.SetMember("Asset", AssetPath);
+		return Test.Editor.ExecuteCommand("Asset.GetProperties", Arguments);
+	}
+
+	/** The saved properties of a new material, as compact JSON. */
+	constexpr std::string_view NewMaterialProperties =
+		R"({"BaseColor":[1.0,1.0,1.0,1.0],"Metallic":0.0,"Roughness":0.5,"EmissiveColor":[0.0,0.0,0.0,1.0],)"
+		R"("BaseColorTexture":null,"MetallicRoughnessTexture":null,"NormalTexture":null,"NormalScale":1.0,)"
+		R"("EmissiveTexture":null,"OcclusionTexture":null,"OcclusionStrength":1.0})";
 }
 
 TEST_SUITE("Asset commands for materials")
@@ -254,5 +272,114 @@ TEST_SUITE("Asset commands for materials")
 					"materials/Metals",
 					"materials/Metals/New.wwmaterial"});
 		}
+	}
+
+	TEST_CASE("Asset.GetProperties returns the path, the class, the values and the warnings of a material")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(CreateMaterial(Test, "Materials/Brick.wwmaterial").HasSucceeded());
+
+		const FCommandResult Result = GetProperties(Test, "Materials/Brick.wwmaterial");
+
+		INFO("Error: ", Result.GetError());
+		REQUIRE(Result.HasSucceeded());
+		CHECK(WriteTestJson(Result.GetValue()) ==
+			std::format(R"({{"Path":"Materials/Brick.wwmaterial","Class":"WMaterial","Unsaved":false,)"
+						R"("Properties":{},"Warnings":[]}})",
+				NewMaterialProperties));
+	}
+
+	TEST_CASE("Asset.GetProperties says what a material file could not give its material")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(Test.Import(Test.WritePicture("Wood.png"), "Textures").HasSucceeded());
+		REQUIRE(Test.Import(Test.WriteMaterial("Crate.wwmaterial",
+								R"({"BaseColorTexture": "Textures/Wood.png", "NormalTexture": "Textures/Gone.png"})"),
+						"Materials")
+					.HasSucceeded());
+
+		const FCommandResult Result = GetProperties(Test, "Materials/Crate.wwmaterial");
+
+		REQUIRE(Result.HasSucceeded());
+		const FJsonValue& Properties = *Result.GetValue().FindMember("Properties");
+		CHECK(*Properties.FindMember("BaseColorTexture") == FJsonValue("Textures/Wood.png"));
+		CHECK(Properties.FindMember("NormalTexture")->IsNull());
+		CHECK(WriteTestJson(*Result.GetValue().FindMember("Warnings")) ==
+			R"(["property \"NormalTexture\": the content directory has no file \"Textures/Gone.png\""])");
+	}
+
+	TEST_CASE("Asset.GetProperties reads an asset that cannot be changed, as a material of a model")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(Test.Import(Test.WriteSquare("Square.gltf"), "Models").HasSucceeded());
+
+		const FCommandResult ModelMaterial = GetProperties(Test, "Models/Square.gltf#Materials/0");
+
+		REQUIRE(ModelMaterial.HasSucceeded());
+		CHECK(*ModelMaterial.GetValue().FindMember("Path") == FJsonValue("Models/Square.gltf#Materials/0"));
+		CHECK(*ModelMaterial.GetValue().FindMember("Class") == FJsonValue("WMaterial"));
+		CHECK(*ModelMaterial.GetValue().FindMember("Unsaved") == FJsonValue(false));
+	}
+
+	TEST_CASE("Asset.GetProperties reads a shape that the engine has built in without a project")
+	{
+		const FScopedEditorTest EditorTest;
+		FEditor Editor;
+		const FCommandResult Cube =
+			Editor.ExecuteCommand("Asset.GetProperties", ParseTestJson(R"({"Asset": "Engine/Shapes#Cube"})"));
+		INFO("Error: ", Cube.GetError());
+		REQUIRE(Cube.HasSucceeded());
+		CHECK(WriteTestJson(Cube.GetValue()) ==
+			R"({"Path":"Engine/Shapes#Cube","Class":"WStaticMesh","Unsaved":false,"Properties":{},"Warnings":[]})");
+	}
+
+	TEST_CASE("Asset.GetProperties says that a material that the editor has changed is not saved")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(CreateMaterial(Test, "Materials/Brick.wwmaterial").HasSucceeded());
+		std::string Error;
+		WMaterial* const Material = FAssetManager::Load<WMaterial>("Materials/Brick.wwmaterial", Error);
+		REQUIRE(Material != nullptr);
+		const FProperty* const Metallic = WMaterial::StaticClass()->FindProperty("Metallic");
+		REQUIRE(Metallic != nullptr);
+		REQUIRE(Test.Editor.GetEditedAssets().SetProperty(*Material, *Metallic, FJsonValue(1.0), Error));
+
+		const FCommandResult Result = GetProperties(Test, "Materials/Brick.wwmaterial");
+
+		REQUIRE(Result.HasSucceeded());
+		CHECK(*Result.GetValue().FindMember("Unsaved") == FJsonValue(true));
+		CHECK(*Result.GetValue().FindMember("Properties")->FindMember("Metallic") == FJsonValue(1.0));
+	}
+
+	TEST_CASE("Asset.GetProperties says why it cannot read an asset")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(Test.Import(Test.WriteSquare("Square.gltf"), "Models").HasSucceeded());
+		std::string AssetPath;
+		std::string Expected;
+
+		SUBCASE("Text that is no asset path")
+		{
+			AssetPath = "../Brick.wwmaterial";
+			Expected =
+				"The asset could not be loaded: \"../Brick.wwmaterial\" is not the path of an asset: it must not "
+				"have the part \"..\".";
+		}
+		SUBCASE("A file that is not there")
+		{
+			AssetPath = "Materials/Gone.wwmaterial";
+			Expected =
+				"The asset could not be loaded: the content directory has no file \"Materials/Gone.wwmaterial\".";
+		}
+		SUBCASE("A key that the file does not have")
+		{
+			AssetPath = "Models/Square.gltf#Materials/7";
+			Expected = "The asset could not be loaded: the file \"Models/Square.gltf\" has no asset \"Materials/7\".";
+		}
+
+		const FCommandResult Result = GetProperties(Test, AssetPath);
+
+		CHECK_FALSE(Result.HasSucceeded());
+		CHECK(Result.GetError() == Expected);
 	}
 }
