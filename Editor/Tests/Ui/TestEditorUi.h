@@ -12,6 +12,7 @@
 #include "Rendering/RenderDevice.h"
 #include "Rendering/RenderTarget.h"
 #include "Rendering/TestRendering.h"
+#include "TestEditorGraphics.h"
 #include "TestEditorObjects.h"
 #include "TestSupport/ScopedLogCapture.h"
 #include "Ui/EditorUi.h"
@@ -211,14 +212,17 @@ private:
 	static constexpr int32 DragStepCount = 5;
 
 	// Declared in the order they are created, and destroyed in the opposite one: the user interface before the
-	// editor and the render device that it uses.
+	// editor, whose render device it uses.
 
 	FScopedEditorTest EditorTest;
 
 public:
 	FScopedLogCapture Capture;
-	std::unique_ptr<FRenderDevice> Device = CreateValidatedDevice();
 	FEditor Editor;
+
+	/** The editor's render device, opened with validation: the one render device there can be. */
+	FRenderDevice* Device = &OpenValidatedGraphics(Editor);
+
 	std::unique_ptr<FEditorUi> Ui;
 	std::unique_ptr<FRenderTarget> Target;
 	FInputState Input;

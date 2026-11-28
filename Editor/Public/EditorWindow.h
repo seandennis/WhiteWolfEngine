@@ -23,8 +23,8 @@ class FWindow;
  * size and input, and each frame is drawn. The picture is then shown nowhere, which is how tests run the editor's
  * window; GetPicture is what a window on the desktop would show.
  *
- * Create and use it on the main thread. The editor has to outlive it. There can be one at a time, because it
- * holds the render device.
+ * It draws with the editor's render device (FEditor::GetGraphics), which it opens if nothing has yet. Create and
+ * use it on the main thread. The editor has to outlive it.
  */
 class FEditorWindow
 {
@@ -38,7 +38,8 @@ public:
 	 * @param Editor The editor whose scene the window shows and whose commands its user interface gives.
 	 * @param OutError Receives the reason on failure.
 	 * @return The window, or null if the platform layer is not running, the window could not be opened, the
-	 * machine has no graphics card that the engine can draw with, or pictures cannot be shown in the window.
+	 * editor's render device could not be opened, as on a machine without a graphics card that the engine can draw
+	 * with, or pictures cannot be shown in the window.
 	 */
 	EDITOR_API static std::unique_ptr<FEditorWindow> Create(
 		FEditor& Editor, const FEditorWindowDescription& Description, std::string& OutError);
@@ -46,7 +47,7 @@ public:
 	/** Used by Create. */
 	FEditorWindow(FEditor& InEditor,
 		std::unique_ptr<FWindow> InWindow,
-		std::unique_ptr<FRenderDevice> InDevice,
+		FRenderDevice& InDevice,
 		std::unique_ptr<FSwapChain> InSwapChain,
 		std::unique_ptr<FEditorUi> InUi);
 
@@ -92,10 +93,12 @@ private:
 	FEditor& Editor;
 
 	// In the order they are created, which is the opposite of the order they have to go in: the swap chain before
-	// the window it shows in, and whatever draws before the render device.
+	// the window it shows in.
 
 	std::unique_ptr<FWindow> Window;
-	std::unique_ptr<FRenderDevice> Device;
+
+	/** The editor's render device, which the editor keeps. */
+	FRenderDevice& Device;
 
 	/** Null for a window that exists in memory only, on a machine whose graphics driver cannot show pictures there. */
 	std::unique_ptr<FSwapChain> SwapChain;

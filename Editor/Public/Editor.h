@@ -5,6 +5,7 @@
 #include "Assets/EditedAssets.h"
 #include "Commands/CommandRegistry.h"
 #include "Commands/CommandResult.h"
+#include "EditorGraphics.h"
 #include "History/UndoHistory.h"
 #include "Logging/MemoryLogSink.h"
 #include "Object/WeakObjectPtr.h"
@@ -41,8 +42,9 @@ extern EDITOR_API FLogCategory LogEditor;
  * of the scene are selected, the ones that the user is working on. It knows from where the scene is looked at:
  * the camera of the viewport, which is the user's eye and not something in the scene. It knows how the gizmo is
  * set that things are moved with in the viewport. It remembers which projects were opened last
- * (FEditorSettings), from one run to the next if it is given a file to keep that in. And it keeps what is logged
- * while it exists, for the user and for an agent to read.
+ * (FEditorSettings), from one run to the next if it is given a file to keep that in. It keeps what is logged while
+ * it exists, for the user and for an agent to read. And it has the one render device that whatever draws for it
+ * draws with, which it opens only when something first draws (GetGraphics).
  *
  * Every change to the scene can be undone. After each command that can change the scene (ECommandEffect), the
  * editor writes the scene down, and if it differs from what it was, that is a step of the history; Undo and Redo
@@ -357,6 +359,20 @@ public:
 	EDITOR_API void ClearLog();
 
 	/**
+	 * Returns the editor's render device: what its window, and anything else that draws for the editor, draws with.
+	 * It is opened the first time something draws, and kept until the editor is destroyed.
+	 */
+	FEditorGraphics& GetGraphics()
+	{
+		return Graphics;
+	}
+
+	const FEditorGraphics& GetGraphics() const
+	{
+		return Graphics;
+	}
+
+	/**
 	 * Returns the file that a path given to a command means: a relative path is relative to the content directory
 	 * of the project, if one is open, so that a scene can be named as "Scenes/Level1.json". Any other path is
 	 * returned as it is.
@@ -432,6 +448,9 @@ private:
 
 	/** The file the settings are kept in; empty if they are kept nowhere. */
 	std::filesystem::path SettingsFile;
+
+	/** The one render device that whatever draws for the editor draws with. */
+	FEditorGraphics Graphics;
 
 	/** Where the log's messages are kept for GetLog. The log has it for as long as the editor exists. */
 	std::shared_ptr<FMemoryLogSink> LogSink;

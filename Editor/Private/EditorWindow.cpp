@@ -43,9 +43,9 @@ std::unique_ptr<FEditorWindow> FEditorWindow::Create(
 		return nullptr;
 	}
 
-	FRenderDeviceDescription DeviceDescription;
-	DeviceDescription.bEnableValidation = Description.bValidateRendering;
-	std::unique_ptr<FRenderDevice> Device = FRenderDevice::Create(DeviceDescription, OutError);
+	// The editor's own: the one render device there can be, which other things that draw for the editor share.
+	FRenderDevice* const Device = Editor.GetGraphics().Open(
+		FRenderDeviceDescription{.bEnableValidation = Description.bValidateRendering}, OutError);
 	if (Device == nullptr)
 	{
 		return nullptr;
@@ -70,18 +70,17 @@ std::unique_ptr<FEditorWindow> FEditorWindow::Create(
 		return nullptr;
 	}
 
-	return std::make_unique<FEditorWindow>(
-		Editor, std::move(Window), std::move(Device), std::move(SwapChain), std::move(Ui));
+	return std::make_unique<FEditorWindow>(Editor, std::move(Window), *Device, std::move(SwapChain), std::move(Ui));
 }
 
 FEditorWindow::FEditorWindow(FEditor& InEditor,
 	std::unique_ptr<FWindow> InWindow,
-	std::unique_ptr<FRenderDevice> InDevice,
+	FRenderDevice& InDevice,
 	std::unique_ptr<FSwapChain> InSwapChain,
 	std::unique_ptr<FEditorUi> InUi)
 	: Editor(InEditor)
 	, Window(std::move(InWindow))
-	, Device(std::move(InDevice))
+	, Device(InDevice)
 	, SwapChain(std::move(InSwapChain))
 	, Ui(std::move(InUi))
 {
@@ -108,7 +107,7 @@ bool FEditorWindow::RunFrame(double DeltaSeconds, std::string& OutError)
 	const bool bPictureFits = Picture != nullptr && Picture->GetWidth() == Width && Picture->GetHeight() == Height;
 	if (!bPictureFits)
 	{
-		std::unique_ptr<FRenderTarget> NewPicture = Device->CreateRenderTarget(Width, Height, OutError);
+		std::unique_ptr<FRenderTarget> NewPicture = Device.CreateRenderTarget(Width, Height, OutError);
 		if (NewPicture == nullptr)
 		{
 			return false;

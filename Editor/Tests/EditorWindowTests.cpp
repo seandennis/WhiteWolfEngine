@@ -10,6 +10,8 @@
 #include "Platform/ScopedHeadlessPlatform.h"
 #include "Platform/Window.h"
 #include "Rendering/Image.h"
+#include "Rendering/RenderDevice.h"
+#include "Rendering/RenderDeviceDescription.h"
 #include "Rendering/RenderTarget.h"
 #include "Rendering/TestRendering.h"
 #include "Scene/Entity.h"
@@ -283,6 +285,19 @@ TEST_SUITE("FEditorWindow")
 		CHECK(Window->RunFrame(1.0 / 60.0, Error));
 		REQUIRE(Window->GetPicture() != nullptr);
 		CHECK(Window->GetPicture()->GetWidth() == Window->GetWindow().GetWidth());
+	}
+
+	TEST_CASE("The window draws with the editor's render device, beside which no other can exist")
+	{
+		FEditorWindowTest Test;
+
+		CHECK(Test.Editor.GetGraphics().IsOpen());
+		std::string Error;
+		CHECK(FRenderDevice::Create(FRenderDeviceDescription(), Error) == nullptr);
+		CHECK(Error == "a render device already exists, and only one can exist at a time");
+		Test.RunFrame();
+		CHECK(Test.Window->GetPicture() != nullptr);
+		CHECK(CountLoggedErrors(Test.Capture) == 0);
 	}
 
 	TEST_CASE("A window that was asked to close says so")
