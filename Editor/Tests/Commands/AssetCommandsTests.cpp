@@ -206,6 +206,19 @@ TEST_SUITE("Asset commands")
 		CHECK_FALSE(std::filesystem::exists(NotLeftBehind));
 	}
 
+	TEST_CASE("Asset.Import of a file that cannot be loaded leaves no folder behind")
+	{
+		FAssetCommandTest Test;
+		const std::filesystem::path Source = Test.WriteText("Broken.wwmaterial", "[]");
+
+		const FCommandResult Result = Test.Import(Source, "Fresh/Deeper");
+
+		CHECK_FALSE(Result.HasSucceeded());
+		CHECK(Result.GetError().starts_with("The file was not imported: "));
+		CHECK_FALSE(std::filesystem::exists(Test.GetContentDirectory() / "Fresh"));
+		CHECK(std::filesystem::is_empty(Test.GetContentDirectory()));
+	}
+
 	TEST_CASE("Asset.Import refuses a model that keeps data outside its own directory")
 	{
 		FAssetCommandTest Test;

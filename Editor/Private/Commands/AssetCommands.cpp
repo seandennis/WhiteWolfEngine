@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <format>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -127,7 +128,7 @@ namespace
 			InUsePath);
 	}
 
-	/** Removes files that an import copied and then could not use. What cannot be removed is left. */
+	/** Removes files that a command wrote and then could not use. What cannot be removed is left. */
 	void RemoveFiles(const std::vector<std::filesystem::path>& Files)
 	{
 		for (const std::filesystem::path& File : Files)
@@ -136,6 +137,62 @@ namespace
 			std::filesystem::remove(File, ErrorCode);
 		}
 	}
+
+	/**
+	 * The folders of the content directory that a command is about to make by writing files into them, noted before
+	 * it writes so that they can be removed again if the writing fails: a command that fails leaves the project as
+	 * it was, folders included.
+	 */
+	class FNewFolders
+	{
+	public:
+		/** Notes the folders above a file of the content directory that are not there yet. */
+		void NoteFoldersOf(const std::filesystem::path& File)
+		{
+			const std::filesystem::path ContentDirectory = FAssetManager::GetContentDirectory().lexically_normal();
+			for (std::filesystem::path Folder = File.parent_path().lexically_normal();
+				 IsBelow(Folder, ContentDirectory);
+				 Folder = Folder.parent_path())
+			{
+				// A folder that is there, or of which that cannot be told, is not the command's to remove.
+				std::error_code ErrorCode;
+				const bool bExists = std::filesystem::exists(Folder, ErrorCode);
+				if (bExists || ErrorCode)
+				{
+					return;
+				}
+				if (std::ranges::find(Folders, Folder) == Folders.end())
+				{
+					Folders.push_back(Folder);
+				}
+			}
+		}
+
+		/** Removes the folders that were noted, the deepest first. One that is not empty, or cannot be removed, is
+		 * left. */
+		void Remove() const
+		{
+			std::vector<std::filesystem::path> DeepestFirst = Folders;
+			std::ranges::sort(DeepestFirst,
+				[](const std::filesystem::path& First, const std::filesystem::path& Second)
+				{ return std::distance(First.begin(), First.end()) > std::distance(Second.begin(), Second.end()); });
+			for (const std::filesystem::path& Folder : DeepestFirst)
+			{
+				std::error_code ErrorCode;
+				std::filesystem::remove(Folder, ErrorCode);
+			}
+		}
+
+	private:
+		/** Returns true if a folder is inside the content directory, and not the content directory itself. */
+		static bool IsBelow(const std::filesystem::path& Folder, const std::filesystem::path& ContentDirectory)
+		{
+			const std::filesystem::path Relative = Folder.lexically_relative(ContentDirectory);
+			return !Relative.empty() && Relative != "." && *Relative.begin() != "..";
+		}
+
+		std::vector<std::filesystem::path> Folders;
+	};
 
 	FCommandResult ImportAsset(FEditor& Editor, const FCommandArguments& Arguments)
 	{
@@ -220,6 +277,11 @@ namespace
 			}
 		}
 
+		FNewFolders NewFolders;
+		for (const FCopy& Copy : Copies)
+		{
+			NewFolders.NoteFoldersOf(Copy.To);
+		}
 		std::vector<std::filesystem::path> Copied;
 		for (const FCopy& Copy : Copies)
 		{
@@ -231,6 +293,7 @@ namespace
 			if (ErrorCode)
 			{
 				RemoveFiles(Copied);
+				NewFolders.Remove();
 				return FCommandResult::Failure(
 					std::format("The file was not imported: '{}' could not be copied to '{}': {}.",
 						FFileHelper::PathToUtf8(Copy.From),
@@ -245,6 +308,7 @@ namespace
 		{
 			// A file that cannot be loaded is no asset, and is not left in the project.
 			RemoveFiles(Copied);
+			NewFolders.Remove();
 			return FCommandResult::Failure(std::format("The file was not imported: {}.", Error));
 		}
 		return FCommandResult::Success(std::move(Value));
@@ -344,10 +408,14 @@ namespace
 			return Refuse(*InUse);
 		}
 
-		// The file of a new material says what its class gives a new one.
+		// The file of a new material says what its class gives a new one. What writing it makes is taken away again
+		// if it fails, the folders included.
+		FNewFolders NewFolders;
+		NewFolders.NoteFoldersOf(FilePath);
 		const WMaterial* const Material = NewObject<WMaterial>();
 		if (!FMaterialSerializer::SaveToFile(*Material, FilePath, Error))
 		{
+			NewFolders.Remove();
 			return Refuse(Error);
 		}
 
@@ -356,6 +424,7 @@ namespace
 		{
 			// A file that cannot be loaded is no material, and is not left in the project.
 			RemoveFiles({FilePath});
+			NewFolders.Remove();
 			return Refuse(Error);
 		}
 		return FCommandResult::Success(std::move(Value));

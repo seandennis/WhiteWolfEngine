@@ -255,6 +255,21 @@ TEST_SUITE("Asset commands for materials")
 		CHECK(ListContent(Test) == ContentBefore);
 	}
 
+	TEST_CASE("Asset.CreateMaterial that cannot write its file leaves no folder behind")
+	{
+		FAssetCommandTest Test;
+		REQUIRE(Test.Import(Test.WritePicture("Wood.png")).HasSucceeded());
+		const std::vector<std::string> ContentBefore = ListContent(Test);
+
+		// No file system takes a name of three hundred letters, so the file cannot be written into the folders that
+		// were made for it.
+		const FCommandResult Result = CreateMaterial(Test, "New/Deeper/" + std::string(300, 'a') + ".wwmaterial");
+
+		CHECK_FALSE(Result.HasSucceeded());
+		CHECK(Result.GetError().starts_with("The material was not created: "));
+		CHECK(ListContent(Test) == ContentBefore);
+	}
+
 	TEST_CASE("Asset.CreateMaterial refuses a path whose material is still in use although its file is gone")
 	{
 		FAssetCommandTest Test;
