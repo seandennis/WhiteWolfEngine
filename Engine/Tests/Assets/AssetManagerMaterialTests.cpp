@@ -15,8 +15,10 @@
 #include <doctest/doctest.h>
 
 #include <filesystem>
+#include <format>
 #include <ostream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 // Material files, as the asset manager loads them. What a material file can say, and how it is read, is tested
@@ -100,6 +102,59 @@ TEST_SUITE("FAssetManager material files")
 		std::string Error;
 		CHECK(Material->BaseColorTexture.Get() == FAssetManager::Load<WTexture>("Textures/Wood.png", Error));
 		CHECK(CountLoggedProblems(Capture) == 0);
+	}
+
+	TEST_CASE("A material file is loaded only under the name that its directory gives it")
+	{
+		const FScopedObjectTest ObjectTest;
+		const FScopedContentDirectory Content;
+		Content.WriteMaterial("Materials/Red.wwmaterial", R"({"Metallic": 1.0})");
+		// Whether the file system takes one spelling for another is asked of the directory, so that the test holds
+		// on every file system.
+		std::error_code ErrorCode;
+		const bool bIgnoresCapitals =
+			std::filesystem::exists(Content.GetPath() / "materials" / "red.wwmaterial", ErrorCode);
+		CAPTURE(bIgnoresCapitals);
+
+		// Where the file system takes another spelling for the file's, that spelling is refused; elsewhere it is the
+		// name of another file, which is not there. Either way it is not the material.
+		struct FSpelling
+		{
+			std::string File;
+			std::string Kind;
+			std::string Name;
+		};
+		const std::vector<FSpelling> Spellings = {
+			{"materials/red.wwmaterial", "folder", "materials"},
+			{"Materials/red.wwmaterial", "file", "Materials/red.wwmaterial"},
+			{"Materials/Red.WWMATERIAL", "file", "Materials/Red.WWMATERIAL"},
+		};
+		const auto CheckRefused = [bIgnoresCapitals](const FSpelling& Spelling)
+		{
+			CAPTURE(Spelling.File);
+			std::string Error;
+			CHECK(FAssetManager::Load(Spelling.File, Error) == nullptr);
+			const std::string Expected = bIgnoresCapitals
+				? std::format("the content directory has no {} \"{}\", only one whose name is spelt differently",
+					  Spelling.Kind,
+					  Spelling.Name)
+				: std::format("the content directory has no file \"{}\"", Spelling.File);
+			CHECK(Error == Expected);
+		};
+		for (const FSpelling& Spelling : Spellings)
+		{
+			CheckRefused(Spelling);
+		}
+
+		// The directory's own spelling is the material, and is not in the way of the others, nor they in its.
+		WMaterial* const Material = LoadMaterial("Materials/Red.wwmaterial");
+		const FScopedRoot Root(Material);
+		CHECK(Material->Metallic == 1.0f);
+		for (const FSpelling& Spelling : Spellings)
+		{
+			CheckRefused(Spelling);
+		}
+		CHECK(LoadMaterial("Materials/Red.wwmaterial") == Material);
 	}
 
 	TEST_CASE("A material file is loaded once while it is used, and read anew when it is asked for after that")

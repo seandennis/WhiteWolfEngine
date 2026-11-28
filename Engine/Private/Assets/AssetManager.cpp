@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <system_error>
 #include <unordered_map>
 #include <utility>
@@ -180,6 +181,13 @@ namespace
 		}
 		if (Kind == EAssetFileKind::Material)
 		{
+			// One file is one material. Under a second spelling of its name it would be a second object of the same
+			// file, which could be given other values and saved over the first.
+			if (!FAssetManager::HasFileSystemSpelling(File, OutError))
+			{
+				return false;
+			}
+
 			// A material is made with what its class gives a new one, and then given what the file says.
 			WMaterial* const Material = NewObject<WMaterial>();
 			std::vector<std::string> Problems;
@@ -354,6 +362,84 @@ std::optional<std::string> FAssetManager::GetAssetFileOfPath(const std::filesyst
 std::filesystem::path FAssetManager::GetPathOfAssetFile(std::string_view File)
 {
 	return GetState().ContentDirectory / FFileHelper::PathFromUtf8(File);
+}
+
+bool FAssetManager::HasFileSystemSpelling(std::string_view File, std::string& OutError)
+{
+	const std::filesystem::path& ContentDirectory = GetState().ContentDirectory;
+	if (ContentDirectory.empty())
+	{
+		OutError = "there is no content directory";
+		return false;
+	}
+	const std::optional<FAssetPath> Path = FAssetPath::Parse(File, OutError);
+	if (!Path.has_value())
+	{
+		return false;
+	}
+	if (!Path->Key.empty())
+	{
+		OutError = std::format("\"{}\" names one asset of a file, where the file is wanted", File);
+		return false;
+	}
+
+	// Each part is looked for among the entries of the folder above it, under the name that the folder gives it.
+	const std::string_view FileText = Path->File;
+	std::filesystem::path Folder = ContentDirectory;
+	std::size_t PartStart = 0;
+	while (true)
+	{
+		const std::size_t Slash = FileText.find('/', PartStart);
+		const bool bIsLastPart = Slash == std::string_view::npos;
+		const std::size_t PartEnd = bIsLastPart ? FileText.size() : Slash;
+		const std::filesystem::path Part = FFileHelper::PathFromUtf8(FileText.substr(PartStart, PartEnd - PartStart));
+		const std::filesystem::path PartPath = Folder / Part;
+
+		std::error_code ErrorCode;
+		bool bIsListed = false;
+		for (std::filesystem::directory_iterator Entry(Folder, ErrorCode);
+			 !ErrorCode && Entry != std::filesystem::directory_iterator();
+			 Entry.increment(ErrorCode))
+		{
+			// The names are compared as the file system keeps them, character for character.
+			if (Entry->path().filename().native() == Part.native())
+			{
+				bIsListed = true;
+				break;
+			}
+		}
+		if (ErrorCode)
+		{
+			OutError = std::format("the folder \"{}\" cannot be listed: {}",
+				FFileHelper::PathToUtf8(Folder),
+				FFileHelper::DescribeError(ErrorCode));
+			return false;
+		}
+
+		if (!bIsListed)
+		{
+			// Not under this name: there under another spelling, or not there at all, and then neither is anything
+			// below it. A part that cannot even be looked at is taken to be not there: whatever then reads or writes
+			// the file fails, with its own reason.
+			if (std::filesystem::exists(PartPath, ErrorCode))
+			{
+				OutError =
+					std::format("the content directory has no {} \"{}\", only one whose name is spelt differently",
+						bIsLastPart ? "file" : "folder",
+						FileText.substr(0, PartEnd));
+				return false;
+			}
+			return true;
+		}
+
+		// Nothing is below the file itself, nor below a part that is not a folder.
+		if (bIsLastPart || !std::filesystem::is_directory(PartPath, ErrorCode))
+		{
+			return true;
+		}
+		Folder = PartPath;
+		PartStart = Slash + 1;
+	}
 }
 
 WAssetPackage* FAssetManager::FindOrLoadPackage(const std::string& File, std::string& OutError)

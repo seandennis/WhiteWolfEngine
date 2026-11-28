@@ -3,6 +3,7 @@
 #include "Assets/Asset.h"
 #include "Assets/AssetPackage.h"
 #include "Assets/TestAssets.h"
+#include "Core/FileHelper.h"
 #include "Object/ObjectGlobals.h"
 #include "Object/TestObjects.h"
 #include "Object/WeakObjectPtr.h"
@@ -16,10 +17,12 @@
 #include <doctest/doctest.h>
 
 #include <filesystem>
+#include <format>
 #include <initializer_list>
 #include <optional>
 #include <ostream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace
@@ -546,5 +549,116 @@ TEST_SUITE("FAssetManager")
 		const FScopedContentDirectory Content;
 
 		CHECK(FAssetManager::GetPathOfAssetFile("Models/Crate.glb") == Content.GetPath() / "Models" / "Crate.glb");
+	}
+
+	TEST_CASE("A file and its folders are spelt as the content directory spells them, as far as they are there")
+	{
+		const FScopedContentDirectory Content;
+		Content.WriteMaterial("Materials/Red.wwmaterial");
+		Content.WritePicture("Wood.png");
+		std::string Error;
+
+		CHECK(FAssetManager::HasFileSystemSpelling("Materials/Red.wwmaterial", Error));
+		CHECK(FAssetManager::HasFileSystemSpelling("Wood.png", Error));
+		// What is not there yet is spelt as it is asked about, in the folders that are there.
+		CHECK(FAssetManager::HasFileSystemSpelling("Materials/Blue.wwmaterial", Error));
+		CHECK(FAssetManager::HasFileSystemSpelling("Materials/Metals/Gold.wwmaterial", Error));
+		CHECK(FAssetManager::HasFileSystemSpelling("Other/New.wwmaterial", Error));
+		// Nothing is below a file.
+		CHECK(FAssetManager::HasFileSystemSpelling("Wood.png/New.wwmaterial", Error));
+		CHECK(Error.empty());
+	}
+
+	TEST_CASE("Other capitals of a name are not its spelling where the file system takes them for the name")
+	{
+		const FScopedContentDirectory Content;
+		Content.WriteMaterial("Materials/Red.wwmaterial");
+		// Whether the file system takes one spelling for another is asked of the directory, so that the test holds
+		// on every file system.
+		std::error_code ErrorCode;
+		const bool bIgnoresCapitals =
+			std::filesystem::exists(Content.GetPath() / "MATERIALS" / "RED.WWMATERIAL", ErrorCode);
+		CAPTURE(bIgnoresCapitals);
+
+		struct FSpelling
+		{
+			std::string File;
+			std::string Kind;
+			std::string Name;
+		};
+		const std::vector<FSpelling> Spellings = {
+			{"materials/Red.wwmaterial", "folder", "materials"},
+			{"Materials/red.wwmaterial", "file", "Materials/red.wwmaterial"},
+			{"MATERIALS/RED.WWMATERIAL", "folder", "MATERIALS"},
+			// A file that is not there yet, in a folder that is.
+			{"materials/New.wwmaterial", "folder", "materials"},
+		};
+		for (const FSpelling& Spelling : Spellings)
+		{
+			CAPTURE(Spelling.File);
+			std::string Error;
+			if (bIgnoresCapitals)
+			{
+				CHECK_FALSE(FAssetManager::HasFileSystemSpelling(Spelling.File, Error));
+				CHECK(Error ==
+					std::format("the content directory has no {} \"{}\", only one whose name is spelt differently",
+						Spelling.Kind,
+						Spelling.Name));
+			}
+			else
+			{
+				// Another name is of another file or folder, which is not there.
+				CHECK(FAssetManager::HasFileSystemSpelling(Spelling.File, Error));
+			}
+		}
+	}
+
+	TEST_CASE("The spelling of a file cannot be told without a content directory, nor of text that names no file")
+	{
+		std::string Error;
+		REQUIRE(FAssetManager::GetContentDirectory().empty());
+		CHECK_FALSE(FAssetManager::HasFileSystemSpelling("Materials/Red.wwmaterial", Error));
+		CHECK(Error == "there is no content directory");
+
+		const FScopedContentDirectory Content;
+		Content.WriteMaterial("Materials/Red.wwmaterial");
+		CHECK_FALSE(FAssetManager::HasFileSystemSpelling("../Red.wwmaterial", Error));
+		CHECK(Error == "\"../Red.wwmaterial\" is not the path of an asset: it must not have the part \"..\"");
+		CHECK_FALSE(FAssetManager::HasFileSystemSpelling("", Error));
+		CHECK(Error == "\"\" is not the path of an asset: it names no file");
+		CHECK_FALSE(FAssetManager::HasFileSystemSpelling("Materials/Red.wwmaterial#Key", Error));
+		CHECK(Error == "\"Materials/Red.wwmaterial#Key\" names one asset of a file, where the file is wanted");
+	}
+
+	TEST_CASE("The spelling of a file cannot be told where a folder cannot be listed, and the reason says which")
+	{
+		const FScopedContentDirectory Content;
+		// A content directory that is not there is a folder that cannot be listed.
+		const std::filesystem::path Missing = Content.GetPath() / "Missing";
+		FAssetManager::SetContentDirectory(Missing);
+		std::string Error;
+
+		CHECK_FALSE(FAssetManager::HasFileSystemSpelling("Materials/Red.wwmaterial", Error));
+
+		const std::string Expected =
+			std::format("the folder \"{}\" cannot be listed: ", FFileHelper::PathToUtf8(Missing));
+		CHECK(Error.starts_with(Expected));
+		CHECK(Error.size() > Expected.size());
+	}
+
+	TEST_CASE("A picture and a model are loaded under any name that the file system takes for theirs")
+	{
+		const FScopedObjectTest ObjectTest;
+		const FScopedContentDirectory Content;
+		Content.WritePicture("Textures/Wood.png");
+		Content.WriteSquare("Models/Square.gltf");
+		std::error_code ErrorCode;
+		const bool bIgnoresCapitals = std::filesystem::exists(Content.GetPath() / "TEXTURES" / "WOOD.PNG", ErrorCode);
+		CAPTURE(bIgnoresCapitals);
+		std::string Error;
+
+		// Only material files are held to the spelling of their directory (see AssetManagerMaterialTests.cpp).
+		CHECK((FAssetManager::Load("textures/wood.png", Error) != nullptr) == bIgnoresCapitals);
+		CHECK((FAssetManager::LoadPackage("models/square.gltf", Error) != nullptr) == bIgnoresCapitals);
 	}
 }

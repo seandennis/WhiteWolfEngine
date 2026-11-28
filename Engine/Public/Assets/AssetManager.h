@@ -38,6 +38,10 @@ extern ENGINE_API FLogCategory LogAssets;
  * A file whose assets refer to other files, as a material file refers to its textures, has those loaded with it.
  * One that refers to itself, directly or through other files, is read without that reference, which is a warning.
  *
+ * A material file is loaded only under the name that its directory gives it, letter for letter
+ * (HasFileSystemSpelling), so that one file is one material also where the file system does not tell capitals
+ * apart. The other kinds of file are loaded under whatever name the file system takes for them.
+ *
  * Besides those, the engine has assets built in, which are no files and need no content directory. They are
  * named, loaded and kept like the assets of a file, the file being ShapesFile:
  *
@@ -144,6 +148,21 @@ public:
 
 	/** Returns where in the file system the file of an asset path is. File must be a valid file of an asset path. */
 	ENGINE_API static std::filesystem::path GetPathOfAssetFile(std::string_view File);
+
+	/**
+	 * Returns true if the file of an asset path is spelt as the content directory spells it: each of its folders,
+	 * and the file itself, is listed under exactly that name in the folder above it, as far as they exist. On
+	 * Windows "materials/red.wwmaterial" opens the file "Materials/Red.wwmaterial", which is not its spelling; on a
+	 * file system that tells capitals apart, a name that exists is always spelt as its directory spells it. A part
+	 * that does not exist ends the walk with true, so a file that is still to be made is asked about the folders that
+	 * it is to be in, and nothing is below a part that is a file.
+	 *
+	 * @param File The file, relative to the content directory: an asset path without a key.
+	 * @param OutError Receives the reason if the answer is false: the first part that is there under another
+	 * spelling, or why that cannot be told (no content directory, text that is not the file of an asset path, a
+	 * folder that cannot be listed).
+	 */
+	ENGINE_API static bool HasFileSystemSpelling(std::string_view File, std::string& OutError);
 
 private:
 	/** Returns the package of a file whose name has been checked, loading the file if it is not loaded. */
